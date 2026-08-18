@@ -3,7 +3,6 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useFfmpeg } from '@/composables/useFfmpeg'
 import { useServerCut } from '@/composables/useServerCut'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -12,21 +11,13 @@ import Timeline from './Timeline.vue'
 const { t } = useI18n()
 const store = useVideoEditorStore()
 const {
-  objectUrl, fileName, duration, startTime, endTime, currentTime, mode, location,
+  objectUrl, fileName, duration, startTime, endTime, currentTime, mode,
   hasVideo, canExport, selectionDuration, resultUrl, resultName, resultBlob, error,
 } = storeToRefs(store)
 
-const { isLoading, isProcessing, progress, load, trim } = useFfmpeg()
-const { isProcessing: srvProcessing, progress: srvProgress, cut: serverCut } = useServerCut()
+const { isProcessing, progress, cut: serverCut } = useServerCut()
 
-// Gebündelter Zustand für die UI, egal welcher Verarbeitungsweg aktiv ist.
-const activeProcessing = computed(() =>
-  location.value === 'server' ? srvProcessing.value : isProcessing.value,
-)
-const activeProgress = computed(() =>
-  location.value === 'server' ? srvProgress.value : progress.value,
-)
-const busy = computed(() => isLoading.value || activeProcessing.value)
+const busy = computed(() => isProcessing.value)
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const isDragOver = ref(false)
@@ -79,17 +70,8 @@ async function onExport(): Promise<void> {
   store.revokeResult()
   try {
     const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
-    let blob: Blob
-    let ext: string
-
-    if (location.value === 'server') {
-      ext = mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
-      blob = await serverCut(store.file, startTime.value, selectionDuration.value, mode.value)
-    } else {
-      await load() // no-op falls bereits geladen
-      ext = mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
-      blob = await trim(store.file, startTime.value, endTime.value, mode.value)
-    }
+    const ext = mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
+    const blob = await serverCut(store.file, startTime.value, selectionDuration.value, mode.value)
 
     store.setResult(blob, `${base}_cut.${ext}`)
   } catch (e) {
@@ -171,25 +153,6 @@ async function onDownload(e: MouseEvent): Promise<void> {
         </button>
       </div>
 
-      <!-- Verarbeitungsort -->
-      <fieldset class="mode">
-        <legend>{{ t('location.legend') }}</legend>
-        <label class="radio" :class="{ active: location === 'browser' }">
-          <input type="radio" value="browser" :checked="location === 'browser'" @change="store.setLocation('browser')" />
-          <span>
-            <b>{{ t('location.browser') }}</b>
-            <small>{{ t('location.browserHint') }}</small>
-          </span>
-        </label>
-        <label class="radio" :class="{ active: location === 'server' }">
-          <input type="radio" value="server" :checked="location === 'server'" @change="store.setLocation('server')" />
-          <span>
-            <b>{{ t('location.server') }}</b>
-            <small>{{ t('location.serverHint') }}</small>
-          </span>
-        </label>
-      </fieldset>
-
       <!-- Modus -->
       <fieldset class="mode">
         <legend>{{ t('mode.legend') }}</legend>
@@ -211,13 +174,12 @@ async function onDownload(e: MouseEvent): Promise<void> {
 
       <!-- Export -->
       <button class="btn primary export" type="button" :disabled="!canExport || busy" @click="onExport">
-        <template v-if="isLoading">{{ t('status.loadingEngine') }}</template>
-        <template v-else-if="activeProcessing">{{ t('status.processing') }} {{ activeProgress }}%</template>
+        <template v-if="isProcessing">{{ t('status.processing') }} {{ progress }}%</template>
         <template v-else>{{ t('actions.export') }}</template>
       </button>
 
-      <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="activeProgress">
-        <div class="bar" :style="{ width: `${activeProcessing ? activeProgress : 100}%` }" :class="{ indeterminate: isLoading }"></div>
+      <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
+        <div class="bar" :style="{ width: `${progress}%` }"></div>
       </div>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -380,14 +342,6 @@ a.btn { text-decoration: none; text-align: center; display: inline-block; }
   overflow: hidden;
 }
 .bar { height: 100%; background: var(--vc-accent); transition: width 0.2s; }
-.bar.indeterminate {
-  width: 40% !important;
-  animation: slide 1.1s ease-in-out infinite;
-}
-@keyframes slide {
-  0% { margin-left: -40%; }
-  100% { margin-left: 100%; }
-}
 
 .error {
   margin: 0;
@@ -406,6 +360,6 @@ a.btn { text-decoration: none; text-align: center; display: inline-block; }
   .mode { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bar, .bar.indeterminate { animation: none; transition: none; }
+  .bar { transition: none; }
 }
 </style>

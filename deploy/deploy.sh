@@ -71,19 +71,10 @@ VITE_FFMPEG_CORE_URL="$VITE_FFMPEG_CORE_URL" \
 VITE_API_BASE="$VITE_API_BASE" \
   npm run build
 
-# --- 4) Selbst gehostetes ffmpeg-core bereitstellen -----------------------
-CORE_SRC="node_modules/@ffmpeg/core/dist/esm"
-CORE_JS="$CORE_SRC/ffmpeg-core.js"
-CORE_WASM="$CORE_SRC/ffmpeg-core.wasm"
-if [[ ! -f "$CORE_JS" || ! -f "$CORE_WASM" ]]; then
-  echo "FEHLER: ffmpeg-core nicht gefunden ($CORE_SRC). Ist @ffmpeg/core installiert?" >&2
-  exit 1
-fi
-# In den Build kopieren, damit rsync alles in einem Rutsch ausliefert.
-mkdir -p "dist/ffmpeg"
-cp "$CORE_JS" "$CORE_WASM" "dist/ffmpeg/"
-
-# --- 5) Ausliefern --------------------------------------------------------
+# --- 4) Ausliefern --------------------------------------------------------
+# Hinweis: Der Schnitt läuft ausschließlich serverseitig (Backend :9015).
+# Ein Browser-/WASM-Weg existiert nicht mehr, daher wird kein ffmpeg-core mehr
+# mit ausgeliefert.
 log "Rsync nach $WEB_ROOT"
 sudo mkdir -p "$WEB_ROOT"
 sudo rsync -a --delete dist/ "$WEB_ROOT/"
