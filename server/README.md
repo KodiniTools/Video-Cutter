@@ -59,6 +59,6 @@ Alle Werte in `.env` (siehe `.env.example`). Wichtig für Produktion:
 
 ## Frontend anbinden
 
-Beim Build der SPA `VITE_API_BASE=/videoschneiden` setzen; dann nutzt der
+Beim Build der SPA `VITE_API_BASE=/video-cutter` setzen; dann nutzt der
 Umschalter „Auf dem Server" die Endpunkte oben. In der Entwicklung proxyt Vite
 `/api` automatisch auf `http://localhost:4021`.
