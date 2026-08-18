@@ -1,0 +1,40 @@
+:root {
+  --vc-accent: #4f8cff;
+  --vc-accent-soft: rgba(79, 140, 255, 0.16);
+  --vc-focus: #9ec1ff;
+  --vc-playhead: #ffd24a;
+  --vc-error-bg: rgba(220, 60, 60, 0.14);
+  --vc-error-text: #ff9a9a;
+}
+
+:root[data-theme='dark'] {
+  --vc-bg: #0e1116;
+  --vc-surface: #161b22;
+  --vc-track-bg: #262d38;
+  --vc-border: #2c333d;
+  --vc-text: #e6edf3;
+  --vc-text-dim: #9aa4b2;
+}
+
+:root[data-theme='light'] {
+  --vc-bg: #f6f7f9;
+  --vc-surface: #ffffff;
+  --vc-track-bg: #e6e9ee;
+  --vc-border: #d5dae1;
+  --vc-text: #1a1f26;
+  --vc-text-dim: #667085;
+  --vc-error-text: #b42318;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--vc-bg);
+  color: var(--vc-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { min-height: 100vh; }
