@@ -14,10 +14,6 @@ export default defineConfig({
   // Für Deployment in ein Unterverzeichnis anpassen, z. B. '/videoschneiden/'.
   base: process.env.VITE_BASE ?? '/',
   plugins: [vue()],
-  // @ffmpeg/ffmpeg erzeugt seinen Worker per `new Worker(url, { type: 'module' })`.
-  // Ohne dies bündelt Vite den Worker als IIFE (klassisch) -> Mismatch, der Worker
-  // startet nicht sauber und `load()` bleibt hängen. 'es' baut ihn als ES-Modul.
-  worker: { format: 'es' },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
@@ -26,7 +22,7 @@ export default defineConfig({
     // /api im Dev auf das lokale Backend weiterleiten (SSE-fähig).
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_API ?? 'http://localhost:4021',
+        target: process.env.VITE_DEV_API ?? 'http://localhost:9015',
         changeOrigin: true,
       },
     },

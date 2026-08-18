@@ -13,14 +13,11 @@
     "format": "prettier --write \"src/**/*.{ts,vue,css}\""
   },
   "dependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "@ffmpeg/util": "^0.12.2",
     "pinia": "^2.3.1",
     "vue": "^3.5.41",
     "vue-i18n": "^10.0.8"
   },
   "devDependencies": {
-    "@ffmpeg/core": "^0.12.10",
     "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vue/test-utils": "^2.4.6",

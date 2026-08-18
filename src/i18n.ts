@@ -4,20 +4,13 @@ const messages = {
   de: {
     app: {
       title: 'Video schneiden',
-      subtitle: 'Direkt im Browser – deine Datei verlässt dein Gerät nicht.',
+      subtitle: 'Videos schnell und einfach schneiden.',
     },
     drop: {
       title: 'Video hierher ziehen oder klicken',
-      hint: 'MP4, WebM, MOV … Die Verarbeitung passiert lokal in deinem Browser.',
+      hint: 'MP4, WebM, MOV … Die Datei wird zum Schneiden auf den Server geladen.',
     },
     labels: { selection: 'Auswahl' },
-    location: {
-      legend: 'Verarbeitung',
-      browser: 'Im Browser',
-      server: 'Auf dem Server',
-      browserHint: 'Lokal, kein Upload.',
-      serverHint: 'Datei wird auf den Server geladen (DE-Server).',
-    },
     actions: {
       change: 'Anderes Video',
       setStart: 'Start setzen',
@@ -33,30 +26,22 @@ const messages = {
       accurateHint: 'Frame-genau via H.264/AAC. Langsamer, immer .mp4.',
     },
     status: {
-      loadingEngine: 'Engine wird geladen …',
       processing: 'Verarbeite …',
     },
     result: { ready: 'Fertig geschnitten:', iosHint: 'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.' },
     errors: { notVideo: 'Bitte eine Videodatei auswählen.' },
-    footer: 'Client-seitige Verarbeitung mit FFmpeg (WebAssembly).',
+    footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
   en: {
     app: {
       title: 'Cut video',
-      subtitle: 'Right in your browser – your file never leaves your device.',
+      subtitle: 'Cut videos quickly and easily.',
     },
     drop: {
       title: 'Drop a video here or click',
-      hint: 'MP4, WebM, MOV … Processing happens locally in your browser.',
+      hint: 'MP4, WebM, MOV … The file is uploaded to the server for cutting.',
     },
     labels: { selection: 'Selection' },
-    location: {
-      legend: 'Processing',
-      browser: 'In browser',
-      server: 'On server',
-      browserHint: 'Local, no upload.',
-      serverHint: 'File is uploaded to the server (DE server).',
-    },
     actions: {
       change: 'Change video',
       setStart: 'Set start',
@@ -72,12 +57,11 @@ const messages = {
       accurateHint: 'Frame-accurate via H.264/AAC. Slower, always .mp4.',
     },
     status: {
-      loadingEngine: 'Loading engine …',
       processing: 'Processing …',
     },
     result: { ready: 'Done:', iosHint: 'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.' },
     errors: { notVideo: 'Please choose a video file.' },
-    footer: 'Client-side processing with FFmpeg (WebAssembly).',
+    footer: 'Server-side processing with FFmpeg.',
   },
 } as const
 

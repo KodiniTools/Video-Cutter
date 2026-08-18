@@ -17,8 +17,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const endTime = ref(0)
   const currentTime = ref(0)
   const mode = ref<TrimMode>('copy')
-  /** Wo geschnitten wird: lokal im Browser oder auf dem VPS-Backend. */
-  const location = ref<'browser' | 'server'>('browser')
 
   // --- Ergebnis / Fehler ---
   const resultUrl = ref('')
@@ -84,10 +82,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     mode.value = m
   }
 
-  function setLocation(l: 'browser' | 'server'): void {
-    location.value = l
-  }
-
   function setResult(blob: Blob, name: string): void {
     revokeResult()
     resultBlob.value = blob
@@ -113,12 +107,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
 
   return {
     // state
-    file, objectUrl, fileName, duration, startTime, endTime, currentTime, mode, location,
+    file, objectUrl, fileName, duration, startTime, endTime, currentTime, mode,
     resultUrl, resultName, resultBlob, error,
     // getters
     selectionDuration, hasVideo, canExport,
     // actions
-    setFile, setDuration, setStart, setEnd, setCurrentTime, setMode, setLocation,
+    setFile, setDuration, setStart, setEnd, setCurrentTime, setMode,
     setResult, setError, revokeResult, reset,
   }
 })
