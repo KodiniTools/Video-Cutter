@@ -27,10 +27,28 @@ npm run preview   # Build lokal prüfen
 
 ## Deployment auf den VPS
 
-1. `VITE_BASE=/videoschneiden/ npm run build`
-2. `dist/` nach `/var/www/kodinitools/videoschneiden/` hochladen.
-3. Nginx-Snippet aus `deploy/nginx-video-cutter.conf` einbinden (COOP/COEP + wasm-MIME!).
-4. `nginx -t && systemctl reload nginx`.
+Ein Skript erledigt Git-Sync, Build (inkl. selbst gehostetem ffmpeg-core) und
+das Ausliefern nach `/var/www/…` – idempotent und ohne `git pull`-Stolperfallen:
+
+```bash
+bash deploy/deploy.sh
+```
+
+Konfigurierbar über Umgebungsvariablen (Defaults für kodinitools.com, Seite
+unter `/video-cutter/`):
+
+```bash
+BASE_PATH=/videoschneiden/ \
+WEB_ROOT=/var/www/kodinitools/videoschneiden \
+  bash deploy/deploy.sh
+```
+
+Einmalig noch das Nginx-Snippet aus `deploy/nginx-video-cutter.conf` einbinden
+(COOP/COEP + wasm-MIME!) und `nginx -t && systemctl reload nginx`.
+
+> Hinweis: Das Skript setzt den Arbeitsbaum per `git reset --hard` auf den
+> Remote-Stand. Der Deploy-Checkout ist damit eine reine Ableitung von Git –
+> lokale Änderungen auf dem Server gehen dabei verloren (gewollt).
 
 ### Wichtig: Cross-Origin Isolation
 
