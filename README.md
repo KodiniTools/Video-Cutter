@@ -62,7 +62,8 @@ Ohne sie lädt die Engine nicht. Prüfen in der Konsole:
 
 Standardmäßig wird der Core von unpkg geladen. Für Unabhängigkeit von der CDN:
 `@ffmpeg/core` in einen Ordner kopieren, ausliefern und
-`VITE_FFMPEG_CORE_URL=/videoschneiden/ffmpeg` beim Build setzen.
+`VITE_FFMPEG_CORE_URL=/video-cutter/ffmpeg` beim Build setzen.
+`deploy/deploy.sh` erledigt das automatisch (kopiert nach `dist/ffmpeg/`).
 
 ## Server-Backend (optional)
 
@@ -71,5 +72,5 @@ VPS-Backend in `server/` (Express + FFmpeg, Job-basiert mit SSE-Fortschritt).
 Der Umschalter „Im Browser / Auf dem Server" in der UI wählt den Weg.
 
 - Dev: `cd server && npm install && npm run dev` (läuft auf `:4021`, Vite proxyt `/api`).
-- Prod-Build der SPA mit `VITE_API_BASE=/videoschneiden`.
+- Prod-Build der SPA mit `VITE_API_BASE=/video-cutter` (macht `deploy/deploy.sh`).
 - Deployment + Nginx: siehe `server/README.md`.
