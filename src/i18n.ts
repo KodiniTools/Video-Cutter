@@ -26,6 +26,7 @@ const messages = {
       accurateHint: 'Frame-genau via H.264/AAC. Langsamer, immer .mp4.',
     },
     status: {
+      uploading: 'Lädt hoch …',
       processing: 'Verarbeite …',
     },
     result: { ready: 'Fertig geschnitten:', iosHint: 'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.' },
@@ -57,6 +58,7 @@ const messages = {
       accurateHint: 'Frame-accurate via H.264/AAC. Slower, always .mp4.',
     },
     status: {
+      uploading: 'Uploading …',
       processing: 'Processing …',
     },
     result: { ready: 'Done:', iosHint: 'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.' },
