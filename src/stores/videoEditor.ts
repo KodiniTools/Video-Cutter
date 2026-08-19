@@ -116,12 +116,34 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
 
   return {
     // state
-    file, objectUrl, fileName, duration, startTime, endTime, currentTime, mode, operation,
-    resultUrl, resultName, resultBlob, error,
+    file,
+    objectUrl,
+    fileName,
+    duration,
+    startTime,
+    endTime,
+    currentTime,
+    mode,
+    operation,
+    resultUrl,
+    resultName,
+    resultBlob,
+    error,
     // getters
-    selectionDuration, hasVideo, canExport,
+    selectionDuration,
+    hasVideo,
+    canExport,
     // actions
-    setFile, setDuration, setStart, setEnd, setCurrentTime, setMode, setOperation,
-    setResult, setError, revokeResult, reset,
+    setFile,
+    setDuration,
+    setStart,
+    setEnd,
+    setCurrentTime,
+    setMode,
+    setOperation,
+    setResult,
+    setError,
+    revokeResult,
+    reset,
   }
 })

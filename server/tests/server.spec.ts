@@ -22,10 +22,16 @@ describe('buildServerArgs', () => {
     expect(args).toContain('-progress')
     expect(args).toContain('pipe:1')
     expect(args.slice(args.indexOf('-ss'))).toEqual([
-      '-ss', '00:00:10.000',
-      '-i', '/tmp/in.mp4',
-      '-t', '00:00:15.000',
-      '-c', 'copy', '-avoid_negative_ts', 'make_zero',
+      '-ss',
+      '00:00:10.000',
+      '-i',
+      '/tmp/in.mp4',
+      '-t',
+      '00:00:15.000',
+      '-c',
+      'copy',
+      '-avoid_negative_ts',
+      'make_zero',
       '/tmp/out.mp4',
     ])
   })
@@ -96,25 +102,39 @@ describe('parseCutParams', () => {
   })
   it('remove: lehnt ab, wenn nichts übrig bliebe', () => {
     expect(() =>
-      parseCutParams({ start: '0', duration: '10', mode: 'copy', operation: 'remove', total: '10' }, MAX),
+      parseCutParams(
+        { start: '0', duration: '10', mode: 'copy', operation: 'remove', total: '10' },
+        MAX,
+      ),
     ).toThrow(ValidationError)
   })
   it('remove: akzeptiert gültige Werte inkl. total', () => {
     expect(
-      parseCutParams({ start: '5', duration: '3', mode: 'reencode', operation: 'remove', total: '30' }, MAX),
+      parseCutParams(
+        { start: '5', duration: '3', mode: 'reencode', operation: 'remove', total: '30' },
+        MAX,
+      ),
     ).toEqual({ start: 5, duration: 3, mode: 'reencode', operation: 'remove', total: 30 })
   })
   it('lehnt negativen Start ab', () => {
-    expect(() => parseCutParams({ start: '-1', duration: '7', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '-1', duration: '7', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt Dauer <= 0 ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '0', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '0', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt zu lange Dauer ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '99999', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '99999', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt unbekannten Modus ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '7', mode: 'xyz' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '7', mode: 'xyz' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
 })
 

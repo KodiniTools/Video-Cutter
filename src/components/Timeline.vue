@@ -73,7 +73,12 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="timeline" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointerleave="onPointerUp">
+  <div
+    class="timeline"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointerleave="onPointerUp"
+  >
     <div ref="track" class="track" @pointerdown="onTrackDown">
       <div class="range" :style="rangeStyle"></div>
       <div class="playhead" :style="{ left: `${currentPct}%` }"></div>

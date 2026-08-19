@@ -25,9 +25,7 @@ export function isAppleMobile(): boolean {
   const ua = navigator.userAgent || ''
   const iOS = /iPad|iPhone|iPod/.test(ua)
   const iPadOS =
-    ua.includes('Macintosh') &&
-    typeof document !== 'undefined' &&
-    'ontouchend' in document
+    ua.includes('Macintosh') && typeof document !== 'undefined' && 'ontouchend' in document
   return iOS || iPadOS
 }
 

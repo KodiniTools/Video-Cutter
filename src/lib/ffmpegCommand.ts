@@ -54,7 +54,13 @@ export interface TrimArgsInput {
  * - `copy`          => verlustfrei, aber Schnitt an Keyframes (sehr schnell).
  * - `reencode`      => frame-genau via libx264/aac (langsamer, größer).
  */
-export function buildTrimArgs({ inputName, outputName, start, end, mode }: TrimArgsInput): string[] {
+export function buildTrimArgs({
+  inputName,
+  outputName,
+  start,
+  end,
+  mode,
+}: TrimArgsInput): string[] {
   const duration = Math.max(0, end - start)
   const base = ['-ss', formatFfmpegTime(start), '-i', inputName, '-t', formatFfmpegTime(duration)]
 
@@ -64,12 +70,18 @@ export function buildTrimArgs({ inputName, outputName, start, end, mode }: TrimA
 
   return [
     ...base,
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '23',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-movflags', '+faststart',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '23',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    '-movflags',
+    '+faststart',
     outputName,
   ]
 }

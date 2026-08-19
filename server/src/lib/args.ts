@@ -32,17 +32,37 @@ export interface ServerArgsInput {
 // Gemeinsame Präfixe/Encoder-Optionen.
 const PROGRESS = ['-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-nostats']
 const REENCODE = [
-  '-c:v', 'libx264',
-  '-preset', 'veryfast',
-  '-crf', '23',
-  '-c:a', 'aac',
-  '-b:a', '128k',
-  '-movflags', '+faststart',
+  '-c:v',
+  'libx264',
+  '-preset',
+  'veryfast',
+  '-crf',
+  '23',
+  '-c:a',
+  'aac',
+  '-b:a',
+  '128k',
+  '-movflags',
+  '+faststart',
 ]
 
 /** Behalten: schneidet [start, start+duration] heraus (copy = verlustfrei, sonst H.264/AAC). */
-function keepArgs(input: string, output: string, start: number, duration: number, mode: TrimMode): string[] {
-  const base = [...PROGRESS, '-ss', formatFfmpegTime(start), '-i', input, '-t', formatFfmpegTime(Math.max(0, duration))]
+function keepArgs(
+  input: string,
+  output: string,
+  start: number,
+  duration: number,
+  mode: TrimMode,
+): string[] {
+  const base = [
+    ...PROGRESS,
+    '-ss',
+    formatFfmpegTime(start),
+    '-i',
+    input,
+    '-t',
+    formatFfmpegTime(Math.max(0, duration)),
+  ]
   if (mode === 'copy') {
     return [...base, '-c', 'copy', '-avoid_negative_ts', 'make_zero', output]
   }
@@ -51,7 +71,15 @@ function keepArgs(input: string, output: string, start: number, duration: number
 
 /** Re-Encode-Trim eines einzelnen Segments [start, start+duration]. */
 function reencodeTrim(input: string, output: string, start: number, duration: number): string[] {
-  const base = [...PROGRESS, '-ss', formatFfmpegTime(start), '-i', input, '-t', formatFfmpegTime(Math.max(0, duration))]
+  const base = [
+    ...PROGRESS,
+    '-ss',
+    formatFfmpegTime(start),
+    '-i',
+    input,
+    '-t',
+    formatFfmpegTime(Math.max(0, duration)),
+  ]
   return [...base, ...REENCODE, output]
 }
 
@@ -90,10 +118,14 @@ export function buildServerArgs({
         `[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]`
       return [
         ...PROGRESS,
-        '-i', inputPath,
-        '-filter_complex', filter,
-        '-map', '[outv]',
-        '-map', '[outa]',
+        '-i',
+        inputPath,
+        '-filter_complex',
+        filter,
+        '-map',
+        '[outv]',
+        '-map',
+        '[outa]',
         ...REENCODE,
         outputPath,
       ]

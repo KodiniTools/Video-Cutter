@@ -62,18 +62,16 @@ async function bootstrap(): Promise<void> {
       res.status(403).json({ error: err.message })
       return
     }
-    // eslint-disable-next-line no-console
+
     console.error('Unerwarteter Fehler:', err)
     res.status(500).json({ error: 'Interner Serverfehler.' })
   })
 
   const server = app.listen(config.port, config.host, () => {
-    // eslint-disable-next-line no-console
     console.log(`video-cutter-api läuft auf http://${config.host}:${config.port}`)
   })
 
   const shutdown = (signal: string) => {
-    // eslint-disable-next-line no-console
     console.log(`${signal} empfangen – fahre herunter …`)
     server.close(() => {
       void jobManager.shutdown().finally(() => process.exit(0))
@@ -87,7 +85,6 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('Start fehlgeschlagen:', err)
   process.exit(1)
 })
