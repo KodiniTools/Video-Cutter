@@ -112,6 +112,11 @@ onBeforeUnmount(() => store.reset())
 
 const appleMobile = isAppleMobile()
 
+/** Ergebnis verwerfen: Vorschau schließen, Blob freigeben – Quellvideo bleibt geladen. */
+function discardResult(): void {
+  store.revokeResult()
+}
+
 async function onDownload(e: MouseEvent): Promise<void> {
   const blob = resultBlob.value
   if (!blob) return // ohne Blob: nativen <a>-Download nicht verhindern
@@ -264,9 +269,17 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <div v-if="resultUrl" class="result">
         <p class="result-title">{{ t('result.ready') }}</p>
         <video class="player" :src="resultUrl" controls preload="metadata"></video>
-        <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
-          {{ t('actions.download') }} — {{ resultName }}
-        </a>
+        <div class="result-actions">
+          <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
+            {{ t('actions.download') }} — {{ resultName }}
+          </a>
+          <button class="btn ghost" type="button" @click="discardResult">
+            {{ t('actions.discard') }}
+          </button>
+          <button class="btn ghost" type="button" @click="store.reset()">
+            {{ t('actions.change') }}
+          </button>
+        </div>
         <p v-if="appleMobile" class="result-hint">{{ t('result.iosHint') }}</p>
       </div>
     </div>
@@ -490,6 +503,17 @@ a.btn {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.result-actions .btn {
+  flex: 1 1 auto;
+}
+.result-actions .btn.primary {
+  flex: 2 1 240px;
 }
 .result-title {
   font-weight: 600;
