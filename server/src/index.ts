@@ -71,6 +71,14 @@ async function bootstrap(): Promise<void> {
     console.log(`video-cutter-api läuft auf http://${config.host}:${config.port}`)
   })
 
+  // Große/langsame Uploads dürfen lange dauern. Node bricht sonst jede Anfrage
+  // nach dem Standard-requestTimeout (5 min) ab -> Verbindung reset (langsamer
+  // Upload). Deshalb: kein Gesamt-Limit auf die Anfrage, aber Header-Timeout als
+  // Slowloris-Schutz, und keepAlive > Nginx, um Reuse-Races zu vermeiden.
+  server.requestTimeout = 0
+  server.headersTimeout = 120_000
+  server.keepAliveTimeout = 75_000
+
   const shutdown = (signal: string) => {
     console.log(`${signal} empfangen – fahre herunter …`)
     server.close(() => {
