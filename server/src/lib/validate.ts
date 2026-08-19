@@ -1,4 +1,4 @@
-import type { TrimMode } from './args'
+import type { TrimMode, CutOperation } from './args'
 
 export class ValidationError extends Error {
   statusCode = 400
@@ -12,6 +12,9 @@ export interface CutParams {
   start: number
   duration: number
   mode: TrimMode
+  operation: CutOperation
+  /** Gesamtdauer des Videos – nur bei operation 'remove' gesetzt. */
+  total?: number
 }
 
 /**
@@ -25,6 +28,7 @@ export function parseCutParams(
   const start = Number(body.start)
   const duration = Number(body.duration)
   const mode = body.mode
+  const operation: CutOperation = body.operation === 'remove' ? 'remove' : 'keep'
 
   if (!Number.isFinite(start) || start < 0) {
     throw new ValidationError('Ungültiger Startwert.')
@@ -39,7 +43,21 @@ export function parseCutParams(
     throw new ValidationError('Ungültiger Modus (erlaubt: copy, reencode).')
   }
 
-  return { start, duration, mode }
+  let total: number | undefined
+  if (operation === 'remove') {
+    total = Number(body.total)
+    if (!Number.isFinite(total) || total <= 0) {
+      throw new ValidationError('Ungültige Gesamtdauer.')
+    }
+    if (start + duration > total + 0.5) {
+      throw new ValidationError('Der zu entfernende Bereich liegt außerhalb des Videos.')
+    }
+    if (total - duration < 0.05) {
+      throw new ValidationError('Nach dem Entfernen bliebe kein Video übrig.')
+    }
+  }
+
+  return { start, duration, mode, operation, total }
 }
 
 /** Endung in Kleinbuchstaben (1–5 Zeichen), Fallback `mp4`. */

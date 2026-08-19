@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { clamp, type TrimMode } from '@/lib/ffmpegCommand'
 
+/** 'keep' = Auswahl behalten, 'remove' = Auswahl entfernen (Rest zusammenfügen). */
+export type CutOperation = 'keep' | 'remove'
+
 /** Mindestlänge der Auswahl in Sekunden. */
 const MIN_SELECTION = 0.05
 
@@ -17,6 +20,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const endTime = ref(0)
   const currentTime = ref(0)
   const mode = ref<TrimMode>('copy')
+  /** Ob die Auswahl behalten oder entfernt wird. */
+  const operation = ref<CutOperation>('keep')
 
   // --- Ergebnis / Fehler ---
   const resultUrl = ref('')
@@ -82,6 +87,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     mode.value = m
   }
 
+  function setOperation(o: CutOperation): void {
+    operation.value = o
+  }
+
   function setResult(blob: Blob, name: string): void {
     revokeResult()
     resultBlob.value = blob
@@ -107,12 +116,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
 
   return {
     // state
-    file, objectUrl, fileName, duration, startTime, endTime, currentTime, mode,
+    file, objectUrl, fileName, duration, startTime, endTime, currentTime, mode, operation,
     resultUrl, resultName, resultBlob, error,
     // getters
     selectionDuration, hasVideo, canExport,
     // actions
-    setFile, setDuration, setStart, setEnd, setCurrentTime, setMode,
+    setFile, setDuration, setStart, setEnd, setCurrentTime, setMode, setOperation,
     setResult, setError, revokeResult, reset,
   }
 })

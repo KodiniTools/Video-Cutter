@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { TrimMode } from '@/lib/ffmpegCommand'
+import type { CutOperation } from '@/stores/videoEditor'
 
 /**
  * Basis-URL des Backends.
@@ -108,9 +109,18 @@ function waitForJob(jobId: string): Promise<void> {
 
 /**
  * Schneidet ein Video serverseitig.
- * @param duration Länge des Ausschnitts in Sekunden (end - start).
+ * @param duration  Länge der Auswahl in Sekunden (end - start).
+ * @param operation 'keep' behält die Auswahl, 'remove' entfernt sie.
+ * @param total     Gesamtdauer des Videos (nur für 'remove' nötig).
  */
-async function cut(file: File, start: number, duration: number, mode: TrimMode): Promise<Blob> {
+async function cut(
+  file: File,
+  start: number,
+  duration: number,
+  mode: TrimMode,
+  operation: CutOperation = 'keep',
+  total = 0,
+): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
   progress.value = 0
@@ -120,6 +130,8 @@ async function cut(file: File, start: number, duration: number, mode: TrimMode):
     form.append('start', String(start))
     form.append('duration', String(duration))
     form.append('mode', mode)
+    form.append('operation', operation)
+    if (operation === 'remove') form.append('total', String(total))
 
     const jobId = await uploadForJob(form, (percent) => {
       progress.value = percent
