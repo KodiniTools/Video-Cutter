@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VideoTrimmer from '@/components/VideoTrimmer.vue'
 import type { AppLocale } from '@/i18n'
 
 const { t, locale } = useI18n()
-const isDark = ref(true)
 
-function applyTheme(): void {
-  document.documentElement.dataset.theme = isDark.value ? 'dark' : 'light'
-}
-function toggleTheme(): void {
-  isDark.value = !isDark.value
-  applyTheme()
-}
-function toggleLocale(): void {
-  locale.value = (locale.value === 'de' ? 'en' : 'de') satisfies AppLocale
+// Sprache mit der globalen Navigation synchron halten (Theme + Sprache steuert
+// die Nav via localStorage 'theme'/'locale' und dem 'locale-changed'-Event).
+function onLocaleChanged(e: Event): void {
+  const detail = (e as CustomEvent<{ locale?: string }>).detail
+  const l = detail?.locale
+  if (l === 'de' || l === 'en') locale.value = l satisfies AppLocale
 }
 
-onMounted(applyTheme)
+onMounted(() => {
+  const stored = localStorage.getItem('locale')
+  if (stored === 'de' || stored === 'en') locale.value = stored satisfies AppLocale
+  window.addEventListener('locale-changed', onLocaleChanged)
+})
+onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChanged))
 </script>
 
 <template>
@@ -30,12 +31,6 @@ onMounted(applyTheme)
           <h1>{{ t('app.title') }}</h1>
           <p>{{ t('app.subtitle') }}</p>
         </div>
-      </div>
-      <div class="controls">
-        <button class="chip" type="button" @click="toggleLocale">{{ locale === 'de' ? 'EN' : 'DE' }}</button>
-        <button class="chip" type="button" :aria-label="'Theme'" @click="toggleTheme">
-          {{ isDark ? '☀' : '☾' }}
-        </button>
       </div>
     </header>
 
@@ -72,18 +67,5 @@ onMounted(applyTheme)
 }
 .brand h1 { margin: 0; font-size: 20px; }
 .brand p { margin: 2px 0 0; font-size: 13px; color: var(--vc-text-dim); }
-.controls { display: flex; gap: 8px; }
-.chip {
-  min-width: 40px;
-  padding: 8px 10px;
-  border: 1px solid var(--vc-border);
-  border-radius: 8px;
-  background: var(--vc-surface);
-  color: var(--vc-text);
-  cursor: pointer;
-  font-size: 14px;
-}
-.chip:hover { border-color: var(--vc-accent); }
-.chip:focus-visible { outline: 2px solid var(--vc-focus); outline-offset: 2px; }
 .footer { font-size: 12px; color: var(--vc-text-dim); text-align: center; }
 </style>

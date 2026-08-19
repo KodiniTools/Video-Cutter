@@ -15,9 +15,12 @@ const {
   hasVideo, canExport, selectionDuration, resultUrl, resultName, resultBlob, error,
 } = storeToRefs(store)
 
-const { isProcessing, progress, cut: serverCut } = useServerCut()
+const { isProcessing, progress, phase, cut: serverCut } = useServerCut()
 
 const busy = computed(() => isProcessing.value)
+const statusLabel = computed(() =>
+  phase.value === 'upload' ? t('status.uploading') : t('status.processing'),
+)
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const isDragOver = ref(false)
@@ -174,7 +177,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
 
       <!-- Export -->
       <button class="btn primary export" type="button" :disabled="!canExport || busy" @click="onExport">
-        <template v-if="isProcessing">{{ t('status.processing') }} {{ progress }}%</template>
+        <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
         <template v-else>{{ t('actions.export') }}</template>
       </button>
 
