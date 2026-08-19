@@ -28,12 +28,42 @@ const {
   error,
 } = storeToRefs(store)
 
-const { isProcessing, progress, phase, cut: serverCut } = useServerCut()
+const {
+  isProcessing,
+  progress,
+  phase,
+  uploadedBytes,
+  totalBytes,
+  bytesPerSec,
+  cut: serverCut,
+} = useServerCut()
 
 const busy = computed(() => isProcessing.value)
 const statusLabel = computed(() =>
   phase.value === 'upload' ? t('status.uploading') : t('status.processing'),
 )
+
+function formatMB(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(bytes < 100 * 1024 * 1024 ? 1 : 0)
+}
+function formatEta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '–'
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')} min` : `${s} s`
+}
+
+// Detailzeile beim Upload: "45 / 380 MB · 1,8 MB/s · noch ~3:12 min".
+const uploadDetail = computed(() => {
+  if (phase.value !== 'upload' || totalBytes.value <= 0) return ''
+  const parts = [`${formatMB(uploadedBytes.value)} / ${formatMB(totalBytes.value)} MB`]
+  if (bytesPerSec.value > 0) {
+    parts.push(`${(bytesPerSec.value / (1024 * 1024)).toFixed(1)} MB/s`)
+    const remainingBytes = Math.max(0, totalBytes.value - uploadedBytes.value)
+    parts.push(`${t('status.remaining')} ~${formatEta(remainingBytes / bytesPerSec.value)}`)
+  }
+  return parts.join(' · ')
+})
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const isDragOver = ref(false)
@@ -262,6 +292,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
         <div class="bar" :style="{ width: `${progress}%` }"></div>
       </div>
+      <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
 
@@ -497,6 +528,14 @@ a.btn {
   margin: -4px 0 0;
   font-size: 12px;
   color: var(--vc-text-dim);
+}
+
+.upload-detail {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .result {

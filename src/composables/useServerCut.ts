@@ -22,6 +22,10 @@ export type CutPhase = 'idle' | 'upload' | 'process'
 const isProcessing = ref(false)
 const progress = ref(0)
 const phase = ref<CutPhase>('idle')
+// Upload-Statistik (nur während phase === 'upload' aussagekräftig).
+const uploadedBytes = ref(0)
+const totalBytes = ref(0)
+const bytesPerSec = ref(0)
 
 async function readError(res: Response): Promise<string> {
   try {
@@ -36,13 +40,16 @@ async function readError(res: Response): Promise<string> {
  * Lädt die Datei per XHR hoch (im Gegensatz zu fetch liefert XHR echten
  * Upload-Fortschritt) und legt den Job an. Gibt die jobId zurück.
  */
-function uploadForJob(form: FormData, onProgress: (percent: number) => void): Promise<string> {
+function uploadForJob(
+  form: FormData,
+  onProgress: (loaded: number, total: number) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${API_BASE}/api/cut`)
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+      if (e.lengthComputable) onProgress(e.loaded, e.total)
     }
 
     xhr.onload = () => {
@@ -124,6 +131,9 @@ async function cut(
   isProcessing.value = true
   phase.value = 'upload'
   progress.value = 0
+  uploadedBytes.value = 0
+  totalBytes.value = 0
+  bytesPerSec.value = 0
   try {
     const form = new FormData()
     form.append('video', file)
@@ -133,8 +143,23 @@ async function cut(
     form.append('operation', operation)
     if (operation === 'remove') form.append('total', String(total))
 
-    const jobId = await uploadForJob(form, (percent) => {
-      progress.value = percent
+    // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
+    let lastTime = 0
+    let lastLoaded = 0
+    const jobId = await uploadForJob(form, (loaded, tot) => {
+      progress.value = tot > 0 ? Math.round((loaded / tot) * 100) : 0
+      uploadedBytes.value = loaded
+      totalBytes.value = tot
+      const now = performance.now()
+      if (lastTime && now - lastTime > 300) {
+        const inst = ((loaded - lastLoaded) / (now - lastTime)) * 1000 // Bytes/s
+        bytesPerSec.value = bytesPerSec.value ? bytesPerSec.value * 0.7 + inst * 0.3 : inst
+        lastTime = now
+        lastLoaded = loaded
+      } else if (!lastTime) {
+        lastTime = now
+        lastLoaded = loaded
+      }
     })
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
@@ -152,5 +177,5 @@ async function cut(
 }
 
 export function useServerCut() {
-  return { isProcessing, progress, phase, cut }
+  return { isProcessing, progress, phase, uploadedBytes, totalBytes, bytesPerSec, cut }
 }
