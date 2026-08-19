@@ -37,4 +37,11 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-#app { min-height: 100vh; }
+/* Globale Nav (oben), App (Mitte), Footer (unten) als Sticky-Footer-Layout. */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#app { flex: 1 0 auto; }
