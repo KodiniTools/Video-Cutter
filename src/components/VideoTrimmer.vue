@@ -3,7 +3,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useServerCut } from '@/composables/useServerCut'
+import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
@@ -36,6 +36,7 @@ const {
   totalBytes,
   bytesPerSec,
   cut: serverCut,
+  cancel: serverCancel,
 } = useServerCut()
 
 const busy = computed(() => isProcessing.value)
@@ -134,8 +135,14 @@ async function onExport(): Promise<void> {
 
     store.setResult(blob, `${base}_cut.${ext}`)
   } catch (e) {
-    store.setError(e instanceof Error ? e.message : String(e))
+    // Nutzer-Abbruch nicht als Fehler anzeigen.
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg !== CUT_CANCELLED) store.setError(msg)
   }
+}
+
+function onCancel(): void {
+  serverCancel()
 }
 
 onBeforeUnmount(() => store.reset())
@@ -293,6 +300,10 @@ async function onDownload(e: MouseEvent): Promise<void> {
         <div class="bar" :style="{ width: `${progress}%` }"></div>
       </div>
       <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
+
+      <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
+        {{ t('actions.cancel') }}
+      </button>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
 
@@ -536,6 +547,10 @@ a.btn {
   color: var(--vc-text-dim);
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.cancel {
+  align-self: center;
 }
 
 .result {

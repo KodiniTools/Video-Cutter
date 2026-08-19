@@ -26,6 +26,7 @@ const messages = {
       export: 'Schneiden & exportieren',
       download: 'Herunterladen',
       discard: 'Verwerfen',
+      cancel: 'Abbrechen',
     },
     mode: {
       legend: 'Schnittmodus',
@@ -72,6 +73,7 @@ const messages = {
       export: 'Cut & export',
       download: 'Download',
       discard: 'Discard',
+      cancel: 'Cancel',
     },
     mode: {
       legend: 'Cut mode',

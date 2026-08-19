@@ -9,6 +9,9 @@ import type { CutOperation } from '@/stores/videoEditor'
  */
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
+/** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
+export const CUT_CANCELLED = 'CUT_CANCELLED'
+
 interface JobEvent {
   state: 'processing' | 'done' | 'error'
   progress: number
@@ -26,6 +29,12 @@ const phase = ref<CutPhase>('idle')
 const uploadedBytes = ref(0)
 const totalBytes = ref(0)
 const bytesPerSec = ref(0)
+
+// Handles auf den aktuell laufenden Vorgang (für "Abbrechen").
+let currentXhr: XMLHttpRequest | null = null
+let currentSource: EventSource | null = null
+let currentJobId: string | null = null
+let rejectActive: ((reason: Error) => void) | null = null
 
 async function readError(res: Response): Promise<string> {
   try {
@@ -46,6 +55,12 @@ function uploadForJob(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    currentXhr = xhr
+    rejectActive = reject
+    const cleanup = () => {
+      if (currentXhr === xhr) currentXhr = null
+      if (rejectActive === reject) rejectActive = null
+    }
     xhr.open('POST', `${API_BASE}/api/cut`)
 
     xhr.upload.onprogress = (e) => {
@@ -53,6 +68,7 @@ function uploadForJob(
     }
 
     xhr.onload = () => {
+      cleanup()
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText) as { jobId?: string }
@@ -73,8 +89,12 @@ function uploadForJob(
       }
     }
 
-    xhr.onerror = () => reject(new Error('Upload fehlgeschlagen (Netzwerkfehler).'))
-    xhr.onabort = () => reject(new Error('Upload abgebrochen.'))
+    xhr.onerror = () => {
+      cleanup()
+      reject(new Error('Upload fehlgeschlagen (Netzwerkfehler).'))
+    }
+    // Abbruch wird zentral über cancel() abgewickelt (rejectActive).
+    xhr.onabort = () => cleanup()
 
     xhr.send(form)
   })
@@ -84,7 +104,13 @@ function uploadForJob(
 function waitForJob(jobId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const source = new EventSource(`${API_BASE}/api/cut/${jobId}/events`)
+    currentSource = source
+    rejectActive = reject
     let settled = false
+    const cleanup = () => {
+      if (currentSource === source) currentSource = null
+      if (rejectActive === reject) rejectActive = null
+    }
 
     source.onmessage = (ev) => {
       let data: JobEvent
@@ -96,10 +122,12 @@ function waitForJob(jobId: string): Promise<void> {
       progress.value = data.progress
       if (data.state === 'done') {
         settled = true
+        cleanup()
         source.close()
         resolve()
       } else if (data.state === 'error') {
         settled = true
+        cleanup()
         source.close()
         reject(new Error(data.error ?? 'Serverseitiger Schnitt fehlgeschlagen.'))
       }
@@ -108,10 +136,30 @@ function waitForJob(jobId: string): Promise<void> {
     source.onerror = () => {
       if (settled) return
       settled = true
+      cleanup()
       source.close()
       reject(new Error('Verbindung zum Server unterbrochen.'))
     }
   })
+}
+
+/** Bricht den laufenden Upload/Job ab (Nutzer-Aktion). */
+function cancel(): void {
+  const rej = rejectActive
+  rejectActive = null
+  if (currentXhr) {
+    currentXhr.abort()
+    currentXhr = null
+  }
+  if (currentSource) {
+    currentSource.close()
+    currentSource = null
+  }
+  // Serverseitigen Job beenden (laufenden ffmpeg-Prozess stoppen).
+  if (currentJobId) {
+    fetch(`${API_BASE}/api/cut/${currentJobId}`, { method: 'DELETE' }).catch(() => {})
+  }
+  rej?.(new Error(CUT_CANCELLED))
 }
 
 /**
@@ -134,6 +182,7 @@ async function cut(
   uploadedBytes.value = 0
   totalBytes.value = 0
   bytesPerSec.value = 0
+  currentJobId = null
   try {
     const form = new FormData()
     form.append('video', file)
@@ -161,6 +210,7 @@ async function cut(
         lastLoaded = loaded
       }
     })
+    currentJobId = jobId
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
     phase.value = 'process'
@@ -169,13 +219,15 @@ async function cut(
 
     const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
     if (!download.ok) throw new Error(await readError(download))
+    currentJobId = null
     return await download.blob()
   } finally {
     isProcessing.value = false
     phase.value = 'idle'
+    currentJobId = null
   }
 }
 
 export function useServerCut() {
-  return { isProcessing, progress, phase, uploadedBytes, totalBytes, bytesPerSec, cut }
+  return { isProcessing, progress, phase, uploadedBytes, totalBytes, bytesPerSec, cut, cancel }
 }
