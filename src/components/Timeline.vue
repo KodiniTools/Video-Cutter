@@ -48,6 +48,8 @@ function onPointerMove(ev: PointerEvent): void {
   const t = timeFromClientX(ev.clientX)
   if (dragging.value === 'start') emit('update:start', t)
   else emit('update:end', t)
+  // Vorschau live auf die gezogene Griff-Position setzen.
+  emit('seek', t)
 }
 
 function onPointerUp(): void {
@@ -62,8 +64,11 @@ function onTrackDown(ev: PointerEvent): void {
 // Tastaturbedienung der Griffe (1 s Schritt, 5 s mit Shift).
 function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   const step = ev.shiftKey ? 5 : 1
-  if (target === 'start') emit('update:start', props.start + dir * step)
-  else emit('update:end', props.end + dir * step)
+  const v = (target === 'start' ? props.start : props.end) + dir * step
+  if (target === 'start') emit('update:start', v)
+  else emit('update:end', v)
+  // Vorschau live mitführen.
+  emit('seek', v)
 }
 </script>
 
