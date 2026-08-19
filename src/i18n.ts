@@ -25,6 +25,7 @@ const messages = {
       setEnd: 'Ende setzen',
       export: 'Schneiden & exportieren',
       download: 'Herunterladen',
+      discard: 'Verwerfen',
     },
     mode: {
       legend: 'Schnittmodus',
@@ -69,6 +70,7 @@ const messages = {
       setEnd: 'Set end',
       export: 'Cut & export',
       download: 'Download',
+      discard: 'Discard',
     },
     mode: {
       legend: 'Cut mode',
