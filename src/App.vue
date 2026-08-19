@@ -57,15 +57,33 @@ onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChang
   justify-content: space-between;
   gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .logo {
-  width: 40px; height: 40px;
-  display: grid; place-items: center;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
   border-radius: 10px;
   background: var(--vc-accent);
-  color: #fff; font-size: 20px;
+  color: #fff;
+  font-size: 20px;
 }
-.brand h1 { margin: 0; font-size: 20px; }
-.brand p { margin: 2px 0 0; font-size: 13px; color: var(--vc-text-dim); }
-.footer { font-size: 12px; color: var(--vc-text-dim); text-align: center; }
+.brand h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.brand p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--vc-text-dim);
+}
+.footer {
+  font-size: 12px;
+  color: var(--vc-text-dim);
+  text-align: center;
+}
 </style>

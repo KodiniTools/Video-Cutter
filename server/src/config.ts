@@ -11,7 +11,10 @@ function num(name: string, def: number): number {
 function list(name: string, def: string[]): string[] {
   const raw = process.env[name]
   if (!raw) return def
-  return raw.split(',').map((s) => s.trim()).filter(Boolean)
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 export const config = {

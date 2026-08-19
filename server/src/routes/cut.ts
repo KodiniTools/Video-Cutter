@@ -157,7 +157,10 @@ cutRouter.get('/cut/:id/download', (req: Request, res: Response) => {
 /**
  * DELETE /api/cut/:id  -> laufenden Job abbrechen.
  */
-cutRouter.delete('/cut/:id', asyncHandler(async (req, res) => {
-  const ok = await jobManager.cancel(req.params.id)
-  res.status(ok ? 200 : 404).json({ cancelled: ok })
-}))
+cutRouter.delete(
+  '/cut/:id',
+  asyncHandler(async (req, res) => {
+    const ok = await jobManager.cancel(req.params.id)
+    res.status(ok ? 200 : 404).json({ cancelled: ok })
+  }),
+)

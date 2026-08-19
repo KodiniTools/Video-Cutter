@@ -9,58 +9,60 @@
 
     <!-- Theme/Sprache früh setzen (kein Flash; synchron mit der globalen Nav) -->
     <script>
-      (function () {
+      ;(function () {
         try {
-          var t = localStorage.getItem('theme');
-          if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          document.documentElement.setAttribute('data-theme', t);
-          var l = localStorage.getItem('locale');
-          if (l) document.documentElement.setAttribute('lang', l);
+          var t = localStorage.getItem('theme')
+          if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          document.documentElement.setAttribute('data-theme', t)
+          var l = localStorage.getItem('locale')
+          if (l) document.documentElement.setAttribute('lang', l)
         } catch (e) {}
-      })();
+      })()
     </script>
 
     <!-- Google Consent Mode v2 - DSGVO/GDPR Compliant -->
     <script>
       // Initialize dataLayer and set default consent to denied
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
+      window.dataLayer = window.dataLayer || []
+      function gtag() {
+        dataLayer.push(arguments)
+      }
 
       // Set default consent state - all denied until user accepts
       gtag('consent', 'default', {
-        'ad_storage': 'denied',
-        'ad_user_data': 'denied',
-        'ad_personalization': 'denied',
-        'analytics_storage': 'denied',
-        'functionality_storage': 'denied',
-        'personalization_storage': 'denied',
-        'security_storage': 'granted',
-        'wait_for_update': 500
-      });
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        functionality_storage: 'denied',
+        personalization_storage: 'denied',
+        security_storage: 'granted',
+        wait_for_update: 500,
+      })
 
       // Load saved consent from localStorage
-      (function() {
+      ;(function () {
         try {
-          var savedConsent = localStorage.getItem('cookieConsent');
+          var savedConsent = localStorage.getItem('cookieConsent')
           if (savedConsent) {
-            var consent = JSON.parse(savedConsent);
+            var consent = JSON.parse(savedConsent)
             if (consent.analytics) {
               gtag('consent', 'update', {
-                'analytics_storage': 'granted',
-                'functionality_storage': 'granted',
-                'personalization_storage': 'granted'
-              });
+                analytics_storage: 'granted',
+                functionality_storage: 'granted',
+                personalization_storage: 'granted',
+              })
             }
             if (consent.marketing) {
               gtag('consent', 'update', {
-                'ad_storage': 'granted',
-                'ad_user_data': 'granted',
-                'ad_personalization': 'granted'
-              });
+                ad_storage: 'granted',
+                ad_user_data: 'granted',
+                ad_personalization: 'granted',
+              })
             }
           }
-        } catch(e) {}
-      })();
+        } catch (e) {}
+      })()
     </script>
   </head>
   <body>
@@ -68,22 +70,22 @@
     <!-- Globale Navigation (KodiniTools)                              -->
     <!-- ============================================================= -->
     <style>
-    /* Reset und Schutz vor bestehenden Styles */
-    .global-nav * {
+      /* Reset und Schutz vor bestehenden Styles */
+      .global-nav * {
         box-sizing: border-box;
-    }
+      }
 
-    /* Überschreibung von bestehenden Navigation Styles */
-    body {
+      /* Überschreibung von bestehenden Navigation Styles */
+      body {
         padding-top: 0 !important;
-    }
+      }
 
-    html {
+      html {
         scroll-padding-top: 0 !important;
-    }
+      }
 
-    /* CSS-Variablen für automatische Theme-Anpassung */
-    .global-nav {
+      /* CSS-Variablen für automatische Theme-Anpassung */
+      .global-nav {
         --nav-bg: rgba(249, 242, 213, 0.9);
         --nav-text: #003971;
         --nav-text-hover: #001d3d;
@@ -94,26 +96,26 @@
         --dropdown-border: rgba(1, 79, 153, 0.08);
         --dropdown-shadow: rgba(0, 57, 113, 0.12);
         --accent-color: #014f99;
-    }
+      }
 
-    /* Dark Theme Support */
-    @media (prefers-color-scheme: dark) {
+      /* Dark Theme Support */
+      @media (prefers-color-scheme: dark) {
         .global-nav {
-            --nav-bg: rgba(26, 32, 44, 0.9);
-            --nav-text: #e2e8f0;
-            --nav-text-hover: #f7fafc;
-            --nav-bg-hover: rgba(255, 255, 255, 0.08);
-            --nav-border: rgba(255, 255, 255, 0.1);
-            --nav-shadow: rgba(0, 0, 0, 0.3);
-            --dropdown-bg: rgba(45, 55, 72, 0.95);
-            --dropdown-border: rgba(255, 255, 255, 0.1);
-            --dropdown-shadow: rgba(0, 0, 0, 0.25);
-            --accent-color: #6366f1;
+          --nav-bg: rgba(26, 32, 44, 0.9);
+          --nav-text: #e2e8f0;
+          --nav-text-hover: #f7fafc;
+          --nav-bg-hover: rgba(255, 255, 255, 0.08);
+          --nav-border: rgba(255, 255, 255, 0.1);
+          --nav-shadow: rgba(0, 0, 0, 0.3);
+          --dropdown-bg: rgba(45, 55, 72, 0.95);
+          --dropdown-border: rgba(255, 255, 255, 0.1);
+          --dropdown-shadow: rgba(0, 0, 0, 0.25);
+          --accent-color: #6366f1;
         }
-    }
+      }
 
-    /* Explizite Dark-Class Support */
-    [data-theme="dark"] .global-nav {
+      /* Explizite Dark-Class Support */
+      [data-theme='dark'] .global-nav {
         --nav-bg: rgba(26, 32, 44, 0.9);
         --nav-text: #e2e8f0;
         --nav-text-hover: #f7fafc;
@@ -127,17 +129,17 @@
         background: rgba(26, 32, 44, 0.9) !important;
         border-bottom-color: rgba(255, 255, 255, 0.1);
         box-shadow: 0 1px 20px rgba(0, 0, 0, 0.3);
-    }
+      }
 
-    [data-theme="dark"] .global-nav .global-nav-brand,
-    [data-theme="dark"] .global-nav .global-nav-link,
-    [data-theme="dark"] .global-nav .global-nav-dropdown-toggle,
-    [data-theme="dark"] .global-nav .global-nav-dropdown-item {
+      [data-theme='dark'] .global-nav .global-nav-brand,
+      [data-theme='dark'] .global-nav .global-nav-link,
+      [data-theme='dark'] .global-nav .global-nav-dropdown-toggle,
+      [data-theme='dark'] .global-nav .global-nav-dropdown-item {
         color: #e2e8f0;
-    }
+      }
 
-    /* Adaptive Navigation Styles - Non-Overlapping */
-    .global-nav {
+      /* Adaptive Navigation Styles - Non-Overlapping */
+      .global-nav {
         position: relative;
         top: 0;
         left: 0;
@@ -149,15 +151,15 @@
         border-bottom: 1px solid var(--nav-border);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 0 1px 20px var(--nav-shadow);
-    }
+      }
 
-    /* Sticky Navigation Option (falls gewünscht, aber nicht overlapping) */
-    .global-nav.sticky {
+      /* Sticky Navigation Option (falls gewünscht, aber nicht overlapping) */
+      .global-nav.sticky {
         position: sticky;
         top: 0;
-    }
+      }
 
-    .global-nav-container {
+      .global-nav-container {
         max-width: 1200px;
         margin: 0 auto;
         display: flex;
@@ -165,53 +167,65 @@
         justify-content: space-between;
         padding: 0 20px;
         height: 70px;
-    }
+      }
 
-    .global-nav-brand {
+      .global-nav-brand {
         font-size: 1.5rem;
         font-weight: 700;
         color: var(--nav-text);
         text-decoration: none;
         transition: all 0.3s ease;
         letter-spacing: -0.025em;
-        font-family: 'Supreme', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family:
+          'Supreme',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
         display: flex;
         align-items: center;
         gap: 0.5rem;
-    }
+      }
 
-    .brand-logo-icon {
+      .brand-logo-icon {
         height: 24px;
         width: 24px;
         object-fit: contain;
         transition: transform 0.3s ease;
-    }
+      }
 
-    .brand-flag-icon {
+      .brand-flag-icon {
         height: 20px;
         width: 20px;
         object-fit: contain;
         transition: transform 0.3s ease;
-    }
+      }
 
-    .global-nav-brand:hover {
+      .global-nav-brand:hover {
         color: var(--accent-color);
         transform: scale(1.05);
-    }
+      }
 
-    .global-nav-links {
+      .global-nav-links {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-family: 'Supreme', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+        font-family:
+          'Supreme',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
 
-    .global-nav-item {
+      .global-nav-item {
         position: relative;
-    }
+      }
 
-    .global-nav-link,
-    .global-nav-dropdown-toggle {
+      .global-nav-link,
+      .global-nav-dropdown-toggle {
         display: flex;
         align-items: center;
         gap: 6px;
@@ -226,28 +240,28 @@
         background: transparent;
         border: none;
         white-space: nowrap;
-    }
+      }
 
-    .global-nav-link:hover,
-    .global-nav-dropdown-toggle:hover {
+      .global-nav-link:hover,
+      .global-nav-dropdown-toggle:hover {
         color: var(--nav-text-hover);
         background: var(--nav-bg-hover);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px var(--nav-shadow);
-    }
+      }
 
-    .global-nav-dropdown-arrow {
+      .global-nav-dropdown-arrow {
         font-size: 0.7rem;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         opacity: 0.7;
-    }
+      }
 
-    .global-nav-dropdown.active .global-nav-dropdown-arrow {
+      .global-nav-dropdown.active .global-nav-dropdown-arrow {
         transform: rotate(180deg);
-    }
+      }
 
-    /* Dropdown Menu - Smart Positioning */
-    .global-nav-dropdown-menu {
+      /* Dropdown Menu - Smart Positioning */
+      .global-nav-dropdown-menu {
         position: absolute;
         top: calc(100% + 8px);
         left: 0;
@@ -266,31 +280,31 @@
         z-index: 200;
         max-height: 400px;
         overflow-y: auto;
-    }
+      }
 
-    /* Smart Dropdown Positioning - verhindert Überlappung mit Viewport */
-    .global-nav-dropdown.flip-up .global-nav-dropdown-menu {
+      /* Smart Dropdown Positioning - verhindert Überlappung mit Viewport */
+      .global-nav-dropdown.flip-up .global-nav-dropdown-menu {
         top: auto;
         bottom: calc(100% + 8px);
         transform: translateY(10px) scale(0.95);
-    }
+      }
 
-    .global-nav-dropdown.flip-up.active .global-nav-dropdown-menu {
+      .global-nav-dropdown.flip-up.active .global-nav-dropdown-menu {
         transform: translateY(0) scale(1);
-    }
+      }
 
-    .global-nav-dropdown.flip-right .global-nav-dropdown-menu {
+      .global-nav-dropdown.flip-right .global-nav-dropdown-menu {
         left: auto;
         right: 0;
-    }
+      }
 
-    .global-nav-dropdown.active .global-nav-dropdown-menu {
+      .global-nav-dropdown.active .global-nav-dropdown-menu {
         opacity: 1;
         visibility: visible;
         transform: translateY(0) scale(1);
-    }
+      }
 
-    .global-nav-dropdown-item {
+      .global-nav-dropdown-item {
         display: block;
         padding: 12px 20px;
         color: var(--nav-text);
@@ -299,17 +313,17 @@
         font-weight: 500;
         transition: all 0.2s ease;
         border-left: 3px solid transparent;
-    }
+      }
 
-    .global-nav-dropdown-item:hover {
+      .global-nav-dropdown-item:hover {
         background: var(--nav-bg-hover);
         color: var(--nav-text-hover);
         border-left-color: var(--accent-color);
         padding-left: 24px;
-    }
+      }
 
-    /* Hamburger Button - hidden on desktop */
-    .global-nav-hamburger {
+      /* Hamburger Button - hidden on desktop */
+      .global-nav-hamburger {
         display: none;
         flex-direction: column;
         justify-content: center;
@@ -322,9 +336,9 @@
         padding: 0;
         z-index: 1001;
         position: relative;
-    }
+      }
 
-    .global-nav-hamburger-line {
+      .global-nav-hamburger-line {
         display: block;
         width: 24px;
         height: 3px;
@@ -332,254 +346,254 @@
         border-radius: 2px;
         transition: all 0.3s ease;
         position: absolute;
-    }
+      }
 
-    .global-nav-hamburger-line:nth-child(1) {
+      .global-nav-hamburger-line:nth-child(1) {
         top: 13px;
-    }
+      }
 
-    .global-nav-hamburger-line:nth-child(2) {
+      .global-nav-hamburger-line:nth-child(2) {
         top: 20px;
-    }
+      }
 
-    .global-nav-hamburger-line:nth-child(3) {
+      .global-nav-hamburger-line:nth-child(3) {
         top: 27px;
-    }
+      }
 
-    /* Hamburger -> X animation */
-    .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(1) {
+      /* Hamburger -> X animation */
+      .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(1) {
         top: 20px;
         transform: rotate(45deg);
-    }
+      }
 
-    .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(2) {
+      .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(2) {
         opacity: 0;
-    }
+      }
 
-    .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(3) {
+      .global-nav-hamburger.is-active .global-nav-hamburger-line:nth-child(3) {
         top: 20px;
         transform: rotate(-45deg);
-    }
+      }
 
-    /* Responsive Design */
-    @media (max-width: 768px) {
+      /* Responsive Design */
+      @media (max-width: 768px) {
         .global-nav-container {
-            padding: 0 16px;
-            height: 60px;
-            position: relative;
+          padding: 0 16px;
+          height: 60px;
+          position: relative;
         }
 
         .global-nav-brand {
-            font-size: 1.3rem;
+          font-size: 1.3rem;
         }
 
         .brand-logo-icon {
-            height: 22px;
-            width: 22px;
+          height: 22px;
+          width: 22px;
         }
 
         .brand-flag-icon {
-            height: 18px;
-            width: 18px;
+          height: 18px;
+          width: 18px;
         }
 
         /* Show hamburger on mobile */
         .global-nav-hamburger {
-            display: flex;
+          display: flex;
         }
 
         /* Hide nav links by default on mobile */
         .global-nav-links {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            flex-direction: column;
-            gap: 0.25rem;
-            width: 100%;
-            text-align: center;
-            background: var(--nav-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            padding: 1rem;
-            border-radius: 0 0 1rem 1rem;
-            box-shadow: 0 10px 40px var(--nav-shadow);
-            z-index: 1000;
-            max-height: 80vh;
-            overflow-y: auto;
+          display: none;
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          flex-direction: column;
+          gap: 0.25rem;
+          width: 100%;
+          text-align: center;
+          background: var(--nav-bg);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          padding: 1rem;
+          border-radius: 0 0 1rem 1rem;
+          box-shadow: 0 10px 40px var(--nav-shadow);
+          z-index: 1000;
+          max-height: 80vh;
+          overflow-y: auto;
         }
 
         /* Show nav links when menu is open */
         .global-nav-links.is-open {
-            display: flex;
+          display: flex;
         }
 
         .global-nav-item {
-            width: 100%;
+          width: 100%;
         }
 
         .global-nav-link,
         .global-nav-dropdown-toggle {
-            padding: 0.75rem 1rem;
-            font-size: 0.95rem;
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
+          padding: 0.75rem 1rem;
+          font-size: 0.95rem;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
         }
 
         /* Dropdowns always expanded in mobile */
         .global-nav-dropdown .global-nav-dropdown-menu {
-            display: block;
-            position: relative;
-            top: 0;
-            left: 0;
-            width: 100%;
-            min-width: unset;
-            margin-top: 0.25rem;
-            opacity: 1;
-            visibility: visible;
-            transform: none;
-            box-shadow: none;
-            background: rgba(0, 0, 0, 0.03);
-            border-radius: 0.5rem;
-            border: none;
-            animation: none;
-            max-height: none;
+          display: block;
+          position: relative;
+          top: 0;
+          left: 0;
+          width: 100%;
+          min-width: unset;
+          margin-top: 0.25rem;
+          opacity: 1;
+          visibility: visible;
+          transform: none;
+          box-shadow: none;
+          background: rgba(0, 0, 0, 0.03);
+          border-radius: 0.5rem;
+          border: none;
+          animation: none;
+          max-height: none;
         }
 
-        [data-theme="dark"] .global-nav-dropdown .global-nav-dropdown-menu {
-            background: rgba(255, 255, 255, 0.05);
+        [data-theme='dark'] .global-nav-dropdown .global-nav-dropdown-menu {
+          background: rgba(255, 255, 255, 0.05);
         }
 
         @media (prefers-color-scheme: dark) {
-            .global-nav-dropdown .global-nav-dropdown-menu {
-                background: rgba(255, 255, 255, 0.05);
-            }
+          .global-nav-dropdown .global-nav-dropdown-menu {
+            background: rgba(255, 255, 255, 0.05);
+          }
         }
 
         /* Hide dropdown toggle arrow on mobile */
         .global-nav-dropdown-arrow {
-            display: none;
+          display: none;
         }
 
         /* Dropdown toggle acts as label on mobile */
         .global-nav-dropdown-toggle {
-            pointer-events: none;
-            font-weight: 600;
+          pointer-events: none;
+          font-weight: 600;
         }
 
         .global-nav-dropdown-item {
-            padding: 0.6rem 1rem 0.6rem 1.5rem;
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-left: none;
+          padding: 0.6rem 1rem 0.6rem 1.5rem;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-left: none;
         }
 
         .global-nav-dropdown-item:hover {
-            padding-left: 1.5rem;
+          padding-left: 1.5rem;
         }
 
         /* Dark Mode: mobile nav-links und dropdown Hintergrund */
-        [data-theme="dark"] .global-nav-links {
-            background: rgba(26, 32, 44, 0.95);
+        [data-theme='dark'] .global-nav-links {
+          background: rgba(26, 32, 44, 0.95);
         }
 
-        [data-theme="dark"] .global-nav-dropdown .global-nav-dropdown-menu {
-            background: rgba(26, 32, 44, 0.95);
+        [data-theme='dark'] .global-nav-dropdown .global-nav-dropdown-menu {
+          background: rgba(26, 32, 44, 0.95);
         }
 
         /* Hide desktop controls, show mobile controls */
         .global-nav-controls-desktop {
-            display: none;
+          display: none;
         }
 
         .global-nav-controls-mobile {
-            display: flex;
-            justify-content: center;
-            margin: 0.5rem auto 0;
-            padding-top: 0.75rem;
-            border-top: 1px solid var(--nav-border);
+          display: flex;
+          justify-content: center;
+          margin: 0.5rem auto 0;
+          padding-top: 0.75rem;
+          border-top: 1px solid var(--nav-border);
         }
-    }
+      }
 
-    /* Fallback für Browser ohne backdrop-filter */
-    @supports not (backdrop-filter: blur(20px)) {
+      /* Fallback für Browser ohne backdrop-filter */
+      @supports not (backdrop-filter: blur(20px)) {
         .global-nav {
-            background: var(--nav-bg);
-            background: rgba(249, 242, 213, 0.97);
+          background: var(--nav-bg);
+          background: rgba(249, 242, 213, 0.97);
         }
 
         @media (prefers-color-scheme: dark) {
-            .global-nav {
-                background: rgba(26, 32, 44, 0.95);
-            }
+          .global-nav {
+            background: rgba(26, 32, 44, 0.95);
+          }
         }
 
-        [data-theme="dark"] .global-nav {
-            background: rgba(26, 32, 44, 0.95);
+        [data-theme='dark'] .global-nav {
+          background: rgba(26, 32, 44, 0.95);
         }
 
         .global-nav-dropdown-menu {
-            background: var(--dropdown-bg);
+          background: var(--dropdown-bg);
         }
-    }
+      }
 
-    /* Body Padding entfernt - keine Fixed Navigation mehr */
-    /* Navigation nimmt natürlichen Platz im Document Flow ein */
+      /* Body Padding entfernt - keine Fixed Navigation mehr */
+      /* Navigation nimmt natürlichen Platz im Document Flow ein */
 
-    /* Schutz vor bestehenden Navigation Styles auf anderen Seiten */
-    body:not(.custom-nav-page) {
+      /* Schutz vor bestehenden Navigation Styles auf anderen Seiten */
+      body:not(.custom-nav-page) {
         padding-top: 0 !important;
-    }
+      }
 
-    html:not(.custom-nav-page) {
+      html:not(.custom-nav-page) {
         scroll-padding-top: 0 !important;
-    }
+      }
 
-    /* Fallback Reset für problematische Seiten */
-    .global-nav-reset {
+      /* Fallback Reset für problematische Seiten */
+      .global-nav-reset {
         padding-top: 0 !important;
         margin-top: 0 !important;
-    }
+      }
 
-    /* Focus States für Accessibility */
-    .global-nav-link:focus,
-    .global-nav-dropdown-toggle:focus {
+      /* Focus States für Accessibility */
+      .global-nav-link:focus,
+      .global-nav-dropdown-toggle:focus {
         outline: 2px solid var(--accent-color);
         outline-offset: 2px;
         border-radius: 8px;
-    }
+      }
 
-    .global-nav-dropdown-item:focus {
+      .global-nav-dropdown-item:focus {
         background: var(--nav-bg-hover);
         outline: none;
         color: var(--accent-color);
-    }
+      }
 
-    /* Nav Controls: Theme Toggle + Language Switcher */
-    .global-nav-controls {
+      /* Nav Controls: Theme Toggle + Language Switcher */
+      .global-nav-controls {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-    }
+      }
 
-    /* Desktop: Controls as 3rd flex child (visible) */
-    .global-nav-controls-desktop {
+      /* Desktop: Controls as 3rd flex child (visible) */
+      .global-nav-controls-desktop {
         display: flex;
-    }
+      }
 
-    /* Mobile: Controls inside menu (hidden on desktop) */
-    .global-nav-controls-mobile {
+      /* Mobile: Controls inside menu (hidden on desktop) */
+      .global-nav-controls-mobile {
         display: none;
-    }
+      }
 
-    /* Theme Toggle Button */
-    .global-nav-theme-toggle {
+      /* Theme Toggle Button */
+      .global-nav-theme-toggle {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -594,35 +608,35 @@
         color: var(--nav-text);
         font-size: 1rem;
         line-height: 1;
-    }
+      }
 
-    .global-nav-theme-toggle:hover {
+      .global-nav-theme-toggle:hover {
         background: var(--nav-bg-hover);
         border-color: var(--accent-color);
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
-    }
+      }
 
-    .global-nav-theme-toggle:focus {
+      .global-nav-theme-toggle:focus {
         outline: 2px solid var(--accent-color);
         outline-offset: 2px;
-    }
+      }
 
-    .global-nav-theme-icon {
+      .global-nav-theme-icon {
         display: block;
         font-size: 0.95rem;
         line-height: 1;
-    }
+      }
 
-    /* Language Switcher Styles */
-    .global-nav-lang-switcher {
+      /* Language Switcher Styles */
+      .global-nav-lang-switcher {
         display: flex;
         gap: 0.25rem;
         border: 1px solid var(--nav-border);
         border-radius: 0.5rem;
         padding: 0.25rem;
-    }
+      }
 
-    .global-nav-lang-btn {
+      .global-nav-lang-btn {
         padding: 0.4rem 0.6rem;
         border: none;
         background: transparent;
@@ -632,452 +646,622 @@
         font-weight: 500;
         font-size: 0.85rem;
         color: var(--nav-text);
-        font-family: 'Supreme', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+        font-family:
+          'Supreme',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
 
-    .global-nav-lang-btn:hover {
+      .global-nav-lang-btn:hover {
         background: var(--nav-bg-hover);
-    }
+      }
 
-    .global-nav-lang-btn.active {
+      .global-nav-lang-btn.active {
         background: var(--accent-color);
         color: #ffffff;
-    }
+      }
 
-    [data-theme="dark"] .global-nav-lang-btn.active {
-        color: #0C0C10;
-    }
+      [data-theme='dark'] .global-nav-lang-btn.active {
+        color: #0c0c10;
+      }
 
-    @media (max-width: 768px) {
+      @media (max-width: 768px) {
         .global-nav-lang-btn {
-            padding: 0.3rem 0.5rem;
-            font-size: 0.8rem;
+          padding: 0.3rem 0.5rem;
+          font-size: 0.8rem;
         }
-    }
+      }
     </style>
 
     <nav class="global-nav sticky" role="navigation" aria-label="Hauptnavigation">
-        <div class="global-nav-container">
-            <a href="https://kodinitools.com/" class="global-nav-brand">
-                <img src="https://kodinitools.com/images/logo.png" alt="KodiniTools Logo" class="brand-logo-icon">
-                <span>KodiniTools</span>
-                <img src="https://kodinitools.com/image/schweiz-192x192.png" alt="Made in Switzerland" class="brand-flag-icon">
-            </a>
+      <div class="global-nav-container">
+        <a href="https://kodinitools.com/" class="global-nav-brand">
+          <img
+            src="https://kodinitools.com/images/logo.png"
+            alt="KodiniTools Logo"
+            class="brand-logo-icon"
+          />
+          <span>KodiniTools</span>
+          <img
+            src="https://kodinitools.com/image/schweiz-192x192.png"
+            alt="Made in Switzerland"
+            class="brand-flag-icon"
+          />
+        </a>
 
-            <!-- Hamburger Button for Mobile -->
-            <button class="global-nav-hamburger" type="button" aria-label="Menü öffnen" aria-expanded="false">
-                <span class="global-nav-hamburger-line"></span>
-                <span class="global-nav-hamburger-line"></span>
-                <span class="global-nav-hamburger-line"></span>
+        <!-- Hamburger Button for Mobile -->
+        <button
+          class="global-nav-hamburger"
+          type="button"
+          aria-label="Menü öffnen"
+          aria-expanded="false"
+        >
+          <span class="global-nav-hamburger-line"></span>
+          <span class="global-nav-hamburger-line"></span>
+          <span class="global-nav-hamburger-line"></span>
+        </button>
+
+        <div class="global-nav-links">
+          <!-- Audiotools Dropdown -->
+          <div class="global-nav-item global-nav-dropdown">
+            <button
+              class="global-nav-dropdown-toggle"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              <span data-i18n="nav.audioTools">Audiotools</span>
+              <span class="global-nav-dropdown-arrow">&#9660;</span>
+            </button>
+            <div class="global-nav-dropdown-menu" role="menu">
+              <a
+                href="https://kodinitools.com/mp3konverter/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.mp3Converter"
+                >MP3 Konverter</a
+              >
+              <a
+                href="https://kodinitools.com/audioequalizer/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.audioEqualizer"
+                >Interaktiver Audio Equalizer</a
+              >
+              <a
+                href="https://kodinitools.com/modernermusikplayer/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.modernPlayer"
+                >Moderner Musikplayer</a
+              >
+              <a
+                href="https://kodinitools.com/ultimativermusikplayer/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.ultimatePlayer"
+                >Ultimativer Musikplayer</a
+              >
+              <a
+                href="https://kodinitools.com/playlist_generator/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.playlistGenerator"
+                >Audioplaylist Generator</a
+              >
+              <a
+                href="https://kodinitools.com/playlistkonverter/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.playlistConverter"
+                >Playlist zu WebM Konverter</a
+              >
+              <a
+                href="https://kodinitools.com/alarmtool/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.alarmTool"
+                >Alarmtool</a
+              >
+              <a
+                href="https://kodinitools.com/audionormalisierer/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.audioNormalizer"
+                >Audio Normalizer</a
+              >
+              <a
+                href="https://kodinitools.com/visualizer/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.visualizer"
+                >Visualizer</a
+              >
+              <a
+                href="https://kodinitools.com/equaliser19/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.equalizer19"
+                >19-Band Equalizer</a
+              >
+              <a
+                href="https://kodinitools.com/audiokonverter/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.audioConverter"
+                >Audio Konverter</a
+              >
+            </div>
+          </div>
+
+          <!-- Bildtools Dropdown -->
+          <div class="global-nav-item global-nav-dropdown">
+            <button
+              class="global-nav-dropdown-toggle"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              <span data-i18n="nav.imageTools">Bildtools</span>
+              <span class="global-nav-dropdown-arrow">&#9660;</span>
+            </button>
+            <div class="global-nav-dropdown-menu" role="menu">
+              <a
+                href="https://kodinitools.com/bildkonverter/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.imageConverter"
+                >Bildkonverter</a
+              >
+              <a
+                href="https://kodinitools.com/bilderseriebearbeiten/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.batchImageEditor"
+                >Bildserie bearbeiten</a
+              >
+              <a
+                href="https://kodinitools.com/collagemaker/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.photoCollage"
+                >Fotocollage</a
+              >
+            </div>
+          </div>
+
+          <!-- Tools Dropdown -->
+          <div class="global-nav-item global-nav-dropdown">
+            <button
+              class="global-nav-dropdown-toggle"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              <span data-i18n="nav.tools">Tools</span>
+              <span class="global-nav-dropdown-arrow">&#9660;</span>
+            </button>
+            <div class="global-nav-dropdown-menu" role="menu">
+              <a
+                href="https://kodinitools.com/kodini-color-extractor/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.colorExtractor"
+                >Kodini Farbextraktor</a
+              >
+              <a
+                href="https://kodinitools.com/videokonverter/"
+                class="global-nav-dropdown-item"
+                role="menuitem"
+                data-i18n="nav.videoConverter"
+                >Videokonverter</a
+              >
+            </div>
+          </div>
+
+          <div class="global-nav-item">
+            <a
+              href="https://kodinitools.com/kontaktformular/"
+              class="global-nav-link"
+              data-i18n="nav.contact"
+              >Kontakt</a
+            >
+          </div>
+
+          <!-- Mobile: Controls inside menu -->
+          <div class="global-nav-controls global-nav-controls-mobile">
+            <!-- Theme Toggle -->
+            <button
+              class="global-nav-theme-toggle"
+              type="button"
+              aria-label="Theme wechseln"
+              data-i18n-aria="aria.toggleTheme"
+            >
+              <span class="global-nav-theme-icon"></span>
             </button>
 
-            <div class="global-nav-links">
-                <!-- Audiotools Dropdown -->
-                <div class="global-nav-item global-nav-dropdown">
-                    <button class="global-nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">
-                        <span data-i18n="nav.audioTools">Audiotools</span>
-                        <span class="global-nav-dropdown-arrow">&#9660;</span>
-                    </button>
-                    <div class="global-nav-dropdown-menu" role="menu">
-                        <a href="https://kodinitools.com/mp3konverter/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.mp3Converter">MP3 Konverter</a>
-                        <a href="https://kodinitools.com/audioequalizer/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.audioEqualizer">Interaktiver Audio Equalizer</a>
-                        <a href="https://kodinitools.com/modernermusikplayer/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.modernPlayer">Moderner Musikplayer</a>
-                        <a href="https://kodinitools.com/ultimativermusikplayer/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.ultimatePlayer">Ultimativer Musikplayer</a>
-                        <a href="https://kodinitools.com/playlist_generator/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.playlistGenerator">Audioplaylist Generator</a>
-                        <a href="https://kodinitools.com/playlistkonverter/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.playlistConverter">Playlist zu WebM Konverter</a>
-                        <a href="https://kodinitools.com/alarmtool/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.alarmTool">Alarmtool</a>
-                        <a href="https://kodinitools.com/audionormalisierer/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.audioNormalizer">Audio Normalizer</a>
-                        <a href="https://kodinitools.com/visualizer/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.visualizer">Visualizer</a>
-                        <a href="https://kodinitools.com/equaliser19/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.equalizer19">19-Band Equalizer</a>
-                        <a href="https://kodinitools.com/audiokonverter/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.audioConverter">Audio Konverter</a>
-                    </div>
-                </div>
-
-                <!-- Bildtools Dropdown -->
-                <div class="global-nav-item global-nav-dropdown">
-                    <button class="global-nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">
-                        <span data-i18n="nav.imageTools">Bildtools</span>
-                        <span class="global-nav-dropdown-arrow">&#9660;</span>
-                    </button>
-                    <div class="global-nav-dropdown-menu" role="menu">
-                        <a href="https://kodinitools.com/bildkonverter/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.imageConverter">Bildkonverter</a>
-                        <a href="https://kodinitools.com/bilderseriebearbeiten/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.batchImageEditor">Bildserie bearbeiten</a>
-                        <a href="https://kodinitools.com/collagemaker/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.photoCollage">Fotocollage</a>
-                    </div>
-                </div>
-
-                <!-- Tools Dropdown -->
-                <div class="global-nav-item global-nav-dropdown">
-                    <button class="global-nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">
-                        <span data-i18n="nav.tools">Tools</span>
-                        <span class="global-nav-dropdown-arrow">&#9660;</span>
-                    </button>
-                    <div class="global-nav-dropdown-menu" role="menu">
-                        <a href="https://kodinitools.com/kodini-color-extractor/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.colorExtractor">Kodini Farbextraktor</a>
-                        <a href="https://kodinitools.com/videokonverter/" class="global-nav-dropdown-item" role="menuitem" data-i18n="nav.videoConverter">Videokonverter</a>
-                    </div>
-                </div>
-
-                <div class="global-nav-item">
-                    <a href="https://kodinitools.com/kontaktformular/" class="global-nav-link" data-i18n="nav.contact">Kontakt</a>
-                </div>
-
-                <!-- Mobile: Controls inside menu -->
-                <div class="global-nav-controls global-nav-controls-mobile">
-                    <!-- Theme Toggle -->
-                    <button class="global-nav-theme-toggle" type="button" aria-label="Theme wechseln" data-i18n-aria="aria.toggleTheme">
-                        <span class="global-nav-theme-icon"></span>
-                    </button>
-
-                    <!-- Language Switcher -->
-                    <div class="global-nav-lang-switcher" role="group" aria-label="Sprache wählen" data-i18n-aria="aria.selectLanguage">
-                        <button class="global-nav-lang-btn" data-lang="de" type="button">DE</button>
-                        <button class="global-nav-lang-btn" data-lang="en" type="button">EN</button>
-                    </div>
-                </div>
+            <!-- Language Switcher -->
+            <div
+              class="global-nav-lang-switcher"
+              role="group"
+              aria-label="Sprache wählen"
+              data-i18n-aria="aria.selectLanguage"
+            >
+              <button class="global-nav-lang-btn" data-lang="de" type="button">DE</button>
+              <button class="global-nav-lang-btn" data-lang="en" type="button">EN</button>
             </div>
-
-            <!-- Desktop: Controls outside nav-links (3rd flex child for centering) -->
-            <div class="global-nav-controls global-nav-controls-desktop">
-                <!-- Theme Toggle -->
-                <button class="global-nav-theme-toggle" type="button" aria-label="Theme wechseln" data-i18n-aria="aria.toggleTheme">
-                    <span class="global-nav-theme-icon" id="globalNavThemeIcon"></span>
-                </button>
-
-                <!-- Language Switcher -->
-                <div class="global-nav-lang-switcher" role="group" aria-label="Sprache wählen" data-i18n-aria="aria.selectLanguage">
-                    <button class="global-nav-lang-btn" data-lang="de" type="button">DE</button>
-                    <button class="global-nav-lang-btn" data-lang="en" type="button">EN</button>
-                </div>
-            </div>
+          </div>
         </div>
+
+        <!-- Desktop: Controls outside nav-links (3rd flex child for centering) -->
+        <div class="global-nav-controls global-nav-controls-desktop">
+          <!-- Theme Toggle -->
+          <button
+            class="global-nav-theme-toggle"
+            type="button"
+            aria-label="Theme wechseln"
+            data-i18n-aria="aria.toggleTheme"
+          >
+            <span class="global-nav-theme-icon" id="globalNavThemeIcon"></span>
+          </button>
+
+          <!-- Language Switcher -->
+          <div
+            class="global-nav-lang-switcher"
+            role="group"
+            aria-label="Sprache wählen"
+            data-i18n-aria="aria.selectLanguage"
+          >
+            <button class="global-nav-lang-btn" data-lang="de" type="button">DE</button>
+            <button class="global-nav-lang-btn" data-lang="en" type="button">EN</button>
+          </div>
+        </div>
+      </div>
     </nav>
 
     <script>
-    // Global Navigation JavaScript mit i18n und Theme-Switcher
-    (function() {
-        'use strict';
+      // Global Navigation JavaScript mit i18n und Theme-Switcher
+      ;(function () {
+        'use strict'
 
         var NAV_TRANSLATIONS = {
-            de: {
-                'nav.audioTools': 'Audiotools',
-                'nav.imageTools': 'Bildtools',
-                'nav.tools': 'Tools',
-                'nav.contact': 'Kontakt',
-                'nav.mp3Converter': 'MP3 Konverter',
-                'nav.audioEqualizer': 'Interaktiver Audio Equalizer',
-                'nav.modernPlayer': 'Moderner Musikplayer',
-                'nav.ultimatePlayer': 'Ultimativer Musikplayer',
-                'nav.playlistGenerator': 'Audioplaylist Generator',
-                'nav.playlistConverter': 'Playlist zu WebM Konverter',
-                'nav.alarmTool': 'Alarmtool',
-                'nav.audioNormalizer': 'Audio Normalizer',
-                'nav.visualizer': 'Visualizer',
-                'nav.equalizer19': '19-Band Equalizer',
-                'nav.audioConverter': 'Audio Konverter',
-                'nav.imageConverter': 'Bildkonverter',
-                'nav.batchImageEditor': 'Bildserie bearbeiten',
-                'nav.photoCollage': 'Fotocollage',
-                'nav.colorExtractor': 'Kodini Farbextraktor',
-                'nav.videoConverter': 'Videokonverter',
-                'aria.toggleTheme': 'Theme wechseln',
-                'aria.selectLanguage': 'Sprache wählen',
-                'aria.menuOpen': 'Menü öffnen',
-                'aria.menuClose': 'Menü schliessen',
-                'aria.mainNav': 'Hauptnavigation'
-            },
-            en: {
-                'nav.audioTools': 'Audio Tools',
-                'nav.imageTools': 'Image Tools',
-                'nav.tools': 'Tools',
-                'nav.contact': 'Contact',
-                'nav.mp3Converter': 'MP3 Converter',
-                'nav.audioEqualizer': 'Interactive Audio Equalizer',
-                'nav.modernPlayer': 'Modern Music Player',
-                'nav.ultimatePlayer': 'Ultimate Music Player',
-                'nav.playlistGenerator': 'Audio Playlist Generator',
-                'nav.playlistConverter': 'Playlist to WebM Converter',
-                'nav.alarmTool': 'Alarm Tool',
-                'nav.audioNormalizer': 'Audio Normalizer',
-                'nav.visualizer': 'Visualizer',
-                'nav.equalizer19': '19-Band Equalizer',
-                'nav.audioConverter': 'Audio Converter',
-                'nav.imageConverter': 'Image Converter',
-                'nav.batchImageEditor': 'Batch Image Editor',
-                'nav.photoCollage': 'Photo Collage',
-                'nav.colorExtractor': 'Kodini Color Extractor',
-                'nav.videoConverter': 'Video Converter',
-                'aria.toggleTheme': 'Toggle theme',
-                'aria.selectLanguage': 'Select language',
-                'aria.menuOpen': 'Open menu',
-                'aria.menuClose': 'Close menu',
-                'aria.mainNav': 'Main navigation'
-            }
-        };
+          de: {
+            'nav.audioTools': 'Audiotools',
+            'nav.imageTools': 'Bildtools',
+            'nav.tools': 'Tools',
+            'nav.contact': 'Kontakt',
+            'nav.mp3Converter': 'MP3 Konverter',
+            'nav.audioEqualizer': 'Interaktiver Audio Equalizer',
+            'nav.modernPlayer': 'Moderner Musikplayer',
+            'nav.ultimatePlayer': 'Ultimativer Musikplayer',
+            'nav.playlistGenerator': 'Audioplaylist Generator',
+            'nav.playlistConverter': 'Playlist zu WebM Konverter',
+            'nav.alarmTool': 'Alarmtool',
+            'nav.audioNormalizer': 'Audio Normalizer',
+            'nav.visualizer': 'Visualizer',
+            'nav.equalizer19': '19-Band Equalizer',
+            'nav.audioConverter': 'Audio Konverter',
+            'nav.imageConverter': 'Bildkonverter',
+            'nav.batchImageEditor': 'Bildserie bearbeiten',
+            'nav.photoCollage': 'Fotocollage',
+            'nav.colorExtractor': 'Kodini Farbextraktor',
+            'nav.videoConverter': 'Videokonverter',
+            'aria.toggleTheme': 'Theme wechseln',
+            'aria.selectLanguage': 'Sprache wählen',
+            'aria.menuOpen': 'Menü öffnen',
+            'aria.menuClose': 'Menü schliessen',
+            'aria.mainNav': 'Hauptnavigation',
+          },
+          en: {
+            'nav.audioTools': 'Audio Tools',
+            'nav.imageTools': 'Image Tools',
+            'nav.tools': 'Tools',
+            'nav.contact': 'Contact',
+            'nav.mp3Converter': 'MP3 Converter',
+            'nav.audioEqualizer': 'Interactive Audio Equalizer',
+            'nav.modernPlayer': 'Modern Music Player',
+            'nav.ultimatePlayer': 'Ultimate Music Player',
+            'nav.playlistGenerator': 'Audio Playlist Generator',
+            'nav.playlistConverter': 'Playlist to WebM Converter',
+            'nav.alarmTool': 'Alarm Tool',
+            'nav.audioNormalizer': 'Audio Normalizer',
+            'nav.visualizer': 'Visualizer',
+            'nav.equalizer19': '19-Band Equalizer',
+            'nav.audioConverter': 'Audio Converter',
+            'nav.imageConverter': 'Image Converter',
+            'nav.batchImageEditor': 'Batch Image Editor',
+            'nav.photoCollage': 'Photo Collage',
+            'nav.colorExtractor': 'Kodini Color Extractor',
+            'nav.videoConverter': 'Video Converter',
+            'aria.toggleTheme': 'Toggle theme',
+            'aria.selectLanguage': 'Select language',
+            'aria.menuOpen': 'Open menu',
+            'aria.menuClose': 'Close menu',
+            'aria.mainNav': 'Main navigation',
+          },
+        }
 
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initGlobalNav);
+          document.addEventListener('DOMContentLoaded', initGlobalNav)
         } else {
-            initGlobalNav();
+          initGlobalNav()
         }
 
         function initGlobalNav() {
-            document.body.style.paddingTop = '0';
-            document.documentElement.style.scrollPaddingTop = '0';
+          document.body.style.paddingTop = '0'
+          document.documentElement.style.scrollPaddingTop = '0'
 
-            initThemeSwitcher();
-            initLanguageSwitcher();
-            initMobileMenu();
+          initThemeSwitcher()
+          initLanguageSwitcher()
+          initMobileMenu()
 
-            var currentLang = localStorage.getItem('locale') || 'de';
-            applyTranslations(currentLang);
+          var currentLang = localStorage.getItem('locale') || 'de'
+          applyTranslations(currentLang)
 
-            var dropdowns = document.querySelectorAll('.global-nav-dropdown');
+          var dropdowns = document.querySelectorAll('.global-nav-dropdown')
 
-            dropdowns.forEach(function(dropdown) {
-                var toggle = dropdown.querySelector('.global-nav-dropdown-toggle');
-                var menu = dropdown.querySelector('.global-nav-dropdown-menu');
+          dropdowns.forEach(function (dropdown) {
+            var toggle = dropdown.querySelector('.global-nav-dropdown-toggle')
+            var menu = dropdown.querySelector('.global-nav-dropdown-menu')
 
-                function positionDropdown() {
-                    var rect = dropdown.getBoundingClientRect();
-                    var menuRect = menu.getBoundingClientRect();
-                    var viewportHeight = window.innerHeight;
-                    var viewportWidth = window.innerWidth;
+            function positionDropdown() {
+              var rect = dropdown.getBoundingClientRect()
+              var menuRect = menu.getBoundingClientRect()
+              var viewportHeight = window.innerHeight
+              var viewportWidth = window.innerWidth
 
-                    dropdown.classList.remove('flip-up', 'flip-right');
+              dropdown.classList.remove('flip-up', 'flip-right')
 
-                    if (rect.bottom + menuRect.height + 16 > viewportHeight) {
-                        dropdown.classList.add('flip-up');
-                    }
+              if (rect.bottom + menuRect.height + 16 > viewportHeight) {
+                dropdown.classList.add('flip-up')
+              }
 
-                    if (rect.left + menuRect.width > viewportWidth) {
-                        dropdown.classList.add('flip-right');
-                    }
+              if (rect.left + menuRect.width > viewportWidth) {
+                dropdown.classList.add('flip-right')
+              }
+            }
+
+            toggle.addEventListener('click', function (e) {
+              e.stopPropagation()
+
+              dropdowns.forEach(function (other) {
+                if (other !== dropdown) {
+                  other.classList.remove('active')
+                  other
+                    .querySelector('.global-nav-dropdown-toggle')
+                    .setAttribute('aria-expanded', 'false')
                 }
+              })
 
-                toggle.addEventListener('click', function(e) {
-                    e.stopPropagation();
+              if (!dropdown.classList.contains('active')) {
+                positionDropdown()
+              }
 
-                    dropdowns.forEach(function(other) {
-                        if (other !== dropdown) {
-                            other.classList.remove('active');
-                            other.querySelector('.global-nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
-                        }
-                    });
+              var isActive = dropdown.classList.toggle('active')
+              toggle.setAttribute('aria-expanded', isActive)
+            })
 
-                    if (!dropdown.classList.contains('active')) {
-                        positionDropdown();
-                    }
+            toggle.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                toggle.click()
+              }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                dropdown.classList.add('active')
+                toggle.setAttribute('aria-expanded', 'true')
+                var firstItem = menu.querySelector('.global-nav-dropdown-item')
+                if (firstItem) firstItem.focus()
+              }
+            })
 
-                    var isActive = dropdown.classList.toggle('active');
-                    toggle.setAttribute('aria-expanded', isActive);
-                });
-
-                toggle.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggle.click();
-                    }
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        dropdown.classList.add('active');
-                        toggle.setAttribute('aria-expanded', 'true');
-                        var firstItem = menu.querySelector('.global-nav-dropdown-item');
-                        if (firstItem) firstItem.focus();
-                    }
-                });
-
-                var items = menu.querySelectorAll('.global-nav-dropdown-item');
-                items.forEach(function(item, index) {
-                    item.addEventListener('keydown', function(e) {
-                        if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            var nextItem = items[index + 1] || items[0];
-                            nextItem.focus();
-                        }
-                        if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            var prevItem = items[index - 1] || items[items.length - 1];
-                            prevItem.focus();
-                        }
-                        if (e.key === 'Escape') {
-                            dropdown.classList.remove('active');
-                            toggle.setAttribute('aria-expanded', 'false');
-                            toggle.focus();
-                        }
-                    });
-                });
-            });
-
-            window.addEventListener('resize', function() {
-                dropdowns.forEach(function(dropdown) {
-                    if (dropdown.classList.contains('active')) {
-                        dropdown.classList.remove('flip-up', 'flip-right');
-                    }
-                });
-            });
-
-            var scrollTimeout;
-            window.addEventListener('scroll', function() {
-                clearTimeout(scrollTimeout);
-                scrollTimeout = setTimeout(function() {
-                    dropdowns.forEach(function(dropdown) {
-                        dropdown.classList.remove('active');
-                        dropdown.querySelector('.global-nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
-                    });
-                }, 150);
-            });
-
-            document.addEventListener('click', function() {
-                dropdowns.forEach(function(dropdown) {
-                    dropdown.classList.remove('active');
-                    dropdown.querySelector('.global-nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
-                });
-            });
-
-            document.addEventListener('keydown', function(e) {
+            var items = menu.querySelectorAll('.global-nav-dropdown-item')
+            items.forEach(function (item, index) {
+              item.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  var nextItem = items[index + 1] || items[0]
+                  nextItem.focus()
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  var prevItem = items[index - 1] || items[items.length - 1]
+                  prevItem.focus()
+                }
                 if (e.key === 'Escape') {
-                    dropdowns.forEach(function(dropdown) {
-                        dropdown.classList.remove('active');
-                        dropdown.querySelector('.global-nav-dropdown-toggle').setAttribute('aria-expanded', 'false');
-                    });
-                    var hamburger = document.querySelector('.global-nav-hamburger');
-                    var navLinks = document.querySelector('.global-nav-links');
-                    if (hamburger && navLinks) {
-                        navLinks.classList.remove('is-open');
-                        hamburger.classList.remove('is-active');
-                        hamburger.setAttribute('aria-expanded', 'false');
-                        var lang = localStorage.getItem('locale') || 'de';
-                        hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen']);
-                    }
+                  dropdown.classList.remove('active')
+                  toggle.setAttribute('aria-expanded', 'false')
+                  toggle.focus()
                 }
-            });
+              })
+            })
+          })
+
+          window.addEventListener('resize', function () {
+            dropdowns.forEach(function (dropdown) {
+              if (dropdown.classList.contains('active')) {
+                dropdown.classList.remove('flip-up', 'flip-right')
+              }
+            })
+          })
+
+          var scrollTimeout
+          window.addEventListener('scroll', function () {
+            clearTimeout(scrollTimeout)
+            scrollTimeout = setTimeout(function () {
+              dropdowns.forEach(function (dropdown) {
+                dropdown.classList.remove('active')
+                dropdown
+                  .querySelector('.global-nav-dropdown-toggle')
+                  .setAttribute('aria-expanded', 'false')
+              })
+            }, 150)
+          })
+
+          document.addEventListener('click', function () {
+            dropdowns.forEach(function (dropdown) {
+              dropdown.classList.remove('active')
+              dropdown
+                .querySelector('.global-nav-dropdown-toggle')
+                .setAttribute('aria-expanded', 'false')
+            })
+          })
+
+          document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+              dropdowns.forEach(function (dropdown) {
+                dropdown.classList.remove('active')
+                dropdown
+                  .querySelector('.global-nav-dropdown-toggle')
+                  .setAttribute('aria-expanded', 'false')
+              })
+              var hamburger = document.querySelector('.global-nav-hamburger')
+              var navLinks = document.querySelector('.global-nav-links')
+              if (hamburger && navLinks) {
+                navLinks.classList.remove('is-open')
+                hamburger.classList.remove('is-active')
+                hamburger.setAttribute('aria-expanded', 'false')
+                var lang = localStorage.getItem('locale') || 'de'
+                hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen'])
+              }
+            }
+          })
         }
 
         function initThemeSwitcher() {
-            var themeBtns = document.querySelectorAll('.global-nav-theme-toggle');
-            var themeIcons = document.querySelectorAll('.global-nav-theme-icon');
-            if (!themeBtns.length) return;
+          var themeBtns = document.querySelectorAll('.global-nav-theme-toggle')
+          var themeIcons = document.querySelectorAll('.global-nav-theme-icon')
+          if (!themeBtns.length) return
 
-            var savedTheme = localStorage.getItem('theme');
-            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var currentTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+          var savedTheme = localStorage.getItem('theme')
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var currentTheme = savedTheme || (prefersDark ? 'dark' : 'light')
 
-            applyTheme(currentTheme);
+          applyTheme(currentTheme)
 
-            themeBtns.forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var current = document.documentElement.getAttribute('data-theme') || 'light';
-                    var newTheme = current === 'light' ? 'dark' : 'light';
-                    applyTheme(newTheme);
-                    localStorage.setItem('theme', newTheme);
-                });
-            });
+          themeBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var current = document.documentElement.getAttribute('data-theme') || 'light'
+              var newTheme = current === 'light' ? 'dark' : 'light'
+              applyTheme(newTheme)
+              localStorage.setItem('theme', newTheme)
+            })
+          })
 
-            function applyTheme(theme) {
-                document.documentElement.setAttribute('data-theme', theme);
-                themeIcons.forEach(function(icon) {
-                    icon.textContent = theme === 'light' ? '🌙' : '☀️';
-                });
-            }
+          function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme)
+            themeIcons.forEach(function (icon) {
+              icon.textContent = theme === 'light' ? '🌙' : '☀️'
+            })
+          }
         }
 
         function applyTranslations(lang) {
-            var translations = NAV_TRANSLATIONS[lang] || NAV_TRANSLATIONS['de'];
+          var translations = NAV_TRANSLATIONS[lang] || NAV_TRANSLATIONS['de']
 
-            document.querySelectorAll('.global-nav [data-i18n]').forEach(function(el) {
-                var key = el.getAttribute('data-i18n');
-                if (translations[key]) {
-                    el.textContent = translations[key];
-                }
-            });
-
-            document.querySelectorAll('.global-nav [data-i18n-aria]').forEach(function(el) {
-                var key = el.getAttribute('data-i18n-aria');
-                if (translations[key]) {
-                    el.setAttribute('aria-label', translations[key]);
-                }
-            });
-
-            var nav = document.querySelector('.global-nav');
-            if (nav) {
-                nav.setAttribute('aria-label', translations['aria.mainNav']);
+          document.querySelectorAll('.global-nav [data-i18n]').forEach(function (el) {
+            var key = el.getAttribute('data-i18n')
+            if (translations[key]) {
+              el.textContent = translations[key]
             }
+          })
+
+          document.querySelectorAll('.global-nav [data-i18n-aria]').forEach(function (el) {
+            var key = el.getAttribute('data-i18n-aria')
+            if (translations[key]) {
+              el.setAttribute('aria-label', translations[key])
+            }
+          })
+
+          var nav = document.querySelector('.global-nav')
+          if (nav) {
+            nav.setAttribute('aria-label', translations['aria.mainNav'])
+          }
         }
 
         function initMobileMenu() {
-            var hamburger = document.querySelector('.global-nav-hamburger');
-            var navLinks = document.querySelector('.global-nav-links');
-            if (!hamburger || !navLinks) return;
+          var hamburger = document.querySelector('.global-nav-hamburger')
+          var navLinks = document.querySelector('.global-nav-links')
+          if (!hamburger || !navLinks) return
 
-            hamburger.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var isOpen = navLinks.classList.toggle('is-open');
-                hamburger.classList.toggle('is-active', isOpen);
-                hamburger.setAttribute('aria-expanded', isOpen);
-                var lang = localStorage.getItem('locale') || 'de';
-                var translations = NAV_TRANSLATIONS[lang] || NAV_TRANSLATIONS['de'];
-                hamburger.setAttribute('aria-label', isOpen ? translations['aria.menuClose'] : translations['aria.menuOpen']);
-            });
+          hamburger.addEventListener('click', function (e) {
+            e.stopPropagation()
+            var isOpen = navLinks.classList.toggle('is-open')
+            hamburger.classList.toggle('is-active', isOpen)
+            hamburger.setAttribute('aria-expanded', isOpen)
+            var lang = localStorage.getItem('locale') || 'de'
+            var translations = NAV_TRANSLATIONS[lang] || NAV_TRANSLATIONS['de']
+            hamburger.setAttribute(
+              'aria-label',
+              isOpen ? translations['aria.menuClose'] : translations['aria.menuOpen'],
+            )
+          })
 
-            navLinks.querySelectorAll('.global-nav-link, .global-nav-dropdown-item').forEach(function(link) {
-                link.addEventListener('click', function() {
-                    navLinks.classList.remove('is-open');
-                    hamburger.classList.remove('is-active');
-                    hamburger.setAttribute('aria-expanded', 'false');
-                    var lang = localStorage.getItem('locale') || 'de';
-                    hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen']);
-                });
-            });
+          navLinks
+            .querySelectorAll('.global-nav-link, .global-nav-dropdown-item')
+            .forEach(function (link) {
+              link.addEventListener('click', function () {
+                navLinks.classList.remove('is-open')
+                hamburger.classList.remove('is-active')
+                hamburger.setAttribute('aria-expanded', 'false')
+                var lang = localStorage.getItem('locale') || 'de'
+                hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen'])
+              })
+            })
 
-            document.addEventListener('click', function(e) {
-                if (!navLinks.contains(e.target) && !hamburger.contains(e.target)) {
-                    navLinks.classList.remove('is-open');
-                    hamburger.classList.remove('is-active');
-                    hamburger.setAttribute('aria-expanded', 'false');
-                    var lang = localStorage.getItem('locale') || 'de';
-                    hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen']);
-                }
-            });
+          document.addEventListener('click', function (e) {
+            if (!navLinks.contains(e.target) && !hamburger.contains(e.target)) {
+              navLinks.classList.remove('is-open')
+              hamburger.classList.remove('is-active')
+              hamburger.setAttribute('aria-expanded', 'false')
+              var lang = localStorage.getItem('locale') || 'de'
+              hamburger.setAttribute('aria-label', NAV_TRANSLATIONS[lang]['aria.menuOpen'])
+            }
+          })
         }
 
         function initLanguageSwitcher() {
-            var langBtns = document.querySelectorAll('.global-nav-lang-btn');
-            if (!langBtns.length) return;
+          var langBtns = document.querySelectorAll('.global-nav-lang-btn')
+          if (!langBtns.length) return
 
-            var currentLang = localStorage.getItem('locale') || 'de';
-            document.documentElement.setAttribute('lang', currentLang);
+          var currentLang = localStorage.getItem('locale') || 'de'
+          document.documentElement.setAttribute('lang', currentLang)
 
-            function updateActiveButton(lang) {
-                langBtns.forEach(function(btn) {
-                    var btnLang = btn.getAttribute('data-lang');
-                    if (btnLang === lang) {
-                        btn.classList.add('active');
-                    } else {
-                        btn.classList.remove('active');
-                    }
-                });
-            }
+          function updateActiveButton(lang) {
+            langBtns.forEach(function (btn) {
+              var btnLang = btn.getAttribute('data-lang')
+              if (btnLang === lang) {
+                btn.classList.add('active')
+              } else {
+                btn.classList.remove('active')
+              }
+            })
+          }
 
-            updateActiveButton(currentLang);
+          updateActiveButton(currentLang)
 
-            langBtns.forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var targetLang = this.getAttribute('data-lang');
-                    var storedLang = localStorage.getItem('locale') || 'de';
-                    if (targetLang === storedLang) return;
+          langBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var targetLang = this.getAttribute('data-lang')
+              var storedLang = localStorage.getItem('locale') || 'de'
+              if (targetLang === storedLang) return
 
-                    localStorage.setItem('locale', targetLang);
-                    document.documentElement.setAttribute('lang', targetLang);
+              localStorage.setItem('locale', targetLang)
+              document.documentElement.setAttribute('lang', targetLang)
 
-                    updateActiveButton(targetLang);
-                    applyTranslations(targetLang);
+              updateActiveButton(targetLang)
+              applyTranslations(targetLang)
 
-                    window.dispatchEvent(new CustomEvent('locale-changed', { detail: { locale: targetLang } }));
-                });
-            });
+              window.dispatchEvent(
+                new CustomEvent('locale-changed', { detail: { locale: targetLang } }),
+              )
+            })
+          })
         }
-    })();
+      })()
     </script>
 
     <!-- ============================================================= -->
@@ -1090,497 +1274,576 @@
     <!-- Footer (KodiniTools)                                          -->
     <!-- ============================================================= -->
     <style>
-    .site-footer {
-      background: #ffffff;
-      border-top: 1px solid #d4c09a;
-      padding: 1.5rem 2rem;
-      margin-top: 2rem;
-      font-family: 'Supreme', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-    }
-
-    [data-theme="dark"] .site-footer {
-      background: #16161c;
-      border-top-color: #5E5F69;
-    }
-
-    .footer-content {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .footer-link {
-      color: #014f99;
-      text-decoration: none;
-      font-size: 0.85rem;
-      transition: color 0.2s ease;
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-family: inherit;
-      padding: 0;
-    }
-
-    [data-theme="dark"] .footer-link {
-      color: #AEAFB7;
-    }
-
-    .footer-link:hover {
-      color: #c9984d;
-    }
-
-    [data-theme="dark"] .footer-link:hover {
-      color: #F2E28E;
-    }
-
-    .social-link {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    .social-icon {
-      width: 1rem;
-      height: 1rem;
-      opacity: 0.7;
-      transition: opacity 0.2s ease;
-    }
-
-    .social-link:hover .social-icon {
-      opacity: 1;
-    }
-
-    .footer-copyright {
-      color: #4f6f8e;
-      font-size: 0.8rem;
-      margin: 0;
-    }
-
-    [data-theme="dark"] .footer-copyright {
-      color: #5E5F69;
-    }
-
-    @media (max-width: 768px) {
       .site-footer {
-        padding: 1.25rem 1rem;
+        background: #ffffff;
+        border-top: 1px solid #d4c09a;
+        padding: 1.5rem 2rem;
+        margin-top: 2rem;
+        font-family:
+          'Supreme',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'Roboto',
+          sans-serif;
       }
-      .footer-links {
-        gap: 1rem;
-      }
-      .footer-link {
-        font-size: 0.8rem;
-      }
-    }
 
-    @media (max-width: 480px) {
-      .footer-links {
+      [data-theme='dark'] .site-footer {
+        background: #16161c;
+        border-top-color: #5e5f69;
+      }
+
+      .footer-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.75rem;
+        gap: 1rem;
       }
-    }
+
+      .footer-links {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .footer-link {
+        color: #014f99;
+        text-decoration: none;
+        font-size: 0.85rem;
+        transition: color 0.2s ease;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        padding: 0;
+      }
+
+      [data-theme='dark'] .footer-link {
+        color: #aeafb7;
+      }
+
+      .footer-link:hover {
+        color: #c9984d;
+      }
+
+      [data-theme='dark'] .footer-link:hover {
+        color: #f2e28e;
+      }
+
+      .social-link {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .social-icon {
+        width: 1rem;
+        height: 1rem;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+      }
+
+      .social-link:hover .social-icon {
+        opacity: 1;
+      }
+
+      .footer-copyright {
+        color: #4f6f8e;
+        font-size: 0.8rem;
+        margin: 0;
+      }
+
+      [data-theme='dark'] .footer-copyright {
+        color: #5e5f69;
+      }
+
+      @media (max-width: 768px) {
+        .site-footer {
+          padding: 1.25rem 1rem;
+        }
+        .footer-links {
+          gap: 1rem;
+        }
+        .footer-link {
+          font-size: 0.8rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .footer-links {
+          flex-direction: column;
+          align-items: center;
+          gap: 0.75rem;
+        }
+      }
     </style>
 
     <footer class="site-footer">
       <div class="footer-content">
         <div class="footer-links">
-          <a href="https://kodinitools.com/datenschutz/" class="footer-link" data-i18n="footer.privacy">Datenschutz</a>
-          <a href="https://kodinitools.com/kontaktformular/" class="footer-link" data-i18n="footer.contact">Kontakt</a>
-          <button class="footer-link" onclick="CookieConsent.showSettings()" data-i18n="footer.cookieSettings">Cookie-Einstellungen</button>
-          <a href="https://www.facebook.com/KodiniTools" target="_blank" rel="noopener noreferrer" class="footer-link social-link" aria-label="Facebook">
-            <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+          <a
+            href="https://kodinitools.com/datenschutz/"
+            class="footer-link"
+            data-i18n="footer.privacy"
+            >Datenschutz</a
+          >
+          <a
+            href="https://kodinitools.com/kontaktformular/"
+            class="footer-link"
+            data-i18n="footer.contact"
+            >Kontakt</a
+          >
+          <button
+            class="footer-link"
+            onclick="CookieConsent.showSettings()"
+            data-i18n="footer.cookieSettings"
+          >
+            Cookie-Einstellungen
+          </button>
+          <a
+            href="https://www.facebook.com/KodiniTools"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-link social-link"
+            aria-label="Facebook"
+          >
+            <svg
+              class="social-icon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"
+              />
             </svg>
           </a>
         </div>
-        <p class="footer-copyright">&copy; <script>document.write(new Date().getFullYear())</script> KodiniTools</p>
+        <p class="footer-copyright">
+          &copy;
+          <script>
+            document.write(new Date().getFullYear())
+          </script>
+          KodiniTools
+        </p>
       </div>
     </footer>
 
     <script>
-    // Footer i18n
-    (function() {
-      'use strict';
+      // Footer i18n
+      ;(function () {
+        'use strict'
 
-      var FOOTER_TRANSLATIONS = {
-        de: {
-          'footer.privacy': 'Datenschutz',
-          'footer.contact': 'Kontakt',
-          'footer.cookieSettings': 'Cookie-Einstellungen'
-        },
-        en: {
-          'footer.privacy': 'Privacy Policy',
-          'footer.contact': 'Contact',
-          'footer.cookieSettings': 'Cookie Settings'
+        var FOOTER_TRANSLATIONS = {
+          de: {
+            'footer.privacy': 'Datenschutz',
+            'footer.contact': 'Kontakt',
+            'footer.cookieSettings': 'Cookie-Einstellungen',
+          },
+          en: {
+            'footer.privacy': 'Privacy Policy',
+            'footer.contact': 'Contact',
+            'footer.cookieSettings': 'Cookie Settings',
+          },
         }
-      };
 
-      function applyFooterTranslations() {
-        var lang = localStorage.getItem('locale') || 'de';
-        var t = FOOTER_TRANSLATIONS[lang] || FOOTER_TRANSLATIONS['de'];
-        var footer = document.querySelector('.site-footer');
-        if (!footer) return;
-        footer.querySelectorAll('[data-i18n]').forEach(function(el) {
-          var key = el.getAttribute('data-i18n');
-          if (t[key]) el.textContent = t[key];
-        });
-      }
+        function applyFooterTranslations() {
+          var lang = localStorage.getItem('locale') || 'de'
+          var t = FOOTER_TRANSLATIONS[lang] || FOOTER_TRANSLATIONS['de']
+          var footer = document.querySelector('.site-footer')
+          if (!footer) return
+          footer.querySelectorAll('[data-i18n]').forEach(function (el) {
+            var key = el.getAttribute('data-i18n')
+            if (t[key]) el.textContent = t[key]
+          })
+        }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyFooterTranslations);
-      } else {
-        applyFooterTranslations();
-      }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', applyFooterTranslations)
+        } else {
+          applyFooterTranslations()
+        }
 
-      window.addEventListener('locale-changed', applyFooterTranslations);
-    })();
+        window.addEventListener('locale-changed', applyFooterTranslations)
+      })()
     </script>
 
     <!-- ============================================================= -->
     <!-- Cookie-Banner (DSGVO)                                         -->
     <!-- ============================================================= -->
     <style>
-    .cookie-banner {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #ffffff;
-      border-top: 1px solid #d4c09a;
-      padding: 1.25rem;
-      z-index: 10000;
-      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
-      font-family: 'Supreme', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      display: none;
-    }
+      .cookie-banner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border-top: 1px solid #d4c09a;
+        padding: 1.25rem;
+        z-index: 10000;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+        font-family:
+          'Supreme',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'Roboto',
+          sans-serif;
+        display: none;
+      }
 
-    [data-theme="dark"] .cookie-banner {
-      background: #1a1a1f;
-      border-top-color: rgba(242, 226, 142, 0.2);
-      color: #fafafa;
-    }
+      [data-theme='dark'] .cookie-banner {
+        background: #1a1a1f;
+        border-top-color: rgba(242, 226, 142, 0.2);
+        color: #fafafa;
+      }
 
-    .cookie-banner.show { display: block; }
+      .cookie-banner.show {
+        display: block;
+      }
 
-    .cookie-content {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1.5rem;
-    }
-
-    .cookie-text {
-      flex: 1;
-      min-width: 280px;
-    }
-
-    .cookie-text h3 {
-      font-size: 1rem;
-      margin: 0 0 0.5rem;
-      color: #003971;
-    }
-
-    [data-theme="dark"] .cookie-text h3 { color: #fafafa; }
-
-    .cookie-text p {
-      font-size: 0.85rem;
-      color: #014f99;
-      margin: 0 0 0.5rem;
-      line-height: 1.5;
-    }
-
-    [data-theme="dark"] .cookie-text p { color: #AEAFB7; }
-
-    .cookie-link {
-      background: none;
-      border: none;
-      color: #c9984d;
-      cursor: pointer;
-      font-size: 0.85rem;
-      padding: 0;
-      text-decoration: underline;
-    }
-
-    [data-theme="dark"] .cookie-link { color: #F2E28E; }
-
-    .cookie-actions {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .cookie-btn {
-      padding: 0.65rem 1.25rem;
-      border-radius: 0.5rem;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      border: 2px solid transparent;
-      white-space: nowrap;
-    }
-
-    .cookie-btn-accept {
-      background: linear-gradient(135deg, #014f99 0%, #003971 100%);
-      color: #ffffff;
-    }
-
-    .cookie-btn-accept:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(1, 79, 153, 0.3);
-    }
-
-    .cookie-btn-reject {
-      background: transparent;
-      border: 2px solid #003971;
-      color: #003971;
-    }
-
-    [data-theme="dark"] .cookie-btn-reject {
-      border-color: #fafafa;
-      color: #fafafa;
-    }
-
-    .cookie-btn-reject:hover {
-      background: #003971;
-      color: #ffffff;
-      transform: translateY(-2px);
-    }
-
-    [data-theme="dark"] .cookie-btn-reject:hover {
-      background: #fafafa;
-      color: #0C0C10;
-    }
-
-    .cookie-btn-settings {
-      background: transparent;
-      border: 2px solid #d4c09a;
-      color: #014f99;
-    }
-
-    .cookie-btn-settings:hover {
-      border-color: #c9984d;
-      color: #c9984d;
-    }
-
-    [data-theme="dark"] .cookie-btn-settings:hover {
-      border-color: #F2E28E;
-      color: #F2E28E;
-    }
-
-    .cookie-modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 10001;
-      padding: 1rem;
-    }
-
-    .cookie-modal-overlay.show { display: flex; }
-
-    .cookie-modal {
-      background: #ffffff;
-      border-radius: 1rem;
-      max-width: 600px;
-      width: 100%;
-      max-height: 90vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }
-
-    [data-theme="dark"] .cookie-modal {
-      background: #1a1a1f;
-      border: 1px solid rgba(242, 226, 142, 0.2);
-      color: #fafafa;
-    }
-
-    .cookie-modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid #d4c09a;
-    }
-
-    [data-theme="dark"] .cookie-modal-header { border-color: #5E5F69; }
-
-    .cookie-modal-header h2 {
-      font-size: 1.15rem;
-      margin: 0;
-    }
-
-    .cookie-modal-close {
-      background: none;
-      border: none;
-      font-size: 1.75rem;
-      color: #014f99;
-      cursor: pointer;
-      padding: 0;
-      line-height: 1;
-    }
-
-    .cookie-modal-close:hover { color: #003971; }
-    [data-theme="dark"] .cookie-modal-close:hover { color: #fafafa; }
-
-    .cookie-modal-body {
-      padding: 1.5rem;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .cookie-modal-intro {
-      font-size: 0.9rem;
-      color: #014f99;
-      margin: 0 0 1.5rem;
-      line-height: 1.6;
-    }
-
-    [data-theme="dark"] .cookie-modal-intro { color: #AEAFB7; }
-
-    .cookie-category {
-      border: 1px solid #d4c09a;
-      border-radius: 0.75rem;
-      margin-bottom: 1rem;
-      overflow: hidden;
-    }
-
-    [data-theme="dark"] .cookie-category { border-color: #5E5F69; }
-
-    .cookie-category-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 1rem 1.25rem;
-      gap: 1rem;
-    }
-
-    .cookie-category-info h4 {
-      font-size: 0.95rem;
-      margin: 0 0 0.35rem;
-    }
-
-    .cookie-category-info p {
-      font-size: 0.8rem;
-      color: #014f99;
-      line-height: 1.5;
-      margin: 0;
-    }
-
-    [data-theme="dark"] .cookie-category-info p { color: #AEAFB7; }
-
-    .cookie-toggle { flex-shrink: 0; }
-
-    .toggle-switch {
-      position: relative;
-      display: inline-block;
-      width: 48px;
-      height: 26px;
-      cursor: pointer;
-    }
-
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-      position: absolute;
-    }
-
-    .toggle-slider {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #d4c09a;
-      border-radius: 26px;
-      transition: background 0.3s;
-    }
-
-    .toggle-slider::before {
-      content: '';
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 20px;
-      height: 20px;
-      background: #ffffff;
-      border-radius: 50%;
-      transition: transform 0.3s;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    }
-
-    .toggle-switch input:checked + .toggle-slider {
-      background: #014f99;
-    }
-
-    [data-theme="dark"] .toggle-switch input:checked + .toggle-slider {
-      background: #F2E28E;
-    }
-
-    .toggle-switch input:checked + .toggle-slider::before {
-      transform: translateX(22px);
-    }
-
-    .toggle-disabled {
-      opacity: 0.7;
-      font-size: 0.75rem;
-      color: #014f99;
-      font-style: italic;
-    }
-
-    .cookie-modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.75rem;
-      padding: 1.25rem 1.5rem;
-      border-top: 1px solid #d4c09a;
-      flex-wrap: wrap;
-    }
-
-    [data-theme="dark"] .cookie-modal-footer { border-color: #5E5F69; }
-
-    .cookie-btn-save {
-      background: linear-gradient(135deg, #c9984d 0%, #014f99 100%);
-      color: #ffffff;
-    }
-
-    .cookie-btn-save:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(201, 152, 77, 0.3);
-    }
-
-    @media (max-width: 768px) {
       .cookie-content {
-        flex-direction: column;
-        align-items: stretch;
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1.5rem;
       }
-      .cookie-actions { justify-content: stretch; }
-      .cookie-btn {
+
+      .cookie-text {
         flex: 1;
-        text-align: center;
+        min-width: 280px;
       }
-      .cookie-modal-footer { flex-direction: column; }
-      .cookie-modal-footer .cookie-btn { width: 100%; }
-    }
+
+      .cookie-text h3 {
+        font-size: 1rem;
+        margin: 0 0 0.5rem;
+        color: #003971;
+      }
+
+      [data-theme='dark'] .cookie-text h3 {
+        color: #fafafa;
+      }
+
+      .cookie-text p {
+        font-size: 0.85rem;
+        color: #014f99;
+        margin: 0 0 0.5rem;
+        line-height: 1.5;
+      }
+
+      [data-theme='dark'] .cookie-text p {
+        color: #aeafb7;
+      }
+
+      .cookie-link {
+        background: none;
+        border: none;
+        color: #c9984d;
+        cursor: pointer;
+        font-size: 0.85rem;
+        padding: 0;
+        text-decoration: underline;
+      }
+
+      [data-theme='dark'] .cookie-link {
+        color: #f2e28e;
+      }
+
+      .cookie-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .cookie-btn {
+        padding: 0.65rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        white-space: nowrap;
+      }
+
+      .cookie-btn-accept {
+        background: linear-gradient(135deg, #014f99 0%, #003971 100%);
+        color: #ffffff;
+      }
+
+      .cookie-btn-accept:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(1, 79, 153, 0.3);
+      }
+
+      .cookie-btn-reject {
+        background: transparent;
+        border: 2px solid #003971;
+        color: #003971;
+      }
+
+      [data-theme='dark'] .cookie-btn-reject {
+        border-color: #fafafa;
+        color: #fafafa;
+      }
+
+      .cookie-btn-reject:hover {
+        background: #003971;
+        color: #ffffff;
+        transform: translateY(-2px);
+      }
+
+      [data-theme='dark'] .cookie-btn-reject:hover {
+        background: #fafafa;
+        color: #0c0c10;
+      }
+
+      .cookie-btn-settings {
+        background: transparent;
+        border: 2px solid #d4c09a;
+        color: #014f99;
+      }
+
+      .cookie-btn-settings:hover {
+        border-color: #c9984d;
+        color: #c9984d;
+      }
+
+      [data-theme='dark'] .cookie-btn-settings:hover {
+        border-color: #f2e28e;
+        color: #f2e28e;
+      }
+
+      .cookie-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+        padding: 1rem;
+      }
+
+      .cookie-modal-overlay.show {
+        display: flex;
+      }
+
+      .cookie-modal {
+        background: #ffffff;
+        border-radius: 1rem;
+        max-width: 600px;
+        width: 100%;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      [data-theme='dark'] .cookie-modal {
+        background: #1a1a1f;
+        border: 1px solid rgba(242, 226, 142, 0.2);
+        color: #fafafa;
+      }
+
+      .cookie-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #d4c09a;
+      }
+
+      [data-theme='dark'] .cookie-modal-header {
+        border-color: #5e5f69;
+      }
+
+      .cookie-modal-header h2 {
+        font-size: 1.15rem;
+        margin: 0;
+      }
+
+      .cookie-modal-close {
+        background: none;
+        border: none;
+        font-size: 1.75rem;
+        color: #014f99;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+
+      .cookie-modal-close:hover {
+        color: #003971;
+      }
+      [data-theme='dark'] .cookie-modal-close:hover {
+        color: #fafafa;
+      }
+
+      .cookie-modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .cookie-modal-intro {
+        font-size: 0.9rem;
+        color: #014f99;
+        margin: 0 0 1.5rem;
+        line-height: 1.6;
+      }
+
+      [data-theme='dark'] .cookie-modal-intro {
+        color: #aeafb7;
+      }
+
+      .cookie-category {
+        border: 1px solid #d4c09a;
+        border-radius: 0.75rem;
+        margin-bottom: 1rem;
+        overflow: hidden;
+      }
+
+      [data-theme='dark'] .cookie-category {
+        border-color: #5e5f69;
+      }
+
+      .cookie-category-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 1rem 1.25rem;
+        gap: 1rem;
+      }
+
+      .cookie-category-info h4 {
+        font-size: 0.95rem;
+        margin: 0 0 0.35rem;
+      }
+
+      .cookie-category-info p {
+        font-size: 0.8rem;
+        color: #014f99;
+        line-height: 1.5;
+        margin: 0;
+      }
+
+      [data-theme='dark'] .cookie-category-info p {
+        color: #aeafb7;
+      }
+
+      .cookie-toggle {
+        flex-shrink: 0;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 48px;
+        height: 26px;
+        cursor: pointer;
+      }
+
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #d4c09a;
+        border-radius: 26px;
+        transition: background 0.3s;
+      }
+
+      .toggle-slider::before {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        background: #ffffff;
+        border-radius: 50%;
+        transition: transform 0.3s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .toggle-switch input:checked + .toggle-slider {
+        background: #014f99;
+      }
+
+      [data-theme='dark'] .toggle-switch input:checked + .toggle-slider {
+        background: #f2e28e;
+      }
+
+      .toggle-switch input:checked + .toggle-slider::before {
+        transform: translateX(22px);
+      }
+
+      .toggle-disabled {
+        opacity: 0.7;
+        font-size: 0.75rem;
+        color: #014f99;
+        font-style: italic;
+      }
+
+      .cookie-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        border-top: 1px solid #d4c09a;
+        flex-wrap: wrap;
+      }
+
+      [data-theme='dark'] .cookie-modal-footer {
+        border-color: #5e5f69;
+      }
+
+      .cookie-btn-save {
+        background: linear-gradient(135deg, #c9984d 0%, #014f99 100%);
+        color: #ffffff;
+      }
+
+      .cookie-btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(201, 152, 77, 0.3);
+      }
+
+      @media (max-width: 768px) {
+        .cookie-content {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .cookie-actions {
+          justify-content: stretch;
+        }
+        .cookie-btn {
+          flex: 1;
+          text-align: center;
+        }
+        .cookie-modal-footer {
+          flex-direction: column;
+        }
+        .cookie-modal-footer .cookie-btn {
+          width: 100%;
+        }
+      }
     </style>
 
     <!-- Cookie Banner HTML -->
@@ -1588,13 +1851,40 @@
       <div class="cookie-content">
         <div class="cookie-text">
           <h3 data-i18n="cookie.title">Cookie-Einstellungen</h3>
-          <p data-i18n="cookie.text">Wir verwenden Cookies, um Ihnen die beste Erfahrung auf unserer Website zu bieten. Sie koennen waehlen, welche Cookies Sie zulassen moechten.</p>
-          <button class="cookie-link" onclick="CookieConsent.showSettings()" data-i18n="cookie.moreInfo">Mehr erfahren</button>
+          <p data-i18n="cookie.text">
+            Wir verwenden Cookies, um Ihnen die beste Erfahrung auf unserer Website zu bieten. Sie
+            koennen waehlen, welche Cookies Sie zulassen moechten.
+          </p>
+          <button
+            class="cookie-link"
+            onclick="CookieConsent.showSettings()"
+            data-i18n="cookie.moreInfo"
+          >
+            Mehr erfahren
+          </button>
         </div>
         <div class="cookie-actions">
-          <button class="cookie-btn cookie-btn-reject" onclick="CookieConsent.rejectAll()" data-i18n="cookie.rejectAll">Ablehnen</button>
-          <button class="cookie-btn cookie-btn-settings" onclick="CookieConsent.showSettings()" data-i18n="cookie.settings">Einstellungen</button>
-          <button class="cookie-btn cookie-btn-accept" onclick="CookieConsent.acceptAll()" data-i18n="cookie.acceptAll">Akzeptieren</button>
+          <button
+            class="cookie-btn cookie-btn-reject"
+            onclick="CookieConsent.rejectAll()"
+            data-i18n="cookie.rejectAll"
+          >
+            Ablehnen
+          </button>
+          <button
+            class="cookie-btn cookie-btn-settings"
+            onclick="CookieConsent.showSettings()"
+            data-i18n="cookie.settings"
+          >
+            Einstellungen
+          </button>
+          <button
+            class="cookie-btn cookie-btn-accept"
+            onclick="CookieConsent.acceptAll()"
+            data-i18n="cookie.acceptAll"
+          >
+            Akzeptieren
+          </button>
         </div>
       </div>
     </div>
@@ -1607,14 +1897,20 @@
           <button class="cookie-modal-close" onclick="CookieConsent.hideSettings()">&times;</button>
         </div>
         <div class="cookie-modal-body">
-          <p class="cookie-modal-intro" data-i18n="cookie.settingsIntro">Hier koennen Sie Ihre Cookie-Praeferenzen verwalten. Essentielle Cookies sind fuer die Grundfunktionen der Website erforderlich und koennen nicht deaktiviert werden.</p>
+          <p class="cookie-modal-intro" data-i18n="cookie.settingsIntro">
+            Hier koennen Sie Ihre Cookie-Praeferenzen verwalten. Essentielle Cookies sind fuer die
+            Grundfunktionen der Website erforderlich und koennen nicht deaktiviert werden.
+          </p>
 
           <!-- Essential -->
           <div class="cookie-category">
             <div class="cookie-category-header">
               <div class="cookie-category-info">
                 <h4 data-i18n="cookie.essentialTitle">Essentielle Cookies</h4>
-                <p data-i18n="cookie.essentialDesc">Diese Cookies sind fuer die Grundfunktionen der Website erforderlich, wie Sicherheit und Zugangssteuerung.</p>
+                <p data-i18n="cookie.essentialDesc">
+                  Diese Cookies sind fuer die Grundfunktionen der Website erforderlich, wie
+                  Sicherheit und Zugangssteuerung.
+                </p>
               </div>
               <div class="cookie-toggle">
                 <span class="toggle-disabled" data-i18n="cookie.alwaysActive">Immer aktiv</span>
@@ -1627,11 +1923,14 @@
             <div class="cookie-category-header">
               <div class="cookie-category-info">
                 <h4 data-i18n="cookie.analyticsTitle">Analyse-Cookies</h4>
-                <p data-i18n="cookie.analyticsDesc">Helfen uns zu verstehen, wie Besucher mit der Website interagieren, um die Benutzererfahrung zu verbessern.</p>
+                <p data-i18n="cookie.analyticsDesc">
+                  Helfen uns zu verstehen, wie Besucher mit der Website interagieren, um die
+                  Benutzererfahrung zu verbessern.
+                </p>
               </div>
               <div class="cookie-toggle">
                 <label class="toggle-switch">
-                  <input type="checkbox" id="analyticsConsent">
+                  <input type="checkbox" id="analyticsConsent" />
                   <span class="toggle-slider"></span>
                 </label>
               </div>
@@ -1643,11 +1942,14 @@
             <div class="cookie-category-header">
               <div class="cookie-category-info">
                 <h4 data-i18n="cookie.marketingTitle">Marketing-Cookies</h4>
-                <p data-i18n="cookie.marketingDesc">Werden verwendet, um Werbung relevanter fuer Sie zu gestalten und die Effektivitaet von Werbekampagnen zu messen.</p>
+                <p data-i18n="cookie.marketingDesc">
+                  Werden verwendet, um Werbung relevanter fuer Sie zu gestalten und die
+                  Effektivitaet von Werbekampagnen zu messen.
+                </p>
               </div>
               <div class="cookie-toggle">
                 <label class="toggle-switch">
-                  <input type="checkbox" id="marketingConsent">
+                  <input type="checkbox" id="marketingConsent" />
                   <span class="toggle-slider"></span>
                 </label>
               </div>
@@ -1655,176 +1957,206 @@
           </div>
         </div>
         <div class="cookie-modal-footer">
-          <button class="cookie-btn cookie-btn-reject" onclick="CookieConsent.rejectAll()" data-i18n="cookie.rejectAllModal">Alle ablehnen</button>
-          <button class="cookie-btn cookie-btn-save" onclick="CookieConsent.saveSettings()" data-i18n="cookie.saveSettings">Einstellungen speichern</button>
-          <button class="cookie-btn cookie-btn-accept" onclick="CookieConsent.acceptAll()" data-i18n="cookie.acceptAllModal">Alle akzeptieren</button>
+          <button
+            class="cookie-btn cookie-btn-reject"
+            onclick="CookieConsent.rejectAll()"
+            data-i18n="cookie.rejectAllModal"
+          >
+            Alle ablehnen
+          </button>
+          <button
+            class="cookie-btn cookie-btn-save"
+            onclick="CookieConsent.saveSettings()"
+            data-i18n="cookie.saveSettings"
+          >
+            Einstellungen speichern
+          </button>
+          <button
+            class="cookie-btn cookie-btn-accept"
+            onclick="CookieConsent.acceptAll()"
+            data-i18n="cookie.acceptAllModal"
+          >
+            Alle akzeptieren
+          </button>
         </div>
       </div>
     </div>
 
     <script>
-    // Cookie Consent Manager mit i18n
-    var CookieConsent = (function() {
-      var banner = document.getElementById('cookieBanner');
-      var modal = document.getElementById('cookieModal');
-      var analyticsCheckbox = document.getElementById('analyticsConsent');
-      var marketingCheckbox = document.getElementById('marketingConsent');
+      // Cookie Consent Manager mit i18n
+      var CookieConsent = (function () {
+        var banner = document.getElementById('cookieBanner')
+        var modal = document.getElementById('cookieModal')
+        var analyticsCheckbox = document.getElementById('analyticsConsent')
+        var marketingCheckbox = document.getElementById('marketingConsent')
 
-      var COOKIE_TRANSLATIONS = {
-        de: {
-          'cookie.title': 'Cookie-Einstellungen',
-          'cookie.text': 'Wir verwenden Cookies, um Ihnen die beste Erfahrung auf unserer Website zu bieten. Sie können wählen, welche Cookies Sie zulassen möchten.',
-          'cookie.moreInfo': 'Mehr erfahren',
-          'cookie.rejectAll': 'Ablehnen',
-          'cookie.settings': 'Einstellungen',
-          'cookie.acceptAll': 'Akzeptieren',
-          'cookie.settingsTitle': 'Cookie-Einstellungen',
-          'cookie.settingsIntro': 'Hier können Sie Ihre Cookie-Präferenzen verwalten. Essentielle Cookies sind für die Grundfunktionen der Website erforderlich und können nicht deaktiviert werden.',
-          'cookie.essentialTitle': 'Essentielle Cookies',
-          'cookie.essentialDesc': 'Diese Cookies sind für die Grundfunktionen der Website erforderlich, wie Sicherheit und Zugangssteuerung.',
-          'cookie.alwaysActive': 'Immer aktiv',
-          'cookie.analyticsTitle': 'Analyse-Cookies',
-          'cookie.analyticsDesc': 'Helfen uns zu verstehen, wie Besucher mit der Website interagieren, um die Benutzererfahrung zu verbessern.',
-          'cookie.marketingTitle': 'Marketing-Cookies',
-          'cookie.marketingDesc': 'Werden verwendet, um Werbung relevanter für Sie zu gestalten und die Effektivität von Werbekampagnen zu messen.',
-          'cookie.rejectAllModal': 'Alle ablehnen',
-          'cookie.saveSettings': 'Einstellungen speichern',
-          'cookie.acceptAllModal': 'Alle akzeptieren'
-        },
-        en: {
-          'cookie.title': 'Cookie Settings',
-          'cookie.text': 'We use cookies to provide you with the best experience on our website. You can choose which cookies you want to allow.',
-          'cookie.moreInfo': 'Learn more',
-          'cookie.rejectAll': 'Reject',
-          'cookie.settings': 'Settings',
-          'cookie.acceptAll': 'Accept',
-          'cookie.settingsTitle': 'Cookie Settings',
-          'cookie.settingsIntro': 'Here you can manage your cookie preferences. Essential cookies are required for the basic functions of the website and cannot be disabled.',
-          'cookie.essentialTitle': 'Essential Cookies',
-          'cookie.essentialDesc': 'These cookies are required for the basic functions of the website, such as security and access control.',
-          'cookie.alwaysActive': 'Always active',
-          'cookie.analyticsTitle': 'Analytics Cookies',
-          'cookie.analyticsDesc': 'Help us understand how visitors interact with the website to improve the user experience.',
-          'cookie.marketingTitle': 'Marketing Cookies',
-          'cookie.marketingDesc': 'Used to make advertising more relevant to you and to measure the effectiveness of advertising campaigns.',
-          'cookie.rejectAllModal': 'Reject all',
-          'cookie.saveSettings': 'Save settings',
-          'cookie.acceptAllModal': 'Accept all'
+        var COOKIE_TRANSLATIONS = {
+          de: {
+            'cookie.title': 'Cookie-Einstellungen',
+            'cookie.text':
+              'Wir verwenden Cookies, um Ihnen die beste Erfahrung auf unserer Website zu bieten. Sie können wählen, welche Cookies Sie zulassen möchten.',
+            'cookie.moreInfo': 'Mehr erfahren',
+            'cookie.rejectAll': 'Ablehnen',
+            'cookie.settings': 'Einstellungen',
+            'cookie.acceptAll': 'Akzeptieren',
+            'cookie.settingsTitle': 'Cookie-Einstellungen',
+            'cookie.settingsIntro':
+              'Hier können Sie Ihre Cookie-Präferenzen verwalten. Essentielle Cookies sind für die Grundfunktionen der Website erforderlich und können nicht deaktiviert werden.',
+            'cookie.essentialTitle': 'Essentielle Cookies',
+            'cookie.essentialDesc':
+              'Diese Cookies sind für die Grundfunktionen der Website erforderlich, wie Sicherheit und Zugangssteuerung.',
+            'cookie.alwaysActive': 'Immer aktiv',
+            'cookie.analyticsTitle': 'Analyse-Cookies',
+            'cookie.analyticsDesc':
+              'Helfen uns zu verstehen, wie Besucher mit der Website interagieren, um die Benutzererfahrung zu verbessern.',
+            'cookie.marketingTitle': 'Marketing-Cookies',
+            'cookie.marketingDesc':
+              'Werden verwendet, um Werbung relevanter für Sie zu gestalten und die Effektivität von Werbekampagnen zu messen.',
+            'cookie.rejectAllModal': 'Alle ablehnen',
+            'cookie.saveSettings': 'Einstellungen speichern',
+            'cookie.acceptAllModal': 'Alle akzeptieren',
+          },
+          en: {
+            'cookie.title': 'Cookie Settings',
+            'cookie.text':
+              'We use cookies to provide you with the best experience on our website. You can choose which cookies you want to allow.',
+            'cookie.moreInfo': 'Learn more',
+            'cookie.rejectAll': 'Reject',
+            'cookie.settings': 'Settings',
+            'cookie.acceptAll': 'Accept',
+            'cookie.settingsTitle': 'Cookie Settings',
+            'cookie.settingsIntro':
+              'Here you can manage your cookie preferences. Essential cookies are required for the basic functions of the website and cannot be disabled.',
+            'cookie.essentialTitle': 'Essential Cookies',
+            'cookie.essentialDesc':
+              'These cookies are required for the basic functions of the website, such as security and access control.',
+            'cookie.alwaysActive': 'Always active',
+            'cookie.analyticsTitle': 'Analytics Cookies',
+            'cookie.analyticsDesc':
+              'Help us understand how visitors interact with the website to improve the user experience.',
+            'cookie.marketingTitle': 'Marketing Cookies',
+            'cookie.marketingDesc':
+              'Used to make advertising more relevant to you and to measure the effectiveness of advertising campaigns.',
+            'cookie.rejectAllModal': 'Reject all',
+            'cookie.saveSettings': 'Save settings',
+            'cookie.acceptAllModal': 'Accept all',
+          },
         }
-      };
 
-      function applyCookieTranslations() {
-        var lang = localStorage.getItem('locale') || 'de';
-        var t = COOKIE_TRANSLATIONS[lang] || COOKIE_TRANSLATIONS['de'];
+        function applyCookieTranslations() {
+          var lang = localStorage.getItem('locale') || 'de'
+          var t = COOKIE_TRANSLATIONS[lang] || COOKIE_TRANSLATIONS['de']
 
-        document.querySelectorAll('#cookieBanner [data-i18n], #cookieModal [data-i18n]').forEach(function(el) {
-          var key = el.getAttribute('data-i18n');
-          if (t[key]) el.textContent = t[key];
-        });
-      }
+          document
+            .querySelectorAll('#cookieBanner [data-i18n], #cookieModal [data-i18n]')
+            .forEach(function (el) {
+              var key = el.getAttribute('data-i18n')
+              if (t[key]) el.textContent = t[key]
+            })
+        }
 
-      function init() {
-        applyCookieTranslations();
+        function init() {
+          applyCookieTranslations()
 
-        var saved = localStorage.getItem('cookieConsent');
-        if (saved) {
-          try {
-            var consent = JSON.parse(saved);
-            analyticsCheckbox.checked = consent.analytics;
-            marketingCheckbox.checked = consent.marketing;
-          } catch(e) {
-            showBanner();
+          var saved = localStorage.getItem('cookieConsent')
+          if (saved) {
+            try {
+              var consent = JSON.parse(saved)
+              analyticsCheckbox.checked = consent.analytics
+              marketingCheckbox.checked = consent.marketing
+            } catch (e) {
+              showBanner()
+            }
+          } else {
+            showBanner()
           }
+        }
+
+        function showBanner() {
+          banner.classList.add('show')
+        }
+
+        function hideBanner() {
+          banner.classList.remove('show')
+        }
+
+        function showSettings() {
+          modal.classList.add('show')
+        }
+
+        function hideSettings() {
+          modal.classList.remove('show')
+        }
+
+        function updateGoogleConsent(analytics, marketing) {
+          if (typeof gtag === 'function') {
+            gtag('consent', 'update', {
+              analytics_storage: analytics ? 'granted' : 'denied',
+              functionality_storage: analytics ? 'granted' : 'denied',
+              personalization_storage: analytics ? 'granted' : 'denied',
+            })
+            gtag('consent', 'update', {
+              ad_storage: marketing ? 'granted' : 'denied',
+              ad_user_data: marketing ? 'granted' : 'denied',
+              ad_personalization: marketing ? 'granted' : 'denied',
+            })
+          }
+        }
+
+        function saveConsent(analytics, marketing) {
+          var data = {
+            analytics: analytics,
+            marketing: marketing,
+            timestamp: new Date().toISOString(),
+          }
+          localStorage.setItem('cookieConsent', JSON.stringify(data))
+          updateGoogleConsent(analytics, marketing)
+        }
+
+        function acceptAll() {
+          analyticsCheckbox.checked = true
+          marketingCheckbox.checked = true
+          saveConsent(true, true)
+          hideBanner()
+          hideSettings()
+        }
+
+        function rejectAll() {
+          analyticsCheckbox.checked = false
+          marketingCheckbox.checked = false
+          saveConsent(false, false)
+          hideBanner()
+          hideSettings()
+        }
+
+        function saveSettings() {
+          saveConsent(analyticsCheckbox.checked, marketingCheckbox.checked)
+          hideBanner()
+          hideSettings()
+        }
+
+        modal.addEventListener('click', function (e) {
+          if (e.target === modal) hideSettings()
+        })
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init)
         } else {
-          showBanner();
+          init()
         }
-      }
 
-      function showBanner() {
-        banner.classList.add('show');
-      }
+        window.addEventListener('locale-changed', applyCookieTranslations)
 
-      function hideBanner() {
-        banner.classList.remove('show');
-      }
-
-      function showSettings() {
-        modal.classList.add('show');
-      }
-
-      function hideSettings() {
-        modal.classList.remove('show');
-      }
-
-      function updateGoogleConsent(analytics, marketing) {
-        if (typeof gtag === 'function') {
-          gtag('consent', 'update', {
-            'analytics_storage': analytics ? 'granted' : 'denied',
-            'functionality_storage': analytics ? 'granted' : 'denied',
-            'personalization_storage': analytics ? 'granted' : 'denied'
-          });
-          gtag('consent', 'update', {
-            'ad_storage': marketing ? 'granted' : 'denied',
-            'ad_user_data': marketing ? 'granted' : 'denied',
-            'ad_personalization': marketing ? 'granted' : 'denied'
-          });
+        return {
+          showBanner: showBanner,
+          hideBanner: hideBanner,
+          showSettings: showSettings,
+          hideSettings: hideSettings,
+          acceptAll: acceptAll,
+          rejectAll: rejectAll,
+          saveSettings: saveSettings,
         }
-      }
-
-      function saveConsent(analytics, marketing) {
-        var data = {
-          analytics: analytics,
-          marketing: marketing,
-          timestamp: new Date().toISOString()
-        };
-        localStorage.setItem('cookieConsent', JSON.stringify(data));
-        updateGoogleConsent(analytics, marketing);
-      }
-
-      function acceptAll() {
-        analyticsCheckbox.checked = true;
-        marketingCheckbox.checked = true;
-        saveConsent(true, true);
-        hideBanner();
-        hideSettings();
-      }
-
-      function rejectAll() {
-        analyticsCheckbox.checked = false;
-        marketingCheckbox.checked = false;
-        saveConsent(false, false);
-        hideBanner();
-        hideSettings();
-      }
-
-      function saveSettings() {
-        saveConsent(analyticsCheckbox.checked, marketingCheckbox.checked);
-        hideBanner();
-        hideSettings();
-      }
-
-      modal.addEventListener('click', function(e) {
-        if (e.target === modal) hideSettings();
-      });
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-      } else {
-        init();
-      }
-
-      window.addEventListener('locale-changed', applyCookieTranslations);
-
-      return {
-        showBanner: showBanner,
-        hideBanner: hideBanner,
-        showSettings: showSettings,
-        hideSettings: hideSettings,
-        acceptAll: acceptAll,
-        rejectAll: rejectAll,
-        saveSettings: saveSettings
-      };
-    })();
+      })()
     </script>
   </body>
 </html>

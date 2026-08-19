@@ -21,10 +21,7 @@ export interface CutParams {
  * Validiert die Multipart-Felder streng.
  * Wirft `ValidationError` (HTTP 400) bei ungültigen Werten.
  */
-export function parseCutParams(
-  body: Record<string, unknown>,
-  maxDurationSec: number,
-): CutParams {
+export function parseCutParams(body: Record<string, unknown>, maxDurationSec: number): CutParams {
   const start = Number(body.start)
   const duration = Number(body.duration)
   const mode = body.mode
@@ -69,6 +66,9 @@ export function safeExt(filename: string): string {
 /** Basisname ohne Endung, auf sichere Zeichen reduziert. */
 export function safeBaseName(filename: string): string {
   const withoutExt = (filename ?? '').replace(/\.[^.]+$/, '')
-  const cleaned = withoutExt.replace(/[^a-zA-Z0-9-_ ]+/g, '').trim().slice(0, 80)
+  const cleaned = withoutExt
+    .replace(/[^a-zA-Z0-9-_ ]+/g, '')
+    .trim()
+    .slice(0, 80)
   return cleaned || 'video'
 }

@@ -32,17 +32,37 @@ export interface ServerArgsInput {
 // Gemeinsame Präfixe/Encoder-Optionen.
 const PROGRESS = ['-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-nostats']
 const REENCODE = [
-  '-c:v', 'libx264',
-  '-preset', 'veryfast',
-  '-crf', '23',
-  '-c:a', 'aac',
-  '-b:a', '128k',
-  '-movflags', '+faststart',
+  '-c:v',
+  'libx264',
+  '-preset',
+  'veryfast',
+  '-crf',
+  '23',
+  '-c:a',
+  'aac',
+  '-b:a',
+  '128k',
+  '-movflags',
+  '+faststart',
 ]
 
 /** Behalten: schneidet [start, start+duration] heraus (copy = verlustfrei, sonst H.264/AAC). */
-function keepArgs(input: string, output: string, start: number, duration: number, mode: TrimMode): string[] {
-  const base = [...PROGRESS, '-ss', formatFfmpegTime(start), '-i', input, '-t', formatFfmpegTime(Math.max(0, duration))]
+function keepArgs(
+  input: string,
+  output: string,
+  start: number,
+  duration: number,
+  mode: TrimMode,
+): string[] {
+  const base = [
+    ...PROGRESS,
+    '-ss',
+    formatFfmpegTime(start),
+    '-i',
+    input,
+    '-t',
+    formatFfmpegTime(Math.max(0, duration)),
+  ]
   if (mode === 'copy') {
     return [...base, '-c', 'copy', '-avoid_negative_ts', 'make_zero', output]
   }
@@ -51,7 +71,15 @@ function keepArgs(input: string, output: string, start: number, duration: number
 
 /** Re-Encode-Trim eines einzelnen Segments [start, start+duration]. */
 function reencodeTrim(input: string, output: string, start: number, duration: number): string[] {
-  const base = [...PROGRESS, '-ss', formatFfmpegTime(start), '-i', input, '-t', formatFfmpegTime(Math.max(0, duration))]
+  const base = [
+    ...PROGRESS,
+    '-ss',
+    formatFfmpegTime(start),
+    '-i',
+    input,
+    '-t',
+    formatFfmpegTime(Math.max(0, duration)),
+  ]
   return [...base, ...REENCODE, output]
 }
 
@@ -81,19 +109,34 @@ export function buildServerArgs({
     const keepLast = end < tot - EPS
 
     // Mitte entfernen: Teil davor + Teil danach zusammenfügen.
+    // WICHTIG: den Input ZWEIMAL separat einlesen (Input 0 auf [0, s] via -t,
+    // Input 1 ab `end` via -ss). Würde man denselben Input mit zwei trim-Zweigen
+    // splitten, puffert der zweite Zweig den ganzen Rest im Speicher -> OOM/Kill.
     if (keepFirst && keepLast) {
       const filter =
-        `[0:v]trim=start=0:end=${s},setpts=PTS-STARTPTS[v0];` +
-        `[0:a]atrim=start=0:end=${s},asetpts=PTS-STARTPTS[a0];` +
-        `[0:v]trim=start=${end},setpts=PTS-STARTPTS[v1];` +
-        `[0:a]atrim=start=${end},asetpts=PTS-STARTPTS[a1];` +
+        `[0:v]setpts=PTS-STARTPTS[v0];` +
+        `[0:a]asetpts=PTS-STARTPTS[a0];` +
+        `[1:v]setpts=PTS-STARTPTS[v1];` +
+        `[1:a]asetpts=PTS-STARTPTS[a1];` +
         `[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]`
       return [
         ...PROGRESS,
-        '-i', inputPath,
-        '-filter_complex', filter,
-        '-map', '[outv]',
-        '-map', '[outa]',
+        // Input 0: nur der Teil vor der Auswahl.
+        '-t',
+        formatFfmpegTime(s),
+        '-i',
+        inputPath,
+        // Input 1: ab dem Ende der Auswahl bis zum Video-Ende.
+        '-ss',
+        formatFfmpegTime(end),
+        '-i',
+        inputPath,
+        '-filter_complex',
+        filter,
+        '-map',
+        '[outv]',
+        '-map',
+        '[outa]',
         ...REENCODE,
         outputPath,
       ]

@@ -37,13 +37,16 @@ npm run dev       # startet auf :4021 (tsx watch)
 ## Deployment auf den VPS
 
 **Windows → VPS (bequem):**
+
 ```powershell
 cd server
 .\deploy\deploy.ps1
 ```
+
 Kopiert die Quellen, installiert ffmpeg (falls nötig), baut und startet PM2.
 
 **Oder direkt auf dem Server:**
+
 ```bash
 cd /opt/video-cutter-server
 bash deploy/setup-vps.sh

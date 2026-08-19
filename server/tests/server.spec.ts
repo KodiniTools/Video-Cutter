@@ -22,10 +22,16 @@ describe('buildServerArgs', () => {
     expect(args).toContain('-progress')
     expect(args).toContain('pipe:1')
     expect(args.slice(args.indexOf('-ss'))).toEqual([
-      '-ss', '00:00:10.000',
-      '-i', '/tmp/in.mp4',
-      '-t', '00:00:15.000',
-      '-c', 'copy', '-avoid_negative_ts', 'make_zero',
+      '-ss',
+      '00:00:10.000',
+      '-i',
+      '/tmp/in.mp4',
+      '-t',
+      '00:00:15.000',
+      '-c',
+      'copy',
+      '-avoid_negative_ts',
+      'make_zero',
       '/tmp/out.mp4',
     ])
   })
@@ -44,7 +50,7 @@ describe('buildServerArgs', () => {
     expect(args.at(-1)).toBe('/tmp/out.mp4')
   })
 
-  it('remove (Mitte) baut einen concat-Filter und kodiert neu', () => {
+  it('remove (Mitte) liest den Input zweimal und concatet (kein Split -> kein OOM)', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
       outputPath: '/tmp/out.mp4',
@@ -54,9 +60,15 @@ describe('buildServerArgs', () => {
       operation: 'remove',
       total: 30,
     })
+    // Input 0 auf [0,10] begrenzt, Input 1 ab 15 -> zwei -i auf denselben Pfad.
+    expect(args.filter((a) => a === '/tmp/in.mp4')).toHaveLength(2)
+    expect(args.slice(args.indexOf('-t'), args.indexOf('-t') + 2)).toEqual(['-t', '00:00:10.000'])
+    expect(args.slice(args.indexOf('-ss'), args.indexOf('-ss') + 2)).toEqual([
+      '-ss',
+      '00:00:15.000',
+    ])
     const fc = args[args.indexOf('-filter_complex') + 1]
-    expect(fc).toContain('trim=start=0:end=10')
-    expect(fc).toContain('trim=start=15')
+    expect(fc).toContain('[1:v]') // zweiter Input wird referenziert
     expect(fc).toContain('concat=n=2:v=1:a=1')
     expect(args).toContain('libx264') // immer Re-Encode
     expect(args).toContain('-map')
@@ -96,25 +108,39 @@ describe('parseCutParams', () => {
   })
   it('remove: lehnt ab, wenn nichts übrig bliebe', () => {
     expect(() =>
-      parseCutParams({ start: '0', duration: '10', mode: 'copy', operation: 'remove', total: '10' }, MAX),
+      parseCutParams(
+        { start: '0', duration: '10', mode: 'copy', operation: 'remove', total: '10' },
+        MAX,
+      ),
     ).toThrow(ValidationError)
   })
   it('remove: akzeptiert gültige Werte inkl. total', () => {
     expect(
-      parseCutParams({ start: '5', duration: '3', mode: 'reencode', operation: 'remove', total: '30' }, MAX),
+      parseCutParams(
+        { start: '5', duration: '3', mode: 'reencode', operation: 'remove', total: '30' },
+        MAX,
+      ),
     ).toEqual({ start: 5, duration: 3, mode: 'reencode', operation: 'remove', total: 30 })
   })
   it('lehnt negativen Start ab', () => {
-    expect(() => parseCutParams({ start: '-1', duration: '7', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '-1', duration: '7', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt Dauer <= 0 ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '0', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '0', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt zu lange Dauer ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '99999', mode: 'copy' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '99999', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('lehnt unbekannten Modus ab', () => {
-    expect(() => parseCutParams({ start: '0', duration: '7', mode: 'xyz' }, MAX)).toThrow(ValidationError)
+    expect(() => parseCutParams({ start: '0', duration: '7', mode: 'xyz' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
 })
 

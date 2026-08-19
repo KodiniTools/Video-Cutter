@@ -11,8 +11,21 @@ import Timeline from './Timeline.vue'
 const { t } = useI18n()
 const store = useVideoEditorStore()
 const {
-  objectUrl, fileName, duration, startTime, endTime, currentTime, mode, operation,
-  hasVideo, canExport, selectionDuration, resultUrl, resultName, resultBlob, error,
+  objectUrl,
+  fileName,
+  duration,
+  startTime,
+  endTime,
+  currentTime,
+  mode,
+  operation,
+  hasVideo,
+  canExport,
+  selectionDuration,
+  resultUrl,
+  resultName,
+  resultBlob,
+  error,
 } = storeToRefs(store)
 
 const { isProcessing, progress, phase, cut: serverCut } = useServerCut()
@@ -75,7 +88,11 @@ async function onExport(): Promise<void> {
     const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
     // 'remove' fügt Segmente zusammen -> immer Re-Encode -> mp4.
     const ext =
-      operation.value === 'remove' ? 'mp4' : mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
+      operation.value === 'remove'
+        ? 'mp4'
+        : mode.value === 'copy'
+          ? getExtension(fileName.value)
+          : 'mp4'
     const blob = await serverCut(
       store.file,
       startTime.value,
@@ -129,7 +146,9 @@ async function onDownload(e: MouseEvent): Promise<void> {
     <div v-else class="editor">
       <div class="filebar">
         <span class="filename" :title="fileName">{{ fileName }}</span>
-        <button class="btn ghost" type="button" @click="store.reset()">{{ t('actions.change') }}</button>
+        <button class="btn ghost" type="button" @click="store.reset()">
+          {{ t('actions.change') }}
+        </button>
       </div>
 
       <video
@@ -169,14 +188,24 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <fieldset class="mode">
         <legend>{{ t('operation.legend') }}</legend>
         <label class="radio" :class="{ active: operation === 'keep' }">
-          <input type="radio" value="keep" :checked="operation === 'keep'" @change="store.setOperation('keep')" />
+          <input
+            type="radio"
+            value="keep"
+            :checked="operation === 'keep'"
+            @change="store.setOperation('keep')"
+          />
           <span>
             <b>{{ t('operation.keep') }}</b>
             <small>{{ t('operation.keepHint') }}</small>
           </span>
         </label>
         <label class="radio" :class="{ active: operation === 'remove' }">
-          <input type="radio" value="remove" :checked="operation === 'remove'" @change="store.setOperation('remove')" />
+          <input
+            type="radio"
+            value="remove"
+            :checked="operation === 'remove'"
+            @change="store.setOperation('remove')"
+          />
           <span>
             <b>{{ t('operation.remove') }}</b>
             <small>{{ t('operation.removeHint') }}</small>
@@ -188,14 +217,24 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <fieldset v-if="operation === 'keep'" class="mode">
         <legend>{{ t('mode.legend') }}</legend>
         <label class="radio" :class="{ active: mode === 'copy' }">
-          <input type="radio" value="copy" :checked="mode === 'copy'" @change="store.setMode('copy')" />
+          <input
+            type="radio"
+            value="copy"
+            :checked="mode === 'copy'"
+            @change="store.setMode('copy')"
+          />
           <span>
             <b>{{ t('mode.fast') }}</b>
             <small>{{ t('mode.fastHint') }}</small>
           </span>
         </label>
         <label class="radio" :class="{ active: mode === 'reencode' }">
-          <input type="radio" value="reencode" :checked="mode === 'reencode'" @change="store.setMode('reencode')" />
+          <input
+            type="radio"
+            value="reencode"
+            :checked="mode === 'reencode'"
+            @change="store.setMode('reencode')"
+          />
           <span>
             <b>{{ t('mode.accurate') }}</b>
             <small>{{ t('mode.accurateHint') }}</small>
@@ -205,7 +244,12 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <p v-else class="reencode-note">{{ t('operation.removeNote') }}</p>
 
       <!-- Export -->
-      <button class="btn primary export" type="button" :disabled="!canExport || busy" @click="onExport">
+      <button
+        class="btn primary export"
+        type="button"
+        :disabled="!canExport || busy"
+        @click="onExport"
+      >
         <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
         <template v-else>{{ t('actions.export') }}</template>
       </button>
@@ -261,7 +305,9 @@ async function onDownload(e: MouseEvent): Promise<void> {
   background: var(--vc-surface);
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 .dropzone.over {
   border-color: var(--vc-accent);
@@ -277,11 +323,21 @@ async function onDownload(e: MouseEvent): Promise<void> {
   color: #fff;
   font-size: 20px;
 }
-.dz-title { font-weight: 600; font-size: 16px; }
-.dz-hint { color: var(--vc-text-dim); font-size: 14px; }
+.dz-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+.dz-hint {
+  color: var(--vc-text-dim);
+  font-size: 14px;
+}
 
 /* Editor */
-.editor { display: flex; flex-direction: column; gap: 14px; }
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
 .filebar {
   display: flex;
@@ -326,7 +382,11 @@ async function onDownload(e: MouseEvent): Promise<void> {
   border-radius: 10px;
   padding: 12px;
 }
-.mode legend { padding: 0 6px; font-size: 13px; color: var(--vc-text-dim); }
+.mode legend {
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--vc-text-dim);
+}
 .radio {
   display: flex;
   gap: 10px;
@@ -336,9 +396,19 @@ async function onDownload(e: MouseEvent): Promise<void> {
   border-radius: 8px;
   cursor: pointer;
 }
-.radio.active { border-color: var(--vc-accent); background: var(--vc-accent-soft); }
-.radio span { display: flex; flex-direction: column; gap: 2px; }
-.radio small { color: var(--vc-text-dim); font-size: 12px; }
+.radio.active {
+  border-color: var(--vc-accent);
+  background: var(--vc-accent-soft);
+}
+.radio span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.radio small {
+  color: var(--vc-text-dim);
+  font-size: 12px;
+}
 
 /* Buttons */
 .btn {
@@ -350,21 +420,43 @@ async function onDownload(e: MouseEvent): Promise<void> {
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
 }
-.btn:hover { border-color: var(--vc-accent); }
-.btn.ghost { background: transparent; }
+.btn:hover {
+  border-color: var(--vc-accent);
+}
+.btn.ghost {
+  background: transparent;
+}
 .btn.primary {
   background: var(--vc-accent);
   border-color: var(--vc-accent);
   color: #fff;
   font-weight: 600;
 }
-.btn.primary:hover { filter: brightness(1.08); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn:focus-visible { outline: 2px solid var(--vc-focus); outline-offset: 2px; }
-.export { align-self: stretch; padding: 12px; }
-a.btn { text-decoration: none; text-align: center; display: inline-block; }
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 2px;
+}
+.export {
+  align-self: stretch;
+  padding: 12px;
+}
+a.btn {
+  text-decoration: none;
+  text-align: center;
+  display: inline-block;
+}
 
 /* Progress */
 .progress {
@@ -373,7 +465,11 @@ a.btn { text-decoration: none; text-align: center; display: inline-block; }
   background: var(--vc-track-bg);
   overflow: hidden;
 }
-.bar { height: 100%; background: var(--vc-accent); transition: width 0.2s; }
+.bar {
+  height: 100%;
+  background: var(--vc-accent);
+  transition: width 0.2s;
+}
 
 .error {
   margin: 0;
@@ -390,14 +486,29 @@ a.btn { text-decoration: none; text-align: center; display: inline-block; }
   color: var(--vc-text-dim);
 }
 
-.result { display: flex; flex-direction: column; gap: 10px; }
-.result-title { font-weight: 600; margin: 0; }
-.result-hint { margin: 0; font-size: 12px; color: var(--vc-text-dim); }
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.result-title {
+  font-weight: 600;
+  margin: 0;
+}
+.result-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
 
 @media (max-width: 560px) {
-  .mode { grid-template-columns: 1fr; }
+  .mode {
+    grid-template-columns: 1fr;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bar { transition: none; }
+  .bar {
+    transition: none;
+  }
 }
 </style>

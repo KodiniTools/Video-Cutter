@@ -60,11 +60,16 @@ describe('buildTrimArgs', () => {
       mode: 'copy',
     })
     expect(args).toEqual([
-      '-ss', '00:00:10.000',
-      '-i', 'input.mp4',
-      '-t', '00:00:15.000',
-      '-c', 'copy',
-      '-avoid_negative_ts', 'make_zero',
+      '-ss',
+      '00:00:10.000',
+      '-i',
+      'input.mp4',
+      '-t',
+      '00:00:15.000',
+      '-c',
+      'copy',
+      '-avoid_negative_ts',
+      'make_zero',
       'output.mp4',
     ])
   })

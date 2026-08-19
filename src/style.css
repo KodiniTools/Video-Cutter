@@ -26,14 +26,24 @@
   --vc-error-text: #b42318;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   background: var(--vc-bg);
   color: var(--vc-text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -44,4 +54,6 @@ body {
   min-height: 100vh;
 }
 
-#app { flex: 1 0 auto; }
+#app {
+  flex: 1 0 auto;
+}

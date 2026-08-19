@@ -37,7 +37,11 @@ const messages = {
       uploading: 'Lädt hoch …',
       processing: 'Verarbeite …',
     },
-    result: { ready: 'Fertig geschnitten:', iosHint: 'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.' },
+    result: {
+      ready: 'Fertig geschnitten:',
+      iosHint:
+        'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.',
+    },
     errors: { notVideo: 'Bitte eine Videodatei auswählen.' },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
@@ -77,7 +81,11 @@ const messages = {
       uploading: 'Uploading …',
       processing: 'Processing …',
     },
-    result: { ready: 'Done:', iosHint: 'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.' },
+    result: {
+      ready: 'Done:',
+      iosHint:
+        'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.',
+    },
     errors: { notVideo: 'Please choose a video file.' },
     footer: 'Server-side processing with FFmpeg.',
   },
