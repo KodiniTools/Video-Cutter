@@ -37,6 +37,7 @@ const messages = {
     status: {
       uploading: 'Lädt hoch …',
       processing: 'Verarbeite …',
+      remaining: 'noch',
     },
     result: {
       ready: 'Fertig geschnitten:',
@@ -82,6 +83,7 @@ const messages = {
     status: {
       uploading: 'Uploading …',
       processing: 'Processing …',
+      remaining: 'left',
     },
     result: {
       ready: 'Done:',
