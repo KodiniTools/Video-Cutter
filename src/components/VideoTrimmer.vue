@@ -11,7 +11,7 @@ import Timeline from './Timeline.vue'
 const { t } = useI18n()
 const store = useVideoEditorStore()
 const {
-  objectUrl, fileName, duration, startTime, endTime, currentTime, mode,
+  objectUrl, fileName, duration, startTime, endTime, currentTime, mode, operation,
   hasVideo, canExport, selectionDuration, resultUrl, resultName, resultBlob, error,
 } = storeToRefs(store)
 
@@ -73,8 +73,17 @@ async function onExport(): Promise<void> {
   store.revokeResult()
   try {
     const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
-    const ext = mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
-    const blob = await serverCut(store.file, startTime.value, selectionDuration.value, mode.value)
+    // 'remove' fügt Segmente zusammen -> immer Re-Encode -> mp4.
+    const ext =
+      operation.value === 'remove' ? 'mp4' : mode.value === 'copy' ? getExtension(fileName.value) : 'mp4'
+    const blob = await serverCut(
+      store.file,
+      startTime.value,
+      selectionDuration.value,
+      mode.value,
+      operation.value,
+      duration.value,
+    )
 
     store.setResult(blob, `${base}_cut.${ext}`)
   } catch (e) {
@@ -156,8 +165,27 @@ async function onDownload(e: MouseEvent): Promise<void> {
         </button>
       </div>
 
-      <!-- Modus -->
+      <!-- Aktion: Auswahl behalten oder entfernen -->
       <fieldset class="mode">
+        <legend>{{ t('operation.legend') }}</legend>
+        <label class="radio" :class="{ active: operation === 'keep' }">
+          <input type="radio" value="keep" :checked="operation === 'keep'" @change="store.setOperation('keep')" />
+          <span>
+            <b>{{ t('operation.keep') }}</b>
+            <small>{{ t('operation.keepHint') }}</small>
+          </span>
+        </label>
+        <label class="radio" :class="{ active: operation === 'remove' }">
+          <input type="radio" value="remove" :checked="operation === 'remove'" @change="store.setOperation('remove')" />
+          <span>
+            <b>{{ t('operation.remove') }}</b>
+            <small>{{ t('operation.removeHint') }}</small>
+          </span>
+        </label>
+      </fieldset>
+
+      <!-- Modus (nur beim Behalten relevant; Entfernen kodiert immer neu) -->
+      <fieldset v-if="operation === 'keep'" class="mode">
         <legend>{{ t('mode.legend') }}</legend>
         <label class="radio" :class="{ active: mode === 'copy' }">
           <input type="radio" value="copy" :checked="mode === 'copy'" @change="store.setMode('copy')" />
@@ -174,6 +202,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </span>
         </label>
       </fieldset>
+      <p v-else class="reencode-note">{{ t('operation.removeNote') }}</p>
 
       <!-- Export -->
       <button class="btn primary export" type="button" :disabled="!canExport || busy" @click="onExport">
@@ -353,6 +382,12 @@ a.btn { text-decoration: none; text-align: center; display: inline-block; }
   background: var(--vc-error-bg);
   color: var(--vc-error-text);
   font-size: 14px;
+}
+
+.reencode-note {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
 }
 
 .result { display: flex; flex-direction: column; gap: 10px; }

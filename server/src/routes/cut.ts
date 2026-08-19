@@ -50,7 +50,8 @@ cutRouter.post(
 
       const id = randomUUID()
       const inExt = safeExt(req.file.originalname)
-      const outExt = params.mode === 'copy' ? inExt : 'mp4'
+      // 'remove' fügt Segmente zusammen -> immer Re-Encode -> mp4.
+      const outExt = params.operation === 'remove' ? 'mp4' : params.mode === 'copy' ? inExt : 'mp4'
       const outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
       const outputName = `${safeBaseName(req.file.originalname)}_cut.${outExt}`
 
@@ -67,10 +68,19 @@ cutRouter.post(
         start: params.start,
         duration: params.duration,
         mode: params.mode,
+        operation: params.operation,
+        total: params.total,
       })
 
+      // Erwartete Ausgabedauer für die Fortschrittsanzeige:
+      // 'keep' -> Auswahllänge; 'remove' -> Rest (Gesamt minus Auswahl).
+      const outputDuration =
+        params.operation === 'remove' && params.total !== undefined
+          ? Math.max(0, params.total - params.duration)
+          : params.duration
+
       // Nicht awaiten: läuft im Hintergrund, Client verfolgt via SSE.
-      void jobManager.run(job, args, params.duration)
+      void jobManager.run(job, args, outputDuration)
 
       res.status(202).json({ jobId: id })
     } catch (err) {

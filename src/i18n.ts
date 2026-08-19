@@ -11,6 +11,14 @@ const messages = {
       hint: 'MP4, WebM, MOV … Die Datei wird zum Schneiden auf den Server geladen.',
     },
     labels: { selection: 'Auswahl' },
+    operation: {
+      legend: 'Aktion',
+      keep: 'Auswahl behalten',
+      keepHint: 'Behält den markierten Bereich, schneidet Anfang und Ende weg.',
+      remove: 'Auswahl entfernen',
+      removeHint: 'Entfernt den markierten Bereich, fügt davor und danach zusammen.',
+      removeNote: 'Beim Entfernen wird immer neu kodiert (H.264/AAC, .mp4).',
+    },
     actions: {
       change: 'Anderes Video',
       setStart: 'Start setzen',
@@ -43,6 +51,14 @@ const messages = {
       hint: 'MP4, WebM, MOV … The file is uploaded to the server for cutting.',
     },
     labels: { selection: 'Selection' },
+    operation: {
+      legend: 'Action',
+      keep: 'Keep selection',
+      keepHint: 'Keeps the marked range, trims off start and end.',
+      remove: 'Remove selection',
+      removeHint: 'Removes the marked range, joins the parts before and after.',
+      removeNote: 'Removing always re-encodes (H.264/AAC, .mp4).',
+    },
     actions: {
       change: 'Change video',
       setStart: 'Set start',
