@@ -101,6 +101,24 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     endTime.value = clamp(t, lower, duration.value)
   }
 
+  /**
+   * Setzt den Start auf eine absolute Zeit (z. B. die Wiedergabeposition).
+   * Anders als `setStart` zieht es das Ende mit, falls es davor liegt – so
+   * lässt sich ein neuer Ausschnitt an beliebiger Stelle aufziehen.
+   */
+  function markStart(t: number): void {
+    const v = clamp(t, 0, duration.value)
+    startTime.value = v
+    if (endTime.value < v) endTime.value = v
+  }
+
+  /** Setzt das Ende auf eine absolute Zeit; zieht den Start mit, falls nötig. */
+  function markEnd(t: number): void {
+    const v = clamp(t, 0, duration.value)
+    endTime.value = v
+    if (startTime.value > v) startTime.value = v
+  }
+
   function setCurrentTime(t: number): void {
     currentTime.value = clamp(t, 0, duration.value)
   }
@@ -123,6 +141,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     )
     if (exists) return
     segments.value = [...segments.value, seg].sort((a, b) => a.start - b.start)
+    // Entwurf für den nächsten Ausschnitt an der aktuellen Position frisch
+    // aufsetzen (leere Auswahl an der Wiedergabeposition).
+    startTime.value = currentTime.value
+    endTime.value = currentTime.value
   }
 
   function removeSegment(index: number): void {
@@ -184,6 +206,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setDuration,
     setStart,
     setEnd,
+    markStart,
+    markEnd,
     setCurrentTime,
     setMode,
     setOperation,

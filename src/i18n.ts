@@ -16,6 +16,7 @@ const messages = {
       add: 'Ausschnitt hinzufügen',
       remove: 'Ausschnitt entfernen',
       empty: 'Noch keine Ausschnitte. Ohne Liste wird die aktuelle Auswahl verwendet.',
+      hint: 'Video abspielen und mit ⏱ Start bzw. Ende auf die Wiedergabeposition setzen, dann hinzufügen.',
     },
     operation: {
       legend: 'Aktion',
@@ -72,6 +73,7 @@ const messages = {
       add: 'Add segment',
       remove: 'Remove segment',
       empty: 'No segments yet. Without a list the current selection is used.',
+      hint: 'Play the video and use ⏱ to set start or end to the playback position, then add.',
     },
     operation: {
       legend: 'Action',

@@ -106,12 +106,15 @@ function seekTo(sec: number): void {
   store.setCurrentTime(sec)
 }
 
+// Start/Ende des (neuen) Ausschnitts auf die aktuelle Wiedergabeposition
+// setzen. markStart/markEnd ziehen die Gegenseite bei Bedarf mit, damit sich
+// ein Ausschnitt an beliebiger Stelle aufziehen lässt.
 function setStartHere(): void {
-  store.setStart(currentTime.value)
+  store.markStart(currentTime.value)
 }
 
 function setEndHere(): void {
-  store.setEnd(currentTime.value)
+  store.markEnd(currentTime.value)
 }
 
 // --- Numerische Zeiteingabe für Start/Ende -------------------------------
@@ -388,6 +391,8 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </li>
         </ul>
         <p v-else class="segments-empty">{{ t('segments.empty') }}</p>
+
+        <p class="segments-hint">{{ t('segments.hint') }}</p>
       </div>
 
       <!-- Aktion: Auswahl behalten oder entfernen -->
@@ -719,6 +724,11 @@ async function onDownload(e: MouseEvent): Promise<void> {
   line-height: 1;
 }
 .segments-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
+.segments-hint {
   margin: 0;
   font-size: 12px;
   color: var(--vc-text-dim);
