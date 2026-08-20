@@ -147,6 +147,16 @@ function commitEnd(): void {
   endInput.value = formatDisplayTime(endTime.value)
 }
 
+// Stepper: Start/Ende um `delta` Sekunden anpassen (Slider + Vorschau folgen).
+function stepStart(delta: number): void {
+  store.setStart(startTime.value + delta)
+  seekTo(startTime.value)
+}
+function stepEnd(delta: number): void {
+  store.setEnd(endTime.value + delta)
+  seekTo(endTime.value)
+}
+
 async function onExport(): Promise<void> {
   if (!store.file || !canExport.value) return
   store.setError('')
@@ -270,6 +280,24 @@ async function onDownload(e: MouseEvent): Promise<void> {
             @change="commitStart"
             @keydown.enter.prevent="commitStart"
           />
+          <div class="stepper">
+            <button
+              class="step"
+              type="button"
+              :aria-label="t('actions.increase')"
+              @click="stepStart(1)"
+            >
+              ▲
+            </button>
+            <button
+              class="step"
+              type="button"
+              :aria-label="t('actions.decrease')"
+              @click="stepStart(-1)"
+            >
+              ▼
+            </button>
+          </div>
           <button
             class="btn tiny"
             type="button"
@@ -296,6 +324,24 @@ async function onDownload(e: MouseEvent): Promise<void> {
             @change="commitEnd"
             @keydown.enter.prevent="commitEnd"
           />
+          <div class="stepper">
+            <button
+              class="step"
+              type="button"
+              :aria-label="t('actions.increase')"
+              @click="stepEnd(1)"
+            >
+              ▲
+            </button>
+            <button
+              class="step"
+              type="button"
+              :aria-label="t('actions.decrease')"
+              @click="stepEnd(-1)"
+            >
+              ▼
+            </button>
+          </div>
           <button
             class="btn tiny"
             type="button"
@@ -538,6 +584,38 @@ async function onDownload(e: MouseEvent): Promise<void> {
   padding: 6px 9px;
   font-size: 14px;
   line-height: 1;
+}
+.stepper {
+  display: flex;
+  flex-direction: column;
+}
+.step {
+  width: 24px;
+  height: 17px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-surface);
+  color: var(--vc-text);
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+}
+.step:first-child {
+  border-radius: 6px 6px 0 0;
+  border-bottom: none;
+}
+.step:last-child {
+  border-radius: 0 0 6px 6px;
+}
+.step:hover {
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+}
+.step:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 1px;
 }
 
 /* Modus */
