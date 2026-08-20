@@ -10,7 +10,7 @@ const messages = {
       title: 'Video hierher ziehen oder klicken',
       hint: 'MP4, WebM, MOV … Die Datei wird zum Schneiden auf den Server geladen.',
     },
-    labels: { selection: 'Auswahl' },
+    labels: { selection: 'Auswahl', start: 'Start', end: 'Ende' },
     operation: {
       legend: 'Aktion',
       keep: 'Auswahl behalten',
@@ -23,6 +23,7 @@ const messages = {
       change: 'Anderes Video',
       setStart: 'Start setzen',
       setEnd: 'Ende setzen',
+      toPlayhead: 'Auf aktuelle Wiedergabeposition',
       export: 'Schneiden & exportieren',
       download: 'Herunterladen',
       discard: 'Verwerfen',
@@ -57,7 +58,7 @@ const messages = {
       title: 'Drop a video here or click',
       hint: 'MP4, WebM, MOV … The file is uploaded to the server for cutting.',
     },
-    labels: { selection: 'Selection' },
+    labels: { selection: 'Selection', start: 'Start', end: 'End' },
     operation: {
       legend: 'Action',
       keep: 'Keep selection',
@@ -70,6 +71,7 @@ const messages = {
       change: 'Change video',
       setStart: 'Set start',
       setEnd: 'Set end',
+      toPlayhead: 'To current playback position',
       export: 'Cut & export',
       download: 'Download',
       discard: 'Discard',
