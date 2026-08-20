@@ -450,8 +450,8 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </button>
         </div>
 
-        <ul v-if="segments.length" class="segments-list">
-          <li v-for="(seg, i) in segments" :key="i" class="segment-row">
+        <TransitionGroup tag="ul" name="seg" class="segments-list">
+          <li v-for="(seg, i) in segments" :key="`${seg.start}-${seg.end}`" class="segment-row">
             <span class="segment-index">{{ i + 1 }}</span>
             <span class="segment-time">
               {{ formatDisplayTime(seg.start) }} – {{ formatDisplayTime(seg.end) }}
@@ -467,8 +467,8 @@ async function onDownload(e: MouseEvent): Promise<void> {
               ✕
             </button>
           </li>
-        </ul>
-        <p v-else class="segments-empty">{{ t('segments.empty') }}</p>
+        </TransitionGroup>
+        <p v-if="!segments.length" class="segments-empty">{{ t('segments.empty') }}</p>
 
         <p class="segments-hint">{{ t('segments.hint') }}</p>
       </div>
@@ -797,6 +797,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 .segment-row {
   display: flex;
@@ -836,6 +837,30 @@ async function onDownload(e: MouseEvent): Promise<void> {
   font-size: 12px;
   color: var(--vc-text-dim);
 }
+
+/* Ein-/Ausblenden der Ausschnitte in der Liste */
+.seg-enter-from,
+.seg-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.seg-enter-active,
+.seg-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+/* Damit die übrigen Zeilen sanft nachrücken, wird die entfernte Zeile aus
+   dem Fluss genommen. */
+.seg-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.seg-move {
+  transition: transform 0.25s ease;
+}
+
 .segments-hint {
   margin: 0;
   font-size: 12px;
@@ -1007,6 +1032,11 @@ a.btn {
 }
 @media (prefers-reduced-motion: reduce) {
   .bar {
+    transition: none;
+  }
+  .seg-enter-active,
+  .seg-leave-active,
+  .seg-move {
     transition: none;
   }
 }

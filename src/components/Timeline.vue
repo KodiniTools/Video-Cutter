@@ -33,6 +33,7 @@ const rangeStyle = computed(() => ({
 }))
 const segmentBands = computed(() =>
   (props.segments ?? []).map((s) => ({
+    key: `${s.start}-${s.end}`,
     left: `${pct(s.start)}%`,
     width: `${Math.max(0, pct(s.end) - pct(s.start))}%`,
   })),
@@ -90,13 +91,15 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
     @pointerleave="onPointerUp"
   >
     <div ref="track" class="track" @pointerdown="onTrackDown">
-      <div
-        v-for="(band, i) in segmentBands"
-        :key="i"
-        class="band"
-        :class="operation === 'remove' ? 'band-remove' : 'band-keep'"
-        :style="band"
-      ></div>
+      <TransitionGroup name="band">
+        <div
+          v-for="band in segmentBands"
+          :key="band.key"
+          class="band"
+          :class="operation === 'remove' ? 'band-remove' : 'band-keep'"
+          :style="{ left: band.left, width: band.width }"
+        ></div>
+      </TransitionGroup>
       <div class="range" :style="rangeStyle"></div>
       <div class="playhead" :style="{ left: `${currentPct}%` }"></div>
 
@@ -171,6 +174,25 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   background: color-mix(in srgb, var(--vc-error-text, #d33) 26%, transparent);
   border-top: 2px solid var(--vc-error-text, #d33);
   border-bottom: 2px solid var(--vc-error-text, #d33);
+}
+
+/* Ein-/Ausblenden der Bänder beim Zusammensetzen der Ausschnitte */
+.band-enter-from,
+.band-leave-to {
+  opacity: 0;
+  transform: scaleY(0.4);
+}
+.band-enter-active,
+.band-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .band-enter-active,
+  .band-leave-active {
+    transition: none;
+  }
 }
 
 .playhead {
