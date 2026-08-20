@@ -17,16 +17,70 @@ export function formatFfmpegTime(seconds: number): string {
   return `${pad(hrs)}:${pad(mins)}:${pad(secs)}.${pad(ms, 3)}`
 }
 
+/** Ein Bereich als Start + Länge (Sekunden). */
+export interface Segment {
+  start: number
+  duration: number
+}
+
 export interface ServerArgsInput {
   inputPath: string
   outputPath: string
-  start: number
-  duration: number
+  start?: number
+  duration?: number
   mode: TrimMode
   /** Standard: 'keep'. */
   operation?: CutOperation
-  /** Gesamtdauer des Videos in Sekunden – nur für 'remove' nötig. */
+  /** Gesamtdauer des Videos in Sekunden – für 'remove' und Clamping nötig. */
   total?: number
+  /** Mehrere Ausschnitte. Ohne Angabe wird {start,duration} als einziger genutzt. */
+  segments?: Segment[]
+}
+
+/**
+ * Ermittelt aus den ausgewählten Segmenten die tatsächlich zu BEHALTENDEN
+ * Bereiche (nach Zusammenführen von Überlappungen), abhängig von der Operation:
+ * - 'keep':   die (zusammengeführten) Auswahl-Bereiche.
+ * - 'remove': das Komplement der Auswahl innerhalb [0, total].
+ */
+export function computeKeepRanges(
+  segments: Segment[],
+  operation: CutOperation,
+  total: number,
+): Segment[] {
+  const tot = Number.isFinite(total) ? total : Number.POSITIVE_INFINITY
+  const ivs = segments
+    .map((r) => {
+      const s = Math.max(0, r.start)
+      return { s, e: Math.min(s + Math.max(0, r.duration), tot) }
+    })
+    .filter((iv) => iv.e - iv.s > EPS)
+    .sort((a, b) => a.s - b.s)
+
+  // Überlappende/angrenzende Bereiche zusammenführen.
+  const merged: { s: number; e: number }[] = []
+  for (const iv of ivs) {
+    const last = merged[merged.length - 1]
+    if (last && iv.s <= last.e + EPS) last.e = Math.max(last.e, iv.e)
+    else merged.push({ ...iv })
+  }
+
+  let keep: { s: number; e: number }[]
+  if (operation === 'keep') {
+    keep = merged
+  } else {
+    keep = []
+    let cursor = 0
+    for (const iv of merged) {
+      if (iv.s - cursor > EPS) keep.push({ s: cursor, e: iv.s })
+      cursor = Math.max(cursor, iv.e)
+    }
+    if (Number.isFinite(tot) && tot - cursor > EPS) keep.push({ s: cursor, e: tot })
+  }
+
+  return keep
+    .filter((iv) => iv.e - iv.s > EPS)
+    .map((iv) => ({ start: iv.s, duration: iv.e - iv.s }))
 }
 
 // Gemeinsame Präfixe/Encoder-Optionen.
@@ -114,72 +168,82 @@ function reencodeTrim(input: string, output: string, start: number, duration: nu
 }
 
 /**
+ * Fügt mehrere zu behaltende Bereiche zusammen. Jeder Bereich wird als eigener
+ * Input eingelesen (`-ss/-t -i`) – NICHT über einen split, sonst puffern die
+ * Zweige den Rest im Speicher (OOM). Immer Re-Encode (concat braucht Frames).
+ */
+function concatArgs(input: string, output: string, ranges: Segment[]): string[] {
+  const inputs = ranges.flatMap((r) => [
+    '-ss',
+    formatFfmpegTime(r.start),
+    '-t',
+    formatFfmpegTime(Math.max(0, r.duration)),
+    '-i',
+    input,
+  ])
+  let filter = ''
+  ranges.forEach((_, i) => {
+    filter += `[${i}:v]setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
+  })
+  filter +=
+    ranges.map((_, i) => `[v${i}][a${i}]`).join('') +
+    `concat=n=${ranges.length}:v=1:a=1[outv][outa]`
+
+  return [
+    ...PROGRESS,
+    ...inputs,
+    '-filter_complex',
+    filter,
+    '-map',
+    '[outv]',
+    '-map',
+    '[outa]',
+    ...reencodeCodecs(output),
+    output,
+  ]
+}
+
+/**
  * Baut die vollständige Argumentliste für den nativen FFmpeg-Aufruf.
  * `-progress pipe:1` liefert maschinenlesbaren Fortschritt auf stdout.
  * Wird ausschließlich mit `spawn`/`execFile` genutzt (keine Shell → keine Injection).
  *
- * - operation 'keep':   ausgewählten Bereich behalten.
- * - operation 'remove': ausgewählten Bereich entfernen und die Teile davor/danach
- *   zusammenfügen (immer Re-Encode, da concat dekodierte Frames braucht).
+ * Verallgemeinert auf beliebig viele Ausschnitte:
+ * - Ein einzelner zu behaltender Bereich + copy  -> verlustfreier Trim.
+ * - Ein einzelner Bereich + reencode             -> Re-Encode-Trim.
+ * - Mehrere Bereiche                             -> Re-Encode + concat.
  */
 export function buildServerArgs({
   inputPath,
   outputPath,
-  start,
-  duration,
+  start = 0,
+  duration = 0,
   mode,
   operation = 'keep',
   total,
+  segments,
 }: ServerArgsInput): string[] {
-  if (operation === 'remove') {
-    const s = Math.max(0, start)
-    const end = s + Math.max(0, duration)
-    const tot = Number.isFinite(total) ? (total as number) : end
-    const keepFirst = s > EPS
-    const keepLast = end < tot - EPS
+  const src = segments && segments.length ? segments : [{ start, duration }]
+  const fallbackTotal = operation === 'keep' ? Number.POSITIVE_INFINITY : start + duration
+  const keep = computeKeepRanges(
+    src,
+    operation,
+    Number.isFinite(total) ? (total as number) : fallbackTotal,
+  )
 
-    // Mitte entfernen: Teil davor + Teil danach zusammenfügen.
-    // WICHTIG: den Input ZWEIMAL separat einlesen (Input 0 auf [0, s] via -t,
-    // Input 1 ab `end` via -ss). Würde man denselben Input mit zwei trim-Zweigen
-    // splitten, puffert der zweite Zweig den ganzen Rest im Speicher -> OOM/Kill.
-    if (keepFirst && keepLast) {
-      const filter =
-        `[0:v]setpts=PTS-STARTPTS[v0];` +
-        `[0:a]asetpts=PTS-STARTPTS[a0];` +
-        `[1:v]setpts=PTS-STARTPTS[v1];` +
-        `[1:a]asetpts=PTS-STARTPTS[a1];` +
-        `[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]`
-      return [
-        ...PROGRESS,
-        // Input 0: nur der Teil vor der Auswahl.
-        '-t',
-        formatFfmpegTime(s),
-        '-i',
-        inputPath,
-        // Input 1: ab dem Ende der Auswahl bis zum Video-Ende.
-        '-ss',
-        formatFfmpegTime(end),
-        '-i',
-        inputPath,
-        '-filter_complex',
-        filter,
-        '-map',
-        '[outv]',
-        '-map',
-        '[outa]',
-        ...reencodeCodecs(outputPath),
-        outputPath,
-      ]
-    }
-
-    // Auswahl reicht bis ans Ende -> nur den Teil davor behalten.
-    if (keepFirst) {
-      return reencodeTrim(inputPath, outputPath, 0, s)
-    }
-
-    // Auswahl beginnt am Anfang -> nur den Teil danach behalten.
-    return reencodeTrim(inputPath, outputPath, end, Math.max(0, tot - end))
+  // Sicherheitsnetz (durch Validierung ausgeschlossen): nichts übrig.
+  if (keep.length === 0) {
+    return keepArgs(inputPath, outputPath, start, Math.max(0, duration), mode)
   }
 
-  return keepArgs(inputPath, outputPath, start, duration, mode)
+  if (keep.length === 1) {
+    const r = keep[0]
+    // Verlustfrei nur bei 'keep' + copy sinnvoll; 'remove' kodiert immer neu.
+    if (operation === 'keep' && mode === 'copy') {
+      return keepArgs(inputPath, outputPath, r.start, r.duration, 'copy')
+    }
+    return reencodeTrim(inputPath, outputPath, r.start, r.duration)
+  }
+
+  return concatArgs(inputPath, outputPath, keep)
 }

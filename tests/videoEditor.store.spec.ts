@@ -74,4 +74,61 @@ describe('videoEditor store', () => {
     store.setMode('reencode')
     expect(store.mode).toBe('reencode')
   })
+
+  it('ohne Liste sind die effektiven Ausschnitte die aktuelle Auswahl', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.setEnd(12)
+    expect(store.segments).toHaveLength(0)
+    expect(store.effectiveSegments).toEqual([{ start: 5, end: 12 }])
+  })
+
+  it('addSegment hält die Auswahl fest und sortiert nach Start', () => {
+    const store = loadVideo(30)
+    store.setStart(10)
+    store.setEnd(15)
+    store.addSegment()
+    store.setStart(2)
+    store.setEnd(6)
+    store.addSegment()
+    expect(store.segments).toEqual([
+      { start: 2, end: 6 },
+      { start: 10, end: 15 },
+    ])
+    // Bei vorhandener Liste zählt die Liste, nicht die aktuelle Auswahl.
+    expect(store.effectiveSegments).toEqual(store.segments)
+  })
+
+  it('addSegment ignoriert exakte Duplikate', () => {
+    const store = loadVideo(30)
+    store.setStart(3)
+    store.setEnd(8)
+    store.addSegment()
+    store.addSegment()
+    expect(store.segments).toHaveLength(1)
+  })
+
+  it('removeSegment und clearSegments leeren die Liste', () => {
+    const store = loadVideo(30)
+    store.setStart(1)
+    store.setEnd(4)
+    store.addSegment()
+    store.setEnd(14)
+    store.setStart(10)
+    store.addSegment()
+    store.removeSegment(0)
+    expect(store.segments).toEqual([{ start: 10, end: 14 }])
+    store.clearSegments()
+    expect(store.segments).toHaveLength(0)
+  })
+
+  it('setFile leert eine bestehende Segmentliste', () => {
+    const store = loadVideo(30)
+    store.setStart(1)
+    store.setEnd(4)
+    store.addSegment()
+    expect(store.segments).toHaveLength(1)
+    store.setFile(new File([new Uint8Array([0])], 'neu.mp4', { type: 'video/mp4' }))
+    expect(store.segments).toHaveLength(0)
+  })
 })

@@ -74,18 +74,36 @@ describe('buildServerArgs', () => {
       operation: 'remove',
       total: 30,
     })
-    // Input 0 auf [0,10] begrenzt, Input 1 ab 15 -> zwei -i auf denselben Pfad.
+    // Behalten: [0,10] und [15,30] -> zwei -i auf denselben Pfad.
     expect(args.filter((a) => a === '/tmp/in.mp4')).toHaveLength(2)
-    expect(args.slice(args.indexOf('-t'), args.indexOf('-t') + 2)).toEqual(['-t', '00:00:10.000'])
-    expect(args.slice(args.indexOf('-ss'), args.indexOf('-ss') + 2)).toEqual([
-      '-ss',
-      '00:00:15.000',
-    ])
+    // Erster Input: -ss 0 -t 10, zweiter Input: -ss 15 -t 15.
+    const j = args.join(' ')
+    expect(j).toContain('-ss 00:00:00.000 -t 00:00:10.000 -i /tmp/in.mp4')
+    expect(j).toContain('-ss 00:00:15.000 -t 00:00:15.000 -i /tmp/in.mp4')
     const fc = args[args.indexOf('-filter_complex') + 1]
     expect(fc).toContain('[1:v]') // zweiter Input wird referenziert
     expect(fc).toContain('concat=n=2:v=1:a=1')
     expect(args).toContain('libx264') // immer Re-Encode
     expect(args).toContain('-map')
+  })
+
+  it('drei Behalten-Segmente werden zu concat=n=3 zusammengefügt', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 5 },
+        { start: 10, duration: 5 },
+        { start: 20, duration: 5 },
+      ],
+    })
+    expect(args.filter((a) => a === '/tmp/in.mp4')).toHaveLength(3)
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    expect(fc).toContain('concat=n=3:v=1:a=1')
+    expect(fc).toContain('[2:v]')
+    expect(args).toContain('libx264')
   })
 
   it('remove am Anfang behält nur den Teil danach (einzelner Trim)', () => {
@@ -106,14 +124,40 @@ describe('buildServerArgs', () => {
 
 describe('parseCutParams', () => {
   const MAX = 3600
-  it('akzeptiert gültige Werte', () => {
+  it('akzeptiert gültige Werte (Fallback start/duration -> segments)', () => {
     expect(parseCutParams({ start: '3', duration: '7', mode: 'copy' }, MAX)).toEqual({
-      start: 3,
-      duration: 7,
+      segments: [{ start: 3, duration: 7 }],
       mode: 'copy',
       operation: 'keep',
       total: undefined,
     })
+  })
+  it('akzeptiert eine JSON-Segment-Liste', () => {
+    expect(
+      parseCutParams(
+        {
+          segments: JSON.stringify([
+            { start: 1, duration: 2 },
+            { start: 10, duration: 5 },
+          ]),
+          mode: 'reencode',
+        },
+        MAX,
+      ),
+    ).toEqual({
+      segments: [
+        { start: 1, duration: 2 },
+        { start: 10, duration: 5 },
+      ],
+      mode: 'reencode',
+      operation: 'keep',
+      total: undefined,
+    })
+  })
+  it('lehnt eine ungültige Segment-Liste (kein JSON) ab', () => {
+    expect(() => parseCutParams({ segments: 'nicht-json', mode: 'copy' }, MAX)).toThrow(
+      ValidationError,
+    )
   })
   it('remove: verlangt gültige Gesamtdauer', () => {
     expect(() =>
@@ -134,7 +178,36 @@ describe('parseCutParams', () => {
         { start: '5', duration: '3', mode: 'reencode', operation: 'remove', total: '30' },
         MAX,
       ),
-    ).toEqual({ start: 5, duration: 3, mode: 'reencode', operation: 'remove', total: 30 })
+    ).toEqual({
+      segments: [{ start: 5, duration: 3 }],
+      mode: 'reencode',
+      operation: 'remove',
+      total: 30,
+    })
+  })
+  it('remove: mehrere Segmente lassen Rest übrig', () => {
+    expect(
+      parseCutParams(
+        {
+          segments: JSON.stringify([
+            { start: 2, duration: 3 },
+            { start: 10, duration: 4 },
+          ]),
+          mode: 'reencode',
+          operation: 'remove',
+          total: '30',
+        },
+        MAX,
+      ),
+    ).toEqual({
+      segments: [
+        { start: 2, duration: 3 },
+        { start: 10, duration: 4 },
+      ],
+      mode: 'reencode',
+      operation: 'remove',
+      total: 30,
+    })
   })
   it('lehnt negativen Start ab', () => {
     expect(() => parseCutParams({ start: '-1', duration: '7', mode: 'copy' }, MAX)).toThrow(

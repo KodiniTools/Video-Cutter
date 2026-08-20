@@ -7,6 +7,10 @@ const props = defineProps<{
   start: number
   end: number
   current: number
+  /** Festgehaltene Ausschnitte, als schreibgeschützte Bänder dargestellt. */
+  segments?: { start: number; end: number }[]
+  /** 'keep' oder 'remove' – nur für die Einfärbung der Bänder. */
+  operation?: 'keep' | 'remove'
 }>()
 
 const emit = defineEmits<{
@@ -27,6 +31,12 @@ const rangeStyle = computed(() => ({
   left: `${startPct.value}%`,
   width: `${Math.max(0, endPct.value - startPct.value)}%`,
 }))
+const segmentBands = computed(() =>
+  (props.segments ?? []).map((s) => ({
+    left: `${pct(s.start)}%`,
+    width: `${Math.max(0, pct(s.end) - pct(s.start))}%`,
+  })),
+)
 
 function timeFromClientX(clientX: number): number {
   const el = track.value
@@ -80,6 +90,13 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
     @pointerleave="onPointerUp"
   >
     <div ref="track" class="track" @pointerdown="onTrackDown">
+      <div
+        v-for="(band, i) in segmentBands"
+        :key="i"
+        class="band"
+        :class="operation === 'remove' ? 'band-remove' : 'band-keep'"
+        :style="band"
+      ></div>
       <div class="range" :style="rangeStyle"></div>
       <div class="playhead" :style="{ left: `${currentPct}%` }"></div>
 
@@ -135,6 +152,25 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   border-top: 2px solid var(--vc-accent);
   border-bottom: 2px solid var(--vc-accent);
   pointer-events: none;
+}
+
+/* Festgehaltene Ausschnitte (schreibgeschützt). */
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.band-keep {
+  background: color-mix(in srgb, var(--vc-accent) 28%, transparent);
+  border-top: 2px solid var(--vc-accent);
+  border-bottom: 2px solid var(--vc-accent);
+}
+.band-remove {
+  background: color-mix(in srgb, var(--vc-error-text, #d33) 26%, transparent);
+  border-top: 2px solid var(--vc-error-text, #d33);
+  border-bottom: 2px solid var(--vc-error-text, #d33);
 }
 
 .playhead {

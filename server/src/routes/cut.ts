@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
-import { buildServerArgs } from '../lib/args'
+import { buildServerArgs, computeKeepRanges } from '../lib/args'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../lib/validate'
 import { jobManager } from '../lib/jobs'
 
@@ -28,7 +28,7 @@ const asyncHandler =
 export const cutRouter = Router()
 
 /**
- * POST /api/cut  (multipart: video, start, duration, mode)
+ * POST /api/cut  (multipart: video, segments|start+duration, mode, operation, total)
  * Legt einen Job an und startet die Verarbeitung. Antwort: { jobId }.
  */
 cutRouter.post(
@@ -50,20 +50,21 @@ cutRouter.post(
 
       const id = randomUUID()
       const inExt = safeExt(req.file.originalname)
-      // Container-Wahl:
-      //  - copy: Original-Container behalten (webm bleibt webm, mp4 bleibt mp4).
-      //  - reencode/remove: WebM-Input -> WebM (VP9/Opus), sonst mp4 (H.264/AAC).
+
+      // Tatsächlich zu behaltende Bereiche (nach Zusammenführen/Komplement).
+      const keepTotal =
+        params.operation === 'keep'
+          ? (params.total ?? Number.POSITIVE_INFINITY)
+          : (params.total as number)
+      const keep = computeKeepRanges(params.segments, params.operation, keepTotal)
+
+      // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
+      // 'keep' + copy möglich – dann bleibt der Original-Container erhalten.
+      // Sonst (remove oder mehrere Bereiche oder reencode) wird neu kodiert:
+      // WebM-Input -> WebM (VP9/Opus), sonst mp4 (H.264/AAC).
       const isWebm = inExt === 'webm'
-      const outExt =
-        params.operation === 'remove'
-          ? isWebm
-            ? 'webm'
-            : 'mp4'
-          : params.mode === 'copy'
-            ? inExt
-            : isWebm
-              ? 'webm'
-              : 'mp4'
+      const lossless = params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
+      const outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
       const outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
       const outputName = `${safeBaseName(req.file.originalname)}_cut.${outExt}`
 
@@ -77,19 +78,15 @@ cutRouter.post(
       const args = buildServerArgs({
         inputPath: req.file.path,
         outputPath,
-        start: params.start,
-        duration: params.duration,
         mode: params.mode,
         operation: params.operation,
         total: params.total,
+        segments: params.segments,
       })
 
-      // Erwartete Ausgabedauer für die Fortschrittsanzeige:
-      // 'keep' -> Auswahllänge; 'remove' -> Rest (Gesamt minus Auswahl).
-      const outputDuration =
-        params.operation === 'remove' && params.total !== undefined
-          ? Math.max(0, params.total - params.duration)
-          : params.duration
+      // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
+      // behaltenen Bereiche.
+      const outputDuration = keep.reduce((sum, r) => sum + r.duration, 0)
 
       // Nicht awaiten: läuft im Hintergrund, Client verfolgt via SSE.
       void jobManager.run(job, args, outputDuration)
