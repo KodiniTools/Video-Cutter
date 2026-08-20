@@ -88,8 +88,9 @@ describe('videoEditor store', () => {
     store.setStart(10)
     store.setEnd(15)
     store.addSegment()
-    store.setStart(2)
-    store.setEnd(6)
+    // Nach dem Hinzufügen ist der Entwurf leer (an der Position) -> Ende zuerst.
+    store.markEnd(6)
+    store.markStart(2)
     store.addSegment()
     expect(store.segments).toEqual([
       { start: 2, end: 6 },
@@ -120,6 +121,48 @@ describe('videoEditor store', () => {
     expect(store.segments).toEqual([{ start: 10, end: 14 }])
     store.clearSegments()
     expect(store.segments).toHaveLength(0)
+  })
+
+  it('markStart setzt Start absolut und zieht das Ende bei Bedarf mit', () => {
+    const store = loadVideo(30)
+    store.setEnd(10) // Auswahl [0, 10]
+    store.markStart(20) // Wiedergabeposition hinter dem alten Ende
+    expect(store.startTime).toBe(20)
+    expect(store.endTime).toBe(20) // Ende mitgezogen
+  })
+
+  it('markEnd setzt Ende absolut und zieht den Start bei Bedarf mit', () => {
+    const store = loadVideo(30)
+    store.setStart(15) // Auswahl [15, 30]
+    store.markEnd(8) // Wiedergabeposition vor dem Start
+    expect(store.endTime).toBe(8)
+    expect(store.startTime).toBe(8)
+  })
+
+  it('markStart/markEnd bauen einen neuen Ausschnitt aus der Wiedergabe auf', () => {
+    const store = loadVideo(60)
+    // Ersten Ausschnitt festhalten.
+    store.setStart(2)
+    store.setEnd(6)
+    store.addSegment()
+    // Neuen Ausschnitt per Wiedergabeposition markieren (weiter hinten).
+    store.markStart(30)
+    store.markEnd(40)
+    store.addSegment()
+    expect(store.segments).toEqual([
+      { start: 2, end: 6 },
+      { start: 30, end: 40 },
+    ])
+  })
+
+  it('addSegment setzt den Entwurf auf die Wiedergabeposition zurück', () => {
+    const store = loadVideo(30)
+    store.setCurrentTime(12)
+    store.setStart(4)
+    store.setEnd(9)
+    store.addSegment()
+    expect(store.startTime).toBe(12)
+    expect(store.endTime).toBe(12)
   })
 
   it('setFile leert eine bestehende Segmentliste', () => {
