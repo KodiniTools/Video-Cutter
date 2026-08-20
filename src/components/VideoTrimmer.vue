@@ -213,6 +213,12 @@ function onCancel(): void {
   serverCancel()
 }
 
+/** Geladenes Video entfernen und zur Upload-Ansicht zurückkehren. */
+function onDeleteVideo(): void {
+  if (isProcessing.value) serverCancel() // laufenden Upload/Job stoppen
+  store.reset()
+}
+
 // --- Undo/Redo -----------------------------------------------------------
 function onUndo(): void {
   if (canUndo.value) store.undo()
@@ -314,6 +320,9 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </div>
           <button class="btn ghost" type="button" @click="store.reset()">
             {{ t('actions.change') }}
+          </button>
+          <button class="btn ghost danger" type="button" @click="onDeleteVideo">
+            🗑 {{ t('actions.removeVideo') }}
           </button>
         </div>
       </div>
@@ -890,6 +899,13 @@ async function onDownload(e: MouseEvent): Promise<void> {
 }
 .btn.ghost {
   background: transparent;
+}
+.btn.ghost.danger {
+  color: var(--vc-error-text, #d33);
+}
+.btn.ghost.danger:hover {
+  border-color: var(--vc-error-text, #d33);
+  background: var(--vc-error-bg, transparent);
 }
 .btn.primary {
   background: var(--vc-accent);

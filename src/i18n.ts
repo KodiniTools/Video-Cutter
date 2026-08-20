@@ -39,6 +39,7 @@ const messages = {
       cancel: 'Abbrechen',
       undo: 'Rückgängig',
       redo: 'Wiederherstellen',
+      removeVideo: 'Video löschen',
     },
     mode: {
       legend: 'Schnittmodus',
@@ -98,6 +99,7 @@ const messages = {
       cancel: 'Cancel',
       undo: 'Undo',
       redo: 'Redo',
+      removeVideo: 'Delete video',
     },
     mode: {
       legend: 'Cut mode',
