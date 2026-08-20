@@ -52,6 +52,16 @@ const statusLabel = computed(() =>
 function formatMB(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(bytes < 100 * 1024 * 1024 ? 1 : 0)
 }
+/** Menschlich lesbare Dateigröße (KB / MB / GB). */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(0)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+const fileSizeLabel = computed(() => (store.file ? formatBytes(store.file.size) : ''))
 function formatEta(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '–'
   const m = Math.floor(seconds / 60)
@@ -275,7 +285,10 @@ async function onDownload(e: MouseEvent): Promise<void> {
     <!-- Editor -->
     <div v-else class="editor">
       <div class="filebar">
-        <span class="filename" :title="fileName">{{ fileName }}</span>
+        <span class="fileinfo">
+          <span class="filename" :title="fileName">{{ fileName }}</span>
+          <span v-if="fileSizeLabel" class="filesize">{{ fileSizeLabel }}</span>
+        </span>
         <div class="filebar-actions">
           <div class="history">
             <button
@@ -625,12 +638,27 @@ async function onDownload(e: MouseEvent): Promise<void> {
   justify-content: space-between;
   gap: 12px;
 }
+.fileinfo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
 .filename {
   font-size: 14px;
   color: var(--vc-text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.filesize {
+  flex: none;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border: 1px solid var(--vc-border);
+  border-radius: 999px;
 }
 .filebar-actions {
   display: flex;
