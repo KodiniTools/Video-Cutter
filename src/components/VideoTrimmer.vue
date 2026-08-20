@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
@@ -111,6 +111,42 @@ function setEndHere(): void {
   store.setEnd(currentTime.value)
 }
 
+// --- Numerische Zeiteingabe für Start/Ende -------------------------------
+// Editierbare Felder; auf Commit setzen sie start/end (der Slider reagiert
+// darüber automatisch). Akzeptiert "SS", "M:SS", "MM:SS", "H:MM:SS".
+function parseTime(input: string): number | null {
+  const s = input.trim().replace(',', '.')
+  if (!s) return null
+  const parts = s.split(':')
+  if (parts.length > 3) return null
+  if (!parts.every((p) => /^\d+(\.\d+)?$/.test(p))) return null
+  return parts.reduce((acc, p) => acc * 60 + Number(p), 0)
+}
+
+const startInput = ref('')
+const endInput = ref('')
+// Felder mit den Store-Werten synchron halten (auch bei Slider-Ziehen).
+watch(startTime, (v) => (startInput.value = formatDisplayTime(v)), { immediate: true })
+watch(endTime, (v) => (endInput.value = formatDisplayTime(v)), { immediate: true })
+
+function commitStart(): void {
+  const t = parseTime(startInput.value)
+  if (t !== null) {
+    store.setStart(t)
+    seekTo(startTime.value)
+  }
+  startInput.value = formatDisplayTime(startTime.value) // normalisieren/zurücksetzen
+}
+
+function commitEnd(): void {
+  const t = parseTime(endInput.value)
+  if (t !== null) {
+    store.setEnd(t)
+    seekTo(endTime.value)
+  }
+  endInput.value = formatDisplayTime(endTime.value)
+}
+
 async function onExport(): Promise<void> {
   if (!store.file || !canExport.value) return
   store.setError('')
@@ -213,17 +249,55 @@ async function onDownload(e: MouseEvent): Promise<void> {
         @seek="seekTo"
       />
 
-      <!-- In/Out setzen -->
+      <!-- In/Out setzen: numerisch eingeben; Slider reagiert automatisch -->
       <div class="marks">
-        <button class="btn" type="button" @click="setStartHere">
-          {{ t('actions.setStart') }} <b>{{ formatDisplayTime(startTime) }}</b>
-        </button>
+        <div class="time-field">
+          <label>{{ t('labels.start') }}</label>
+          <input
+            class="time-input"
+            type="text"
+            inputmode="numeric"
+            :aria-label="t('labels.start')"
+            v-model="startInput"
+            @change="commitStart"
+            @keydown.enter.prevent="commitStart"
+          />
+          <button
+            class="btn tiny"
+            type="button"
+            :title="t('actions.toPlayhead')"
+            :aria-label="t('actions.toPlayhead')"
+            @click="setStartHere"
+          >
+            ⏱
+          </button>
+        </div>
+
         <div class="sel">
           {{ t('labels.selection') }}: <b>{{ formatDisplayTime(selectionDuration) }}</b>
         </div>
-        <button class="btn" type="button" @click="setEndHere">
-          {{ t('actions.setEnd') }} <b>{{ formatDisplayTime(endTime) }}</b>
-        </button>
+
+        <div class="time-field">
+          <label>{{ t('labels.end') }}</label>
+          <input
+            class="time-input"
+            type="text"
+            inputmode="numeric"
+            :aria-label="t('labels.end')"
+            v-model="endInput"
+            @change="commitEnd"
+            @keydown.enter.prevent="commitEnd"
+          />
+          <button
+            class="btn tiny"
+            type="button"
+            :title="t('actions.toPlayhead')"
+            :aria-label="t('actions.toPlayhead')"
+            @click="setEndHere"
+          >
+            ⏱
+          </button>
+        </div>
       </div>
 
       <!-- Aktion: Auswahl behalten oder entfernen -->
@@ -426,6 +500,36 @@ async function onDownload(e: MouseEvent): Promise<void> {
   font-size: 14px;
   color: var(--vc-text-dim);
   font-variant-numeric: tabular-nums;
+}
+.time-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.time-field label {
+  font-size: 13px;
+  color: var(--vc-text-dim);
+}
+.time-input {
+  width: 84px;
+  padding: 7px 8px;
+  border: 1px solid var(--vc-border);
+  border-radius: 8px;
+  background: var(--vc-surface);
+  color: var(--vc-text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.time-input:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 1px;
+  border-color: var(--vc-accent);
+}
+.btn.tiny {
+  padding: 6px 9px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 /* Modus */
