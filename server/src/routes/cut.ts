@@ -50,8 +50,20 @@ cutRouter.post(
 
       const id = randomUUID()
       const inExt = safeExt(req.file.originalname)
-      // 'remove' fügt Segmente zusammen -> immer Re-Encode -> mp4.
-      const outExt = params.operation === 'remove' ? 'mp4' : params.mode === 'copy' ? inExt : 'mp4'
+      // Container-Wahl:
+      //  - copy: Original-Container behalten (webm bleibt webm, mp4 bleibt mp4).
+      //  - reencode/remove: WebM-Input -> WebM (VP9/Opus), sonst mp4 (H.264/AAC).
+      const isWebm = inExt === 'webm'
+      const outExt =
+        params.operation === 'remove'
+          ? isWebm
+            ? 'webm'
+            : 'mp4'
+          : params.mode === 'copy'
+            ? inExt
+            : isWebm
+              ? 'webm'
+              : 'mp4'
       const outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
       const outputName = `${safeBaseName(req.file.originalname)}_cut.${outExt}`
 

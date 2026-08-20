@@ -31,20 +31,50 @@ export interface ServerArgsInput {
 
 // Gemeinsame Präfixe/Encoder-Optionen.
 const PROGRESS = ['-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-nostats']
-const REENCODE = [
-  '-c:v',
-  'libx264',
-  '-preset',
-  'veryfast',
-  '-crf',
-  '23',
-  '-c:a',
-  'aac',
-  '-b:a',
-  '128k',
-  '-movflags',
-  '+faststart',
-]
+
+/**
+ * Re-Encode-Codecs passend zum Ziel-Container (aus der Ausgabe-Endung):
+ * - .webm -> VP9 + Opus (behält das WebM-Format des Uploads bei).
+ * - sonst -> H.264 + AAC in mp4 (mit faststart fürs Web).
+ */
+function reencodeCodecs(outputPath: string): string[] {
+  if (/\.webm$/i.test(outputPath)) {
+    return [
+      '-c:v',
+      'libvpx-vp9',
+      '-b:v',
+      '0',
+      '-crf',
+      '32',
+      '-row-mt',
+      '1',
+      '-deadline',
+      'good',
+      '-cpu-used',
+      '4',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'libopus',
+      '-b:a',
+      '128k',
+    ]
+  }
+  return [
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '23',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    '-movflags',
+    '+faststart',
+  ]
+}
 
 /** Behalten: schneidet [start, start+duration] heraus (copy = verlustfrei, sonst H.264/AAC). */
 function keepArgs(
@@ -66,7 +96,7 @@ function keepArgs(
   if (mode === 'copy') {
     return [...base, '-c', 'copy', '-avoid_negative_ts', 'make_zero', output]
   }
-  return [...base, ...REENCODE, output]
+  return [...base, ...reencodeCodecs(output), output]
 }
 
 /** Re-Encode-Trim eines einzelnen Segments [start, start+duration]. */
@@ -80,7 +110,7 @@ function reencodeTrim(input: string, output: string, start: number, duration: nu
     '-t',
     formatFfmpegTime(Math.max(0, duration)),
   ]
-  return [...base, ...REENCODE, output]
+  return [...base, ...reencodeCodecs(output), output]
 }
 
 /**
@@ -137,7 +167,7 @@ export function buildServerArgs({
         '[outv]',
         '-map',
         '[outa]',
-        ...REENCODE,
+        ...reencodeCodecs(outputPath),
         outputPath,
       ]
     }
