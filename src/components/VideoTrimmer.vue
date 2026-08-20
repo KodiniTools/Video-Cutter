@@ -153,13 +153,21 @@ async function onExport(): Promise<void> {
   store.revokeResult()
   try {
     const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
-    // 'remove' fügt Segmente zusammen -> immer Re-Encode -> mp4.
+    // Container-Wahl (muss zur Server-Logik passen):
+    //  - copy: Original-Endung behalten.
+    //  - reencode/remove: WebM bleibt WebM, sonst .mp4.
+    const inputExt = getExtension(fileName.value)
+    const isWebm = inputExt === 'webm'
     const ext =
       operation.value === 'remove'
-        ? 'mp4'
-        : mode.value === 'copy'
-          ? getExtension(fileName.value)
+        ? isWebm
+          ? 'webm'
           : 'mp4'
+        : mode.value === 'copy'
+          ? inputExt
+          : isWebm
+            ? 'webm'
+            : 'mp4'
     const blob = await serverCut(
       store.file,
       startTime.value,

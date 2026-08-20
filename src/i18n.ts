@@ -17,7 +17,7 @@ const messages = {
       keepHint: 'Behält den markierten Bereich, schneidet Anfang und Ende weg.',
       remove: 'Auswahl entfernen',
       removeHint: 'Entfernt den markierten Bereich, fügt davor und danach zusammen.',
-      removeNote: 'Beim Entfernen wird immer neu kodiert (H.264/AAC, .mp4).',
+      removeNote: 'Beim Entfernen wird neu kodiert. WebM bleibt WebM, sonst .mp4.',
     },
     actions: {
       change: 'Anderes Video',
@@ -34,7 +34,7 @@ const messages = {
       fast: 'Schnell (verlustfrei)',
       fastHint: 'Kopiert die Streams. Sehr schnell, schneidet an Keyframes.',
       accurate: 'Genau (neu kodieren)',
-      accurateHint: 'Frame-genau via H.264/AAC. Langsamer, immer .mp4.',
+      accurateHint: 'Frame-genau, neu kodiert. Langsamer. WebM bleibt WebM, sonst .mp4.',
     },
     status: {
       uploading: 'Lädt hoch …',
@@ -65,7 +65,7 @@ const messages = {
       keepHint: 'Keeps the marked range, trims off start and end.',
       remove: 'Remove selection',
       removeHint: 'Removes the marked range, joins the parts before and after.',
-      removeNote: 'Removing always re-encodes (H.264/AAC, .mp4).',
+      removeNote: 'Removing re-encodes. WebM stays WebM, otherwise .mp4.',
     },
     actions: {
       change: 'Change video',
@@ -82,7 +82,7 @@ const messages = {
       fast: 'Fast (lossless)',
       fastHint: 'Copies the streams. Very fast, cuts at keyframes.',
       accurate: 'Accurate (re-encode)',
-      accurateHint: 'Frame-accurate via H.264/AAC. Slower, always .mp4.',
+      accurateHint: 'Frame-accurate, re-encoded. Slower. WebM stays WebM, otherwise .mp4.',
     },
     status: {
       uploading: 'Uploading …',

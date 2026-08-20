@@ -50,6 +50,20 @@ describe('buildServerArgs', () => {
     expect(args.at(-1)).toBe('/tmp/out.mp4')
   })
 
+  it('reencode nach .webm nutzt VP9/Opus statt H.264/AAC', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.webm',
+      outputPath: '/tmp/out.webm',
+      start: 0,
+      duration: 5,
+      mode: 'reencode',
+    })
+    expect(args).toContain('libvpx-vp9')
+    expect(args).toContain('libopus')
+    expect(args).not.toContain('libx264')
+    expect(args.at(-1)).toBe('/tmp/out.webm')
+  })
+
   it('remove (Mitte) liest den Input zweimal und concatet (kein Split -> kein OOM)', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
