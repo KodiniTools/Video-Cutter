@@ -355,280 +355,294 @@ async function onDownload(e: MouseEvent): Promise<void> {
         </div>
       </div>
 
-      <video
-        ref="videoEl"
-        class="player"
-        :src="objectUrl"
-        controls
-        preload="metadata"
-        @loadedmetadata="onLoadedMetadata"
-        @timeupdate="onTimeUpdate"
-      ></video>
-
-      <Timeline
-        :duration="duration"
-        :start="startTime"
-        :end="endTime"
-        :current="currentTime"
-        :segments="segments"
-        :operation="operation"
-        :transition-name="transitionName"
-        @update:start="store.setStart"
-        @update:end="store.setEnd"
-        @seek="seekTo"
-      />
-
-      <!-- In/Out setzen: numerisch eingeben; Slider reagiert automatisch -->
-      <div class="marks">
-        <div class="time-field">
-          <label>{{ t('labels.start') }}</label>
-          <input
-            v-model="startInput"
-            class="time-input"
-            type="text"
-            inputmode="numeric"
-            :aria-label="t('labels.start')"
-            @change="commitStart"
-            @keydown.enter.prevent="commitStart"
-          />
-          <div class="stepper">
-            <button
-              class="step"
-              type="button"
-              :aria-label="t('actions.increase')"
-              @click="stepStart(1)"
-            >
-              ▲
-            </button>
-            <button
-              class="step"
-              type="button"
-              :aria-label="t('actions.decrease')"
-              @click="stepStart(-1)"
-            >
-              ▼
-            </button>
-          </div>
-          <button
-            class="btn tiny"
-            type="button"
-            :title="t('actions.toPlayhead')"
-            :aria-label="t('actions.toPlayhead')"
-            @click="setStartHere"
-          >
-            ⏱
-          </button>
-        </div>
-
-        <div class="sel">
-          {{ t('labels.selection') }}: <b>{{ formatDisplayTime(selectionDuration) }}</b>
-        </div>
-
-        <div class="time-field">
-          <label>{{ t('labels.end') }}</label>
-          <input
-            v-model="endInput"
-            class="time-input"
-            type="text"
-            inputmode="numeric"
-            :aria-label="t('labels.end')"
-            @change="commitEnd"
-            @keydown.enter.prevent="commitEnd"
-          />
-          <div class="stepper">
-            <button
-              class="step"
-              type="button"
-              :aria-label="t('actions.increase')"
-              @click="stepEnd(1)"
-            >
-              ▲
-            </button>
-            <button
-              class="step"
-              type="button"
-              :aria-label="t('actions.decrease')"
-              @click="stepEnd(-1)"
-            >
-              ▼
-            </button>
-          </div>
-          <button
-            class="btn tiny"
-            type="button"
-            :title="t('actions.toPlayhead')"
-            :aria-label="t('actions.toPlayhead')"
-            @click="setEndHere"
-          >
-            ⏱
-          </button>
-        </div>
-      </div>
-
-      <!-- Ausschnitt-Liste: aktuelle Auswahl festhalten, mehrere möglich -->
-      <div class="segments">
-        <div class="segments-head">
-          <span class="segments-title">{{ t('segments.title') }}</span>
-          <div class="segments-head-actions">
-            <div ref="animMenu" class="anim-menu">
-              <button
-                class="btn tiny"
-                type="button"
-                :aria-haspopup="true"
-                :aria-expanded="animMenuOpen"
-                :title="t('anim.title')"
-                @click="toggleAnimMenu"
-              >
-                ✨ {{ t(currentAnimLabel) }} ▾
-              </button>
-              <div v-if="animMenuOpen" class="anim-dropdown" role="menu">
-                <p class="anim-dropdown-title">{{ t('anim.title') }}</p>
+      <div class="editor-grid">
+        <!-- LINKS: Auswahl & Ausschnitte -->
+        <div class="panel panel-left">
+          <!-- Auswahl: numerisch eingeben; Slider reagiert automatisch -->
+          <section class="card">
+            <h3 class="panel-title">{{ t('labels.selection') }}</h3>
+            <div class="marks">
+              <div class="time-field">
+                <label>{{ t('labels.start') }}</label>
+                <input
+                  v-model="startInput"
+                  class="time-input"
+                  type="text"
+                  inputmode="numeric"
+                  :aria-label="t('labels.start')"
+                  @change="commitStart"
+                  @keydown.enter.prevent="commitStart"
+                />
+                <div class="stepper">
+                  <button
+                    class="step"
+                    type="button"
+                    :aria-label="t('actions.increase')"
+                    @click="stepStart(1)"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    class="step"
+                    type="button"
+                    :aria-label="t('actions.decrease')"
+                    @click="stepStart(-1)"
+                  >
+                    ▼
+                  </button>
+                </div>
                 <button
-                  v-for="a in animations"
-                  :key="a.id"
-                  class="anim-option"
-                  :class="{ active: animation === a.id }"
+                  class="btn tiny"
                   type="button"
-                  role="menuitemradio"
-                  :aria-checked="animation === a.id"
-                  @click="chooseAnimation(a.id)"
+                  :title="t('actions.toPlayhead')"
+                  :aria-label="t('actions.toPlayhead')"
+                  @click="setStartHere"
                 >
-                  <span class="anim-check">{{ animation === a.id ? '✓' : '' }}</span>
-                  {{ t(a.labelKey) }}
+                  ⏱
+                </button>
+              </div>
+
+              <div class="time-field">
+                <label>{{ t('labels.end') }}</label>
+                <input
+                  v-model="endInput"
+                  class="time-input"
+                  type="text"
+                  inputmode="numeric"
+                  :aria-label="t('labels.end')"
+                  @change="commitEnd"
+                  @keydown.enter.prevent="commitEnd"
+                />
+                <div class="stepper">
+                  <button
+                    class="step"
+                    type="button"
+                    :aria-label="t('actions.increase')"
+                    @click="stepEnd(1)"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    class="step"
+                    type="button"
+                    :aria-label="t('actions.decrease')"
+                    @click="stepEnd(-1)"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <button
+                  class="btn tiny"
+                  type="button"
+                  :title="t('actions.toPlayhead')"
+                  :aria-label="t('actions.toPlayhead')"
+                  @click="setEndHere"
+                >
+                  ⏱
+                </button>
+              </div>
+
+              <div class="sel">
+                {{ t('labels.selection') }}: <b>{{ formatDisplayTime(selectionDuration) }}</b>
+              </div>
+            </div>
+          </section>
+
+          <!-- Ausschnitt-Liste: aktuelle Auswahl festhalten, mehrere möglich -->
+          <div class="segments">
+            <div class="segments-head">
+              <span class="segments-title">{{ t('segments.title') }}</span>
+              <div class="segments-head-actions">
+                <div ref="animMenu" class="anim-menu">
+                  <button
+                    class="btn tiny"
+                    type="button"
+                    :aria-haspopup="true"
+                    :aria-expanded="animMenuOpen"
+                    :title="t('anim.title')"
+                    @click="toggleAnimMenu"
+                  >
+                    ✨ {{ t(currentAnimLabel) }} ▾
+                  </button>
+                  <div v-if="animMenuOpen" class="anim-dropdown" role="menu">
+                    <p class="anim-dropdown-title">{{ t('anim.title') }}</p>
+                    <button
+                      v-for="a in animations"
+                      :key="a.id"
+                      class="anim-option"
+                      :class="{ active: animation === a.id }"
+                      type="button"
+                      role="menuitemradio"
+                      :aria-checked="animation === a.id"
+                      @click="chooseAnimation(a.id)"
+                    >
+                      <span class="anim-check">{{ animation === a.id ? '✓' : '' }}</span>
+                      {{ t(a.labelKey) }}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  class="btn tiny add"
+                  type="button"
+                  :disabled="!canAddSegment"
+                  @click="store.addSegment()"
+                >
+                  ＋ {{ t('segments.add') }}
                 </button>
               </div>
             </div>
-            <button
-              class="btn tiny add"
-              type="button"
-              :disabled="!canAddSegment"
-              @click="store.addSegment()"
-            >
-              ＋ {{ t('segments.add') }}
-            </button>
+
+            <TransitionGroup tag="ul" :name="transitionName" class="segments-list">
+              <li v-for="(seg, i) in segments" :key="`${seg.start}-${seg.end}`" class="segment-row">
+                <span class="segment-index">{{ i + 1 }}</span>
+                <span class="segment-time">
+                  {{ formatDisplayTime(seg.start) }} – {{ formatDisplayTime(seg.end) }}
+                  <small>({{ formatDisplayTime(Math.max(0, seg.end - seg.start)) }})</small>
+                </span>
+                <button
+                  class="btn tiny remove"
+                  type="button"
+                  :aria-label="t('segments.remove')"
+                  :title="t('segments.remove')"
+                  @click="store.removeSegment(i)"
+                >
+                  ✕
+                </button>
+              </li>
+            </TransitionGroup>
+            <p v-if="!segments.length" class="segments-empty">{{ t('segments.empty') }}</p>
+
+            <p class="segments-hint">{{ t('segments.hint') }}</p>
           </div>
         </div>
 
-        <TransitionGroup tag="ul" :name="transitionName" class="segments-list">
-          <li v-for="(seg, i) in segments" :key="`${seg.start}-${seg.end}`" class="segment-row">
-            <span class="segment-index">{{ i + 1 }}</span>
-            <span class="segment-time">
-              {{ formatDisplayTime(seg.start) }} – {{ formatDisplayTime(seg.end) }}
-              <small>({{ formatDisplayTime(Math.max(0, seg.end - seg.start)) }})</small>
-            </span>
-            <button
-              class="btn tiny remove"
-              type="button"
-              :aria-label="t('segments.remove')"
-              :title="t('segments.remove')"
-              @click="store.removeSegment(i)"
-            >
-              ✕
-            </button>
-          </li>
-        </TransitionGroup>
-        <p v-if="!segments.length" class="segments-empty">{{ t('segments.empty') }}</p>
+        <!-- MITTE: Canvas (Video + Timeline + Ergebnis) -->
+        <div class="canvas">
+          <video
+            ref="videoEl"
+            class="player"
+            :src="objectUrl"
+            controls
+            preload="metadata"
+            @loadedmetadata="onLoadedMetadata"
+            @timeupdate="onTimeUpdate"
+          ></video>
 
-        <p class="segments-hint">{{ t('segments.hint') }}</p>
-      </div>
-
-      <!-- Aktion: Auswahl behalten oder entfernen -->
-      <fieldset class="mode">
-        <legend>{{ t('operation.legend') }}</legend>
-        <label class="radio" :class="{ active: operation === 'keep' }">
-          <input
-            type="radio"
-            value="keep"
-            :checked="operation === 'keep'"
-            @change="store.setOperation('keep')"
+          <Timeline
+            :duration="duration"
+            :start="startTime"
+            :end="endTime"
+            :current="currentTime"
+            :segments="segments"
+            :operation="operation"
+            :transition-name="transitionName"
+            @update:start="store.setStart"
+            @update:end="store.setEnd"
+            @seek="seekTo"
           />
-          <span>
-            <b>{{ t('operation.keep') }}</b>
-            <small>{{ t('operation.keepHint') }}</small>
-          </span>
-        </label>
-        <label class="radio" :class="{ active: operation === 'remove' }">
-          <input
-            type="radio"
-            value="remove"
-            :checked="operation === 'remove'"
-            @change="store.setOperation('remove')"
-          />
-          <span>
-            <b>{{ t('operation.remove') }}</b>
-            <small>{{ t('operation.removeHint') }}</small>
-          </span>
-        </label>
-      </fieldset>
 
-      <!-- Modus (nur beim Behalten relevant; Entfernen kodiert immer neu) -->
-      <fieldset v-if="operation === 'keep'" class="mode">
-        <legend>{{ t('mode.legend') }}</legend>
-        <label class="radio" :class="{ active: mode === 'copy' }">
-          <input
-            type="radio"
-            value="copy"
-            :checked="mode === 'copy'"
-            @change="store.setMode('copy')"
-          />
-          <span>
-            <b>{{ t('mode.fast') }}</b>
-            <small>{{ t('mode.fastHint') }}</small>
-          </span>
-        </label>
-        <label class="radio" :class="{ active: mode === 'reencode' }">
-          <input
-            type="radio"
-            value="reencode"
-            :checked="mode === 'reencode'"
-            @change="store.setMode('reencode')"
-          />
-          <span>
-            <b>{{ t('mode.accurate') }}</b>
-            <small>{{ t('mode.accurateHint') }}</small>
-          </span>
-        </label>
-      </fieldset>
-      <p v-else class="reencode-note">{{ t('operation.removeNote') }}</p>
-
-      <!-- Export -->
-      <button
-        class="btn primary export"
-        type="button"
-        :disabled="!canExport || busy"
-        @click="onExport"
-      >
-        <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
-        <template v-else>{{ t('actions.export') }}</template>
-      </button>
-
-      <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
-        <div class="bar" :style="{ width: `${progress}%` }"></div>
-      </div>
-      <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
-
-      <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
-        {{ t('actions.cancel') }}
-      </button>
-
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-
-      <!-- Ergebnis -->
-      <div v-if="resultUrl" class="result">
-        <p class="result-title">{{ t('result.ready') }}</p>
-        <video class="player" :src="resultUrl" controls preload="metadata"></video>
-        <div class="result-actions">
-          <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
-            {{ t('actions.download') }} — {{ resultName }}
-          </a>
-          <button class="btn ghost" type="button" @click="discardResult">
-            {{ t('actions.discard') }}
-          </button>
-          <button class="btn ghost" type="button" @click="store.reset()">
-            {{ t('actions.change') }}
-          </button>
+          <!-- Ergebnis -->
+          <div v-if="resultUrl" class="result">
+            <p class="result-title">{{ t('result.ready') }}</p>
+            <video class="player" :src="resultUrl" controls preload="metadata"></video>
+            <div class="result-actions">
+              <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
+                {{ t('actions.download') }} — {{ resultName }}
+              </a>
+              <button class="btn ghost" type="button" @click="discardResult">
+                {{ t('actions.discard') }}
+              </button>
+              <button class="btn ghost" type="button" @click="store.reset()">
+                {{ t('actions.change') }}
+              </button>
+            </div>
+            <p v-if="appleMobile" class="result-hint">{{ t('result.iosHint') }}</p>
+          </div>
         </div>
-        <p v-if="appleMobile" class="result-hint">{{ t('result.iosHint') }}</p>
+
+        <!-- RECHTS: Optionen & Aktion -->
+        <div class="panel panel-right">
+          <!-- Aktion: Auswahl behalten oder entfernen -->
+          <fieldset class="mode">
+            <legend>{{ t('operation.legend') }}</legend>
+            <label class="radio" :class="{ active: operation === 'keep' }">
+              <input
+                type="radio"
+                value="keep"
+                :checked="operation === 'keep'"
+                @change="store.setOperation('keep')"
+              />
+              <span>
+                <b>{{ t('operation.keep') }}</b>
+                <small>{{ t('operation.keepHint') }}</small>
+              </span>
+            </label>
+            <label class="radio" :class="{ active: operation === 'remove' }">
+              <input
+                type="radio"
+                value="remove"
+                :checked="operation === 'remove'"
+                @change="store.setOperation('remove')"
+              />
+              <span>
+                <b>{{ t('operation.remove') }}</b>
+                <small>{{ t('operation.removeHint') }}</small>
+              </span>
+            </label>
+          </fieldset>
+
+          <!-- Modus (nur beim Behalten relevant; Entfernen kodiert immer neu) -->
+          <fieldset v-if="operation === 'keep'" class="mode">
+            <legend>{{ t('mode.legend') }}</legend>
+            <label class="radio" :class="{ active: mode === 'copy' }">
+              <input
+                type="radio"
+                value="copy"
+                :checked="mode === 'copy'"
+                @change="store.setMode('copy')"
+              />
+              <span>
+                <b>{{ t('mode.fast') }}</b>
+                <small>{{ t('mode.fastHint') }}</small>
+              </span>
+            </label>
+            <label class="radio" :class="{ active: mode === 'reencode' }">
+              <input
+                type="radio"
+                value="reencode"
+                :checked="mode === 'reencode'"
+                @change="store.setMode('reencode')"
+              />
+              <span>
+                <b>{{ t('mode.accurate') }}</b>
+                <small>{{ t('mode.accurateHint') }}</small>
+              </span>
+            </label>
+          </fieldset>
+          <p v-else class="reencode-note">{{ t('operation.removeNote') }}</p>
+
+          <!-- Export -->
+          <button
+            class="btn primary export"
+            type="button"
+            :disabled="!canExport || busy"
+            @click="onExport"
+          >
+            <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
+            <template v-else>{{ t('actions.export') }}</template>
+          </button>
+
+          <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
+            <div class="bar" :style="{ width: `${progress}%` }"></div>
+          </div>
+          <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
+
+          <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
+            {{ t('actions.cancel') }}
+          </button>
+
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+        </div>
       </div>
     </div>
   </section>
@@ -660,6 +674,9 @@ async function onDownload(e: MouseEvent): Promise<void> {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
   padding: 56px 24px;
   border: 2px dashed var(--vc-border);
   border-radius: 14px;
@@ -698,6 +715,53 @@ async function onDownload(e: MouseEvent): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* 3-Spalten-Layout: links Auswahl/Ausschnitte, Mitte Canvas, rechts Optionen.
+   Auf schmalen Displays gestapelt – Canvas zuerst. */
+.editor-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    'canvas'
+    'left'
+    'right';
+}
+.panel-left {
+  grid-area: left;
+}
+.canvas {
+  grid-area: canvas;
+}
+.panel-right {
+  grid-area: right;
+}
+.panel,
+.canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .editor-grid {
+    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+    grid-template-areas: 'left canvas right';
+    align-items: start;
+  }
+}
+
+/* Karten-Container in den Panels */
+.card {
+  border: 1px solid var(--vc-border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.panel-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--vc-text-dim);
 }
 
 .filebar {
@@ -753,15 +817,14 @@ async function onDownload(e: MouseEvent): Promise<void> {
 
 .marks {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 .sel {
   font-size: 14px;
   color: var(--vc-text-dim);
   font-variant-numeric: tabular-nums;
+  padding-top: 2px;
 }
 .time-field {
   display: flex;
@@ -771,6 +834,12 @@ async function onDownload(e: MouseEvent): Promise<void> {
 .time-field label {
   font-size: 13px;
   color: var(--vc-text-dim);
+  width: 42px;
+  flex: none;
+}
+.time-input {
+  flex: 1;
+  min-width: 0;
 }
 .time-input {
   width: 84px;
@@ -1013,7 +1082,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
 /* Modus */
 .mode {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
   border: 1px solid var(--vc-border);
   border-radius: 10px;
@@ -1168,11 +1237,6 @@ a.btn {
   color: var(--vc-text-dim);
 }
 
-@media (max-width: 560px) {
-  .mode {
-    grid-template-columns: 1fr;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .bar {
     transition: none;
