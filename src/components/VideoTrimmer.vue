@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
@@ -23,6 +23,8 @@ const {
   hasVideo,
   canExport,
   canAddSegment,
+  canUndo,
+  canRedo,
   effectiveSegments,
   selectionDuration,
   resultUrl,
@@ -201,7 +203,37 @@ function onCancel(): void {
   serverCancel()
 }
 
-onBeforeUnmount(() => store.reset())
+// --- Undo/Redo -----------------------------------------------------------
+function onUndo(): void {
+  if (canUndo.value) store.undo()
+}
+function onRedo(): void {
+  if (canRedo.value) store.redo()
+}
+
+// Tastatur: Strg/Cmd+Z = rückgängig, Strg/Cmd+Shift+Z bzw. Strg+Y = wieder.
+function onKeydown(e: KeyboardEvent): void {
+  if (!hasVideo.value || busy.value) return
+  const meta = e.ctrlKey || e.metaKey
+  if (!meta) return
+  const key = e.key.toLowerCase()
+  // In Textfeldern die native Bearbeitung nicht überschreiben.
+  const target = e.target as HTMLElement | null
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    onUndo()
+  } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+    e.preventDefault()
+    onRedo()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  store.reset()
+})
 
 const appleMobile = isAppleMobile()
 
@@ -244,9 +276,33 @@ async function onDownload(e: MouseEvent): Promise<void> {
     <div v-else class="editor">
       <div class="filebar">
         <span class="filename" :title="fileName">{{ fileName }}</span>
-        <button class="btn ghost" type="button" @click="store.reset()">
-          {{ t('actions.change') }}
-        </button>
+        <div class="filebar-actions">
+          <div class="history">
+            <button
+              class="btn tiny"
+              type="button"
+              :disabled="!canUndo"
+              :title="`${t('actions.undo')} (Ctrl+Z)`"
+              :aria-label="t('actions.undo')"
+              @click="onUndo"
+            >
+              ↶
+            </button>
+            <button
+              class="btn tiny"
+              type="button"
+              :disabled="!canRedo"
+              :title="`${t('actions.redo')} (Ctrl+Shift+Z)`"
+              :aria-label="t('actions.redo')"
+              @click="onRedo"
+            >
+              ↷
+            </button>
+          </div>
+          <button class="btn ghost" type="button" @click="store.reset()">
+            {{ t('actions.change') }}
+          </button>
+        </div>
       </div>
 
       <video
@@ -575,6 +631,21 @@ async function onDownload(e: MouseEvent): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.filebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.history {
+  display: flex;
+  gap: 4px;
+}
+.history .btn.tiny {
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 10px;
 }
 
 .player {

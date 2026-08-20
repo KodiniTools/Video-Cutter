@@ -175,3 +175,95 @@ describe('videoEditor store', () => {
     expect(store.segments).toHaveLength(0)
   })
 })
+
+describe('videoEditor store – Undo/Redo', () => {
+  it('macht eine Auswahländerung rückgängig und stellt sie wieder her', () => {
+    const store = loadVideo(30)
+    expect(store.canUndo).toBe(false)
+    store.setStart(5)
+    store.setEnd(20)
+    store.commitHistory() // eine Änderungsserie = ein Schritt
+    expect(store.canUndo).toBe(true)
+
+    store.undo()
+    expect(store.startTime).toBe(0)
+    expect(store.endTime).toBe(30)
+    expect(store.canRedo).toBe(true)
+
+    store.redo()
+    expect(store.startTime).toBe(5)
+    expect(store.endTime).toBe(20)
+  })
+
+  it('macht das Hinzufügen eines Ausschnitts rückgängig', () => {
+    const store = loadVideo(30)
+    store.setStart(2)
+    store.setEnd(8)
+    store.commitHistory()
+    store.addSegment()
+    store.commitHistory()
+    expect(store.segments).toHaveLength(1)
+
+    store.undo()
+    expect(store.segments).toHaveLength(0)
+    expect(store.startTime).toBe(2)
+    expect(store.endTime).toBe(8)
+  })
+
+  it('deckt Modus und Aktion ab', () => {
+    const store = loadVideo(30)
+    store.setOperation('remove')
+    store.commitHistory()
+    expect(store.operation).toBe('remove')
+    store.undo()
+    expect(store.operation).toBe('keep')
+
+    store.setMode('reencode')
+    store.commitHistory()
+    store.undo()
+    expect(store.mode).toBe('copy')
+  })
+
+  it('eine neue Änderung verwirft den Redo-Zweig', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.commitHistory()
+    store.undo()
+    expect(store.canRedo).toBe(true)
+    store.setStart(9)
+    store.commitHistory()
+    expect(store.canRedo).toBe(false)
+  })
+
+  it('mehrere Schritte werden in umgekehrter Reihenfolge rückgängig gemacht', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.commitHistory() // Schritt 1
+    store.setStart(10)
+    store.commitHistory() // Schritt 2
+    expect(store.startTime).toBe(10)
+    store.undo()
+    expect(store.startTime).toBe(5)
+    store.undo()
+    expect(store.startTime).toBe(0)
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('History reicht nicht über einen Videowechsel hinaus', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.commitHistory()
+    expect(store.canUndo).toBe(true)
+    // Neues Video laden -> History-Ausgangspunkt zurücksetzen.
+    store.setFile(new File([new Uint8Array([0])], 'neu.mp4', { type: 'video/mp4' }))
+    store.setDuration(40)
+    expect(store.canUndo).toBe(false)
+    expect(store.canRedo).toBe(false)
+  })
+
+  it('unverändert -> kein Undo-Schritt', () => {
+    const store = loadVideo(30)
+    store.commitHistory()
+    expect(store.canUndo).toBe(false)
+  })
+})

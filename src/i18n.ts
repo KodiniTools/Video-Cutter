@@ -37,6 +37,8 @@ const messages = {
       download: 'Herunterladen',
       discard: 'Verwerfen',
       cancel: 'Abbrechen',
+      undo: 'Rückgängig',
+      redo: 'Wiederherstellen',
     },
     mode: {
       legend: 'Schnittmodus',
@@ -94,6 +96,8 @@ const messages = {
       download: 'Download',
       discard: 'Discard',
       cancel: 'Cancel',
+      undo: 'Undo',
+      redo: 'Redo',
     },
     mode: {
       legend: 'Cut mode',
