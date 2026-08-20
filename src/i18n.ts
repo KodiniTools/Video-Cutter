@@ -18,6 +18,15 @@ const messages = {
       empty: 'Noch keine Ausschnitte. Ohne Liste wird die aktuelle Auswahl verwendet.',
       hint: 'Video abspielen und mit ⏱ Start bzw. Ende auf die Wiedergabeposition setzen, dann hinzufügen.',
     },
+    anim: {
+      menu: 'Animation',
+      title: 'Animation der Ausschnitte',
+      none: 'Keine',
+      fade: 'Ein-/Ausblenden',
+      slide: 'Gleiten',
+      scale: 'Zoomen',
+      flip: 'Umklappen',
+    },
     operation: {
       legend: 'Aktion',
       keep: 'Ausschnitte behalten',
@@ -77,6 +86,15 @@ const messages = {
       remove: 'Remove segment',
       empty: 'No segments yet. Without a list the current selection is used.',
       hint: 'Play the video and use ⏱ to set start or end to the playback position, then add.',
+    },
+    anim: {
+      menu: 'Animation',
+      title: 'Segment animation',
+      none: 'None',
+      fade: 'Fade in/out',
+      slide: 'Slide',
+      scale: 'Zoom',
+      flip: 'Flip',
     },
     operation: {
       legend: 'Action',
