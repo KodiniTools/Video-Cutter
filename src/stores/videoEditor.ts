@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { clamp, type TrimMode } from '@/lib/ffmpegCommand'
 
 /** 'keep' = Auswahl behalten, 'remove' = Auswahl entfernen (Rest zusammenfügen). */
@@ -11,8 +11,20 @@ export interface Segment {
   end: number
 }
 
+/** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands. */
+interface EditorSnapshot {
+  startTime: number
+  endTime: number
+  mode: TrimMode
+  operation: CutOperation
+  segments: Segment[]
+}
+
 /** Mindestlänge der Auswahl in Sekunden. */
 const MIN_SELECTION = 0.05
+
+/** Verzögerung, bis eine Änderungsserie (z. B. Ziehen) als ein Schritt gilt. */
+const HISTORY_DEBOUNCE_MS = 350
 
 export const useVideoEditorStore = defineStore('videoEditor', () => {
   // --- Quellvideo ---
@@ -54,6 +66,115 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   )
   const canExport = computed(() => hasVideo.value && effectiveSegments.value.length > 0)
 
+  // --- Undo/Redo -----------------------------------------------------------
+  // Rückgängig/Wiederherstellen deckt Auswahl (Start/Ende), Ausschnitt-Liste,
+  // Modus und Aktion ab – nicht das geladene Video oder die Wiedergabeposition.
+  // Änderungsserien (Ziehen, mehrfaches Tippen) werden per Debounce zu einem
+  // Schritt zusammengefasst.
+  const undoStack = ref<EditorSnapshot[]>([])
+  const redoStack = ref<EditorSnapshot[]>([])
+  let baseline: EditorSnapshot | null = null
+  let applyingHistory = false
+  let commitTimer: ReturnType<typeof setTimeout> | null = null
+
+  const canUndo = computed(() => undoStack.value.length > 0)
+  const canRedo = computed(() => redoStack.value.length > 0)
+
+  function snapshot(): EditorSnapshot {
+    return {
+      startTime: startTime.value,
+      endTime: endTime.value,
+      mode: mode.value,
+      operation: operation.value,
+      segments: segments.value.map((s) => ({ ...s })),
+    }
+  }
+
+  function sameSegments(a: Segment[], b: Segment[]): boolean {
+    if (a.length !== b.length) return false
+    return a.every((s, i) => s.start === b[i].start && s.end === b[i].end)
+  }
+
+  function sameSnapshot(a: EditorSnapshot, b: EditorSnapshot): boolean {
+    return (
+      a.startTime === b.startTime &&
+      a.endTime === b.endTime &&
+      a.mode === b.mode &&
+      a.operation === b.operation &&
+      sameSegments(a.segments, b.segments)
+    )
+  }
+
+  function applySnapshot(s: EditorSnapshot): void {
+    applyingHistory = true
+    startTime.value = s.startTime
+    endTime.value = s.endTime
+    mode.value = s.mode
+    operation.value = s.operation
+    segments.value = s.segments.map((seg) => ({ ...seg }))
+    applyingHistory = false
+  }
+
+  /** Übernimmt den aktuellen Zustand als neuen History-Schritt (falls geändert). */
+  function commitHistory(): void {
+    if (commitTimer) {
+      clearTimeout(commitTimer)
+      commitTimer = null
+    }
+    const cur = snapshot()
+    if (!baseline) {
+      baseline = cur
+      return
+    }
+    if (sameSnapshot(cur, baseline)) return
+    undoStack.value = [...undoStack.value, baseline]
+    redoStack.value = []
+    baseline = cur
+  }
+
+  /** Setzt die History auf den aktuellen Zustand als Ausgangspunkt zurück. */
+  function resetHistory(): void {
+    if (commitTimer) {
+      clearTimeout(commitTimer)
+      commitTimer = null
+    }
+    undoStack.value = []
+    redoStack.value = []
+    baseline = snapshot()
+  }
+
+  function undo(): void {
+    commitHistory() // eventuelle, noch nicht übernommene Änderung festschreiben
+    if (!undoStack.value.length) return
+    const prev = undoStack.value[undoStack.value.length - 1]
+    undoStack.value = undoStack.value.slice(0, -1)
+    if (baseline) redoStack.value = [...redoStack.value, baseline]
+    applySnapshot(prev)
+    baseline = snapshot()
+  }
+
+  function redo(): void {
+    commitHistory()
+    if (!redoStack.value.length) return
+    const next = redoStack.value[redoStack.value.length - 1]
+    redoStack.value = redoStack.value.slice(0, -1)
+    if (baseline) undoStack.value = [...undoStack.value, baseline]
+    applySnapshot(next)
+    baseline = snapshot()
+  }
+
+  // Änderungen am editierbaren Zustand beobachten und (verzögert) festschreiben.
+  // flush: 'sync', damit der applyingHistory-Schutz beim Anwenden greift.
+  watch(
+    [startTime, endTime, mode, operation, segments],
+    () => {
+      if (applyingHistory) return
+      if (commitTimer) clearTimeout(commitTimer)
+      commitTimer = setTimeout(commitHistory, HISTORY_DEBOUNCE_MS)
+    },
+    { deep: true, flush: 'sync' },
+  )
+
   function revokeObjectUrl(): void {
     if (objectUrl.value) {
       URL.revokeObjectURL(objectUrl.value)
@@ -88,6 +209,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     duration.value = Number.isFinite(d) && d > 0 ? d : 0
     startTime.value = 0
     endTime.value = duration.value
+    // Frisch geladenes Video = Ausgangspunkt der History (kein Undo darüber).
+    resetHistory()
   }
 
   function setStart(t: number): void {
@@ -177,6 +300,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     error.value = ''
     segments.value = []
+    resetHistory()
   }
 
   return {
@@ -201,6 +325,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canAddSegment,
     effectiveSegments,
     canExport,
+    canUndo,
+    canRedo,
     // actions
     setFile,
     setDuration,
@@ -218,5 +344,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setError,
     revokeResult,
     reset,
+    // history
+    undo,
+    redo,
+    commitHistory,
+    resetHistory,
   }
 })
