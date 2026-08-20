@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
+import { useAnimationPref } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
@@ -43,6 +44,8 @@ const {
   cut: serverCut,
   cancel: serverCancel,
 } = useServerCut()
+
+const { animation, transitionName, animations } = useAnimationPref()
 
 const busy = computed(() => isProcessing.value)
 const statusLabel = computed(() =>
@@ -245,9 +248,34 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+// --- Animations-Menü -----------------------------------------------------
+const animMenuOpen = ref(false)
+const animMenu = ref<HTMLElement | null>(null)
+const currentAnimLabel = computed(
+  () => animations.find((a) => a.id === animation.value)?.labelKey ?? 'anim.fade',
+)
+
+function toggleAnimMenu(): void {
+  animMenuOpen.value = !animMenuOpen.value
+}
+function chooseAnimation(id: (typeof animations)[number]['id']): void {
+  animation.value = id
+  animMenuOpen.value = false
+}
+function onDocPointerDown(e: PointerEvent): void {
+  if (!animMenuOpen.value) return
+  if (animMenu.value && !animMenu.value.contains(e.target as Node)) {
+    animMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('pointerdown', onDocPointerDown)
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('pointerdown', onDocPointerDown)
   store.reset()
 })
 
@@ -344,6 +372,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
         :current="currentTime"
         :segments="segments"
         :operation="operation"
+        :transition-name="transitionName"
         @update:start="store.setStart"
         @update:end="store.setEnd"
         @seek="seekTo"
@@ -440,17 +469,47 @@ async function onDownload(e: MouseEvent): Promise<void> {
       <div class="segments">
         <div class="segments-head">
           <span class="segments-title">{{ t('segments.title') }}</span>
-          <button
-            class="btn tiny add"
-            type="button"
-            :disabled="!canAddSegment"
-            @click="store.addSegment()"
-          >
-            ＋ {{ t('segments.add') }}
-          </button>
+          <div class="segments-head-actions">
+            <div ref="animMenu" class="anim-menu">
+              <button
+                class="btn tiny"
+                type="button"
+                :aria-haspopup="true"
+                :aria-expanded="animMenuOpen"
+                :title="t('anim.title')"
+                @click="toggleAnimMenu"
+              >
+                ✨ {{ t(currentAnimLabel) }} ▾
+              </button>
+              <div v-if="animMenuOpen" class="anim-dropdown" role="menu">
+                <p class="anim-dropdown-title">{{ t('anim.title') }}</p>
+                <button
+                  v-for="a in animations"
+                  :key="a.id"
+                  class="anim-option"
+                  :class="{ active: animation === a.id }"
+                  type="button"
+                  role="menuitemradio"
+                  :aria-checked="animation === a.id"
+                  @click="chooseAnimation(a.id)"
+                >
+                  <span class="anim-check">{{ animation === a.id ? '✓' : '' }}</span>
+                  {{ t(a.labelKey) }}
+                </button>
+              </div>
+            </div>
+            <button
+              class="btn tiny add"
+              type="button"
+              :disabled="!canAddSegment"
+              @click="store.addSegment()"
+            >
+              ＋ {{ t('segments.add') }}
+            </button>
+          </div>
         </div>
 
-        <TransitionGroup tag="ul" name="seg" class="segments-list">
+        <TransitionGroup tag="ul" :name="transitionName" class="segments-list">
           <li v-for="(seg, i) in segments" :key="`${seg.start}-${seg.end}`" class="segment-row">
             <span class="segment-index">{{ i + 1 }}</span>
             <span class="segment-time">
@@ -786,9 +845,66 @@ async function onDownload(e: MouseEvent): Promise<void> {
   font-size: 13px;
   color: var(--vc-text-dim);
 }
+.segments-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .btn.tiny.add {
   font-size: 13px;
   padding: 6px 10px;
+}
+
+/* Animations-Menü */
+.anim-menu {
+  position: relative;
+}
+.anim-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--vc-border);
+  border-radius: 10px;
+  background: var(--vc-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.anim-dropdown-title {
+  margin: 4px 8px 6px;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
+.anim-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--vc-text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.anim-option:hover {
+  background: var(--vc-accent-soft);
+}
+.anim-option.active {
+  color: var(--vc-accent);
+  font-weight: 600;
+}
+.anim-check {
+  width: 14px;
+  flex: none;
+  color: var(--vc-accent);
+}
+.anim-option:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 1px;
 }
 .segments-list {
   list-style: none;
@@ -838,27 +954,54 @@ async function onDownload(e: MouseEvent): Promise<void> {
   color: var(--vc-text-dim);
 }
 
-/* Ein-/Ausblenden der Ausschnitte in der Liste */
-.seg-enter-from,
-.seg-leave-to {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
-}
-.seg-enter-active,
-.seg-leave-active {
+/* Übergänge der Listenzeilen – Stil je nach Menüauswahl (anim-*).
+   Gemeinsames Timing + Layout, danach der Effekt pro Preset. */
+.anim-fade-enter-active,
+.anim-fade-leave-active,
+.anim-slide-enter-active,
+.anim-slide-leave-active,
+.anim-scale-enter-active,
+.anim-scale-leave-active,
+.anim-flip-enter-active,
+.anim-flip-leave-active {
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity 0.28s ease,
+    transform 0.28s ease;
 }
-/* Damit die übrigen Zeilen sanft nachrücken, wird die entfernte Zeile aus
-   dem Fluss genommen. */
-.seg-leave-active {
+/* Entfernte Zeile aus dem Fluss nehmen, damit die übrigen sanft nachrücken. */
+.anim-fade-leave-active,
+.anim-slide-leave-active,
+.anim-scale-leave-active,
+.anim-flip-leave-active {
   position: absolute;
   left: 0;
   right: 0;
 }
-.seg-move {
-  transition: transform 0.25s ease;
+.anim-fade-move,
+.anim-slide-move,
+.anim-scale-move,
+.anim-flip-move {
+  transition: transform 0.28s ease;
+}
+/* Effekte je Preset */
+.anim-fade-enter-from,
+.anim-fade-leave-to {
+  opacity: 0;
+}
+.anim-slide-enter-from,
+.anim-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-18px);
+}
+.anim-scale-enter-from,
+.anim-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.anim-flip-enter-from,
+.anim-flip-leave-to {
+  opacity: 0;
+  transform: perspective(400px) rotateX(-80deg);
 }
 
 .segments-hint {
@@ -1034,9 +1177,18 @@ a.btn {
   .bar {
     transition: none;
   }
-  .seg-enter-active,
-  .seg-leave-active,
-  .seg-move {
+  .anim-fade-enter-active,
+  .anim-fade-leave-active,
+  .anim-fade-move,
+  .anim-slide-enter-active,
+  .anim-slide-leave-active,
+  .anim-slide-move,
+  .anim-scale-enter-active,
+  .anim-scale-leave-active,
+  .anim-scale-move,
+  .anim-flip-enter-active,
+  .anim-flip-leave-active,
+  .anim-flip-move {
     transition: none;
   }
 }

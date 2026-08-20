@@ -11,6 +11,8 @@ const props = defineProps<{
   segments?: { start: number; end: number }[]
   /** 'keep' oder 'remove' – nur für die Einfärbung der Bänder. */
   operation?: 'keep' | 'remove'
+  /** Übergangsname für das Ein-/Ausblenden der Bänder (aus dem Menü). */
+  transitionName?: string
 }>()
 
 const emit = defineEmits<{
@@ -91,7 +93,7 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
     @pointerleave="onPointerUp"
   >
     <div ref="track" class="track" @pointerdown="onTrackDown">
-      <TransitionGroup name="band">
+      <TransitionGroup :name="transitionName ?? 'anim-fade'">
         <div
           v-for="band in segmentBands"
           :key="band.key"
@@ -176,21 +178,47 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   border-bottom: 2px solid var(--vc-error-text, #d33);
 }
 
-/* Ein-/Ausblenden der Bänder beim Zusammensetzen der Ausschnitte */
-.band-enter-from,
-.band-leave-to {
-  opacity: 0;
-  transform: scaleY(0.4);
-}
-.band-enter-active,
-.band-leave-active {
+/* Übergänge der Bänder – Stil je nach Menüauswahl (anim-*) */
+.anim-fade-enter-active,
+.anim-fade-leave-active,
+.anim-slide-enter-active,
+.anim-slide-leave-active,
+.anim-scale-enter-active,
+.anim-scale-leave-active,
+.anim-flip-enter-active,
+.anim-flip-leave-active {
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity 0.28s ease,
+    transform 0.28s ease;
+}
+.anim-fade-enter-from,
+.anim-fade-leave-to {
+  opacity: 0;
+}
+.anim-slide-enter-from,
+.anim-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.anim-scale-enter-from,
+.anim-scale-leave-to {
+  opacity: 0;
+  transform: scaleY(0.35);
+}
+.anim-flip-enter-from,
+.anim-flip-leave-to {
+  opacity: 0;
+  transform: perspective(300px) rotateX(-80deg);
 }
 @media (prefers-reduced-motion: reduce) {
-  .band-enter-active,
-  .band-leave-active {
+  .anim-fade-enter-active,
+  .anim-fade-leave-active,
+  .anim-slide-enter-active,
+  .anim-slide-leave-active,
+  .anim-scale-enter-active,
+  .anim-scale-leave-active,
+  .anim-flip-enter-active,
+  .anim-flip-leave-active {
     transition: none;
   }
 }
