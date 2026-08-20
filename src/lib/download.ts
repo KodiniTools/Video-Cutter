@@ -5,6 +5,8 @@
  * echten Download aus, sondern öffnet die Datei im selben Tab.
  *
  * Strategie (in dieser Reihenfolge):
+ *  0. Chromium (Desktop/Android) -> "Speichern unter"-Dialog
+ *     (File System Access API): Nutzer wählt Ordner UND Namen selbst.
  *  1. iOS/iPadOS + Web Share (Level 2) -> nativer Teilen-Dialog
  *     ("In Dateien sichern" / "Video sichern").
  *  2. Alle übrigen Plattformen -> programmatischer `<a download>`-Klick.
@@ -50,6 +52,62 @@ async function shareFile(file: File): Promise<boolean> {
   }
 }
 
+// --- "Speichern unter"-Dialog (File System Access API) -------------------
+// Nur Chromium (Chrome/Edge/Opera, Desktop + Android). Der Nutzer wählt
+// Ordner UND Dateinamen selbst. Firefox/Safari/iOS: nicht verfügbar -> Fallback.
+
+interface SavePickerType {
+  description?: string
+  accept: Record<string, string[]>
+}
+interface SavePickerOptions {
+  suggestedName?: string
+  types?: SavePickerType[]
+}
+interface WritableLike {
+  write: (data: Blob) => Promise<void>
+  close: () => Promise<void>
+}
+interface FileHandleLike {
+  createWritable: () => Promise<WritableLike>
+}
+type ShowSaveFilePicker = (opts?: SavePickerOptions) => Promise<FileHandleLike>
+
+function fileExtension(name: string): string {
+  const m = /\.([a-zA-Z0-9]{1,5})$/.exec(name)
+  return m ? m[1].toLowerCase() : ''
+}
+
+/**
+ * Öffnet den nativen "Speichern unter"-Dialog und schreibt den Blob dorthin.
+ * @returns true, wenn gespeichert ODER vom Nutzer abgebrochen wurde (kein
+ *          weiterer Fallback nötig); false, wenn die API fehlt/fehlschlägt.
+ */
+async function savePickerDownload(blob: Blob, name: string): Promise<boolean> {
+  const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker })
+    .showSaveFilePicker
+  if (typeof picker !== 'function') return false
+
+  const mime = blob.type || 'video/mp4'
+  const ext = fileExtension(name)
+  const types: SavePickerType[] = ext
+    ? [{ description: 'Video', accept: { [mime]: [`.${ext}`] } }]
+    : []
+
+  try {
+    const handle = await picker({ suggestedName: name, types })
+    const writable = await handle.createWritable()
+    await writable.write(blob)
+    await writable.close()
+    return true
+  } catch (err) {
+    // Nutzer hat den Dialog abgebrochen -> als erledigt behandeln.
+    if (err instanceof DOMException && err.name === 'AbortError') return true
+    // Sonstiger Fehler -> Aufrufer soll den klassischen Download versuchen.
+    return false
+  }
+}
+
 function anchorDownload(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -80,12 +138,17 @@ export async function saveFile({ blob, name }: DownloadableFile): Promise<boolea
   const file = new File([blob], name, { type: blob.type || 'video/mp4' })
   const apple = isAppleMobile()
 
+  // 0) "Speichern unter"-Dialog (Chromium): Nutzer wählt Ort + Name selbst.
+  if (!apple) {
+    if (await savePickerDownload(blob, name)) return true
+  }
+
   // 1) iOS/iPadOS: nativer Teilen-Dialog
   if (apple && canShareFile(file)) {
     if (await shareFile(file)) return true
   }
 
-  // 2) Desktop/Android: klassischer Download
+  // 2) Desktop/Android ohne Picker: klassischer Download
   if (!apple) {
     anchorDownload(blob, name)
     return true
