@@ -44,7 +44,7 @@ onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChang
 
 <style scoped>
 .shell {
-  max-width: 820px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 24px 20px 40px;
   display: flex;
