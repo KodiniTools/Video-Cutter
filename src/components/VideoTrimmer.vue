@@ -19,8 +19,11 @@ const {
   currentTime,
   mode,
   operation,
+  segments,
   hasVideo,
   canExport,
+  canAddSegment,
+  effectiveSegments,
   selectionDuration,
   resultUrl,
   resultName,
@@ -163,25 +166,21 @@ async function onExport(): Promise<void> {
   store.revokeResult()
   try {
     const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
+    const cutSegments = effectiveSegments.value.map((s) => ({
+      start: s.start,
+      duration: Math.max(0, s.end - s.start),
+    }))
     // Container-Wahl (muss zur Server-Logik passen):
-    //  - copy: Original-Endung behalten.
-    //  - reencode/remove: WebM bleibt WebM, sonst .mp4.
+    //  - verlustfrei (copy behalten, genau ein Ausschnitt): Original-Endung.
+    //  - sonst (entfernen, mehrere Ausschnitte, neu kodieren): WebM bleibt
+    //    WebM, sonst .mp4.
     const inputExt = getExtension(fileName.value)
     const isWebm = inputExt === 'webm'
-    const ext =
-      operation.value === 'remove'
-        ? isWebm
-          ? 'webm'
-          : 'mp4'
-        : mode.value === 'copy'
-          ? inputExt
-          : isWebm
-            ? 'webm'
-            : 'mp4'
+    const lossless = operation.value === 'keep' && mode.value === 'copy' && cutSegments.length === 1
+    const ext = lossless ? inputExt : isWebm ? 'webm' : 'mp4'
     const blob = await serverCut(
       store.file,
-      startTime.value,
-      selectionDuration.value,
+      cutSegments,
       mode.value,
       operation.value,
       duration.value,
@@ -262,6 +261,8 @@ async function onDownload(e: MouseEvent): Promise<void> {
         :start="startTime"
         :end="endTime"
         :current="currentTime"
+        :segments="segments"
+        :operation="operation"
         @update:start="store.setStart"
         @update:end="store.setEnd"
         @seek="seekTo"
@@ -272,11 +273,11 @@ async function onDownload(e: MouseEvent): Promise<void> {
         <div class="time-field">
           <label>{{ t('labels.start') }}</label>
           <input
+            v-model="startInput"
             class="time-input"
             type="text"
             inputmode="numeric"
             :aria-label="t('labels.start')"
-            v-model="startInput"
             @change="commitStart"
             @keydown.enter.prevent="commitStart"
           />
@@ -316,11 +317,11 @@ async function onDownload(e: MouseEvent): Promise<void> {
         <div class="time-field">
           <label>{{ t('labels.end') }}</label>
           <input
+            v-model="endInput"
             class="time-input"
             type="text"
             inputmode="numeric"
             :aria-label="t('labels.end')"
-            v-model="endInput"
             @change="commitEnd"
             @keydown.enter.prevent="commitEnd"
           />
@@ -352,6 +353,41 @@ async function onDownload(e: MouseEvent): Promise<void> {
             ⏱
           </button>
         </div>
+      </div>
+
+      <!-- Ausschnitt-Liste: aktuelle Auswahl festhalten, mehrere möglich -->
+      <div class="segments">
+        <div class="segments-head">
+          <span class="segments-title">{{ t('segments.title') }}</span>
+          <button
+            class="btn tiny add"
+            type="button"
+            :disabled="!canAddSegment"
+            @click="store.addSegment()"
+          >
+            ＋ {{ t('segments.add') }}
+          </button>
+        </div>
+
+        <ul v-if="segments.length" class="segments-list">
+          <li v-for="(seg, i) in segments" :key="i" class="segment-row">
+            <span class="segment-index">{{ i + 1 }}</span>
+            <span class="segment-time">
+              {{ formatDisplayTime(seg.start) }} – {{ formatDisplayTime(seg.end) }}
+              <small>({{ formatDisplayTime(Math.max(0, seg.end - seg.start)) }})</small>
+            </span>
+            <button
+              class="btn tiny remove"
+              type="button"
+              :aria-label="t('segments.remove')"
+              :title="t('segments.remove')"
+              @click="store.removeSegment(i)"
+            >
+              ✕
+            </button>
+          </li>
+        </ul>
+        <p v-else class="segments-empty">{{ t('segments.empty') }}</p>
       </div>
 
       <!-- Aktion: Auswahl behalten oder entfernen -->
@@ -616,6 +652,76 @@ async function onDownload(e: MouseEvent): Promise<void> {
 .step:focus-visible {
   outline: 2px solid var(--vc-focus);
   outline-offset: 1px;
+}
+
+/* Ausschnitt-Liste */
+.segments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--vc-border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.segments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.segments-title {
+  font-size: 13px;
+  color: var(--vc-text-dim);
+}
+.btn.tiny.add {
+  font-size: 13px;
+  padding: 6px 10px;
+}
+.segments-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.segment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--vc-border);
+  border-radius: 8px;
+  background: var(--vc-surface);
+}
+.segment-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--vc-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  flex: none;
+}
+.segment-time {
+  flex: 1;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.segment-time small {
+  color: var(--vc-text-dim);
+}
+.btn.tiny.remove {
+  padding: 4px 8px;
+  line-height: 1;
+}
+.segments-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
 }
 
 /* Modus */

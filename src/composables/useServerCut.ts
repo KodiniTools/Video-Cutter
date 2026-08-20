@@ -162,16 +162,21 @@ function cancel(): void {
   rej?.(new Error(CUT_CANCELLED))
 }
 
+/** Ein Ausschnitt für den Server: Start + Länge in Sekunden. */
+export interface CutSegment {
+  start: number
+  duration: number
+}
+
 /**
  * Schneidet ein Video serverseitig.
- * @param duration  Länge der Auswahl in Sekunden (end - start).
- * @param operation 'keep' behält die Auswahl, 'remove' entfernt sie.
+ * @param segments  Ein oder mehrere Ausschnitte ({ start, duration }).
+ * @param operation 'keep' behält die Ausschnitte, 'remove' entfernt sie.
  * @param total     Gesamtdauer des Videos (nur für 'remove' nötig).
  */
 async function cut(
   file: File,
-  start: number,
-  duration: number,
+  segments: CutSegment[],
   mode: TrimMode,
   operation: CutOperation = 'keep',
   total = 0,
@@ -186,8 +191,7 @@ async function cut(
   try {
     const form = new FormData()
     form.append('video', file)
-    form.append('start', String(start))
-    form.append('duration', String(duration))
+    form.append('segments', JSON.stringify(segments))
     form.append('mode', mode)
     form.append('operation', operation)
     if (operation === 'remove') form.append('total', String(total))
