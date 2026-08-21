@@ -8,6 +8,7 @@ import { useAnimationPref } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
+import DropdownMenu from './DropdownMenu.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -50,6 +51,30 @@ const { animation, transitionName, animations } = useAnimationPref()
 const busy = computed(() => isProcessing.value)
 const statusLabel = computed(() =>
   phase.value === 'upload' ? t('status.uploading') : t('status.processing'),
+)
+
+// Beschriftungen für die Menü-Buttons oben am Canvas.
+const operationLabel = computed(() =>
+  operation.value === 'keep' ? t('operation.keep') : t('operation.remove'),
+)
+
+// Auswahl im Menü treffen und das Menü schließen.
+function pickOperation(op: 'keep' | 'remove', close: () => void): void {
+  store.setOperation(op)
+  close()
+}
+function pickMode(m: 'copy' | 'reencode', close: () => void): void {
+  store.setMode(m)
+  close()
+}
+// Beim Entfernen wird immer neu kodiert -> Modus ist dann fest & deaktiviert.
+const modeDisabled = computed(() => operation.value === 'remove')
+const modeLabel = computed(() =>
+  operation.value === 'remove'
+    ? t('mode.accurate')
+    : mode.value === 'copy'
+      ? t('mode.fast')
+      : t('mode.accurate'),
 )
 
 function formatMB(bytes: number): string {
@@ -516,8 +541,100 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </div>
         </div>
 
-        <!-- MITTE: Canvas (Video + Timeline + Ergebnis) -->
+        <!-- MITTE: Canvas (Werkzeugleiste + Video + Timeline + Ergebnis) -->
         <div class="canvas">
+          <!-- Werkzeugleiste: Aktion & Modus als Menüs, Export separat -->
+          <div class="canvas-toolbar">
+            <div class="toolbar-menus">
+              <DropdownMenu :label="operationLabel" :title="t('operation.legend')">
+                <template #default="{ close }">
+                  <button
+                    class="menu-option"
+                    :class="{ active: operation === 'keep' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="operation === 'keep'"
+                    @click="pickOperation('keep', close)"
+                  >
+                    <span class="menu-check">{{ operation === 'keep' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('operation.keep') }}</b>
+                      <small>{{ t('operation.keepHint') }}</small>
+                    </span>
+                  </button>
+                  <button
+                    class="menu-option"
+                    :class="{ active: operation === 'remove' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="operation === 'remove'"
+                    @click="pickOperation('remove', close)"
+                  >
+                    <span class="menu-check">{{ operation === 'remove' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('operation.remove') }}</b>
+                      <small>{{ t('operation.removeHint') }}</small>
+                    </span>
+                  </button>
+                </template>
+              </DropdownMenu>
+
+              <DropdownMenu :label="modeLabel" :title="t('mode.legend')" :disabled="modeDisabled">
+                <template #default="{ close }">
+                  <button
+                    class="menu-option"
+                    :class="{ active: mode === 'copy' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="mode === 'copy'"
+                    @click="pickMode('copy', close)"
+                  >
+                    <span class="menu-check">{{ mode === 'copy' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('mode.fast') }}</b>
+                      <small>{{ t('mode.fastHint') }}</small>
+                    </span>
+                  </button>
+                  <button
+                    class="menu-option"
+                    :class="{ active: mode === 'reencode' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="mode === 'reencode'"
+                    @click="pickMode('reencode', close)"
+                  >
+                    <span class="menu-check">{{ mode === 'reencode' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('mode.accurate') }}</b>
+                      <small>{{ t('mode.accurateHint') }}</small>
+                    </span>
+                  </button>
+                </template>
+              </DropdownMenu>
+            </div>
+
+            <button
+              class="btn primary export"
+              type="button"
+              :disabled="!canExport || busy"
+              @click="onExport"
+            >
+              <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
+              <template v-else>{{ t('actions.export') }}</template>
+            </button>
+          </div>
+
+          <p v-if="modeDisabled" class="reencode-note">{{ t('operation.removeNote') }}</p>
+
+          <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
+            <div class="bar" :style="{ width: `${progress}%` }"></div>
+          </div>
+          <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
+          <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
+            {{ t('actions.cancel') }}
+          </button>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+
           <video
             ref="videoEl"
             class="player"
@@ -558,90 +675,6 @@ async function onDownload(e: MouseEvent): Promise<void> {
             </div>
             <p v-if="appleMobile" class="result-hint">{{ t('result.iosHint') }}</p>
           </div>
-        </div>
-
-        <!-- RECHTS: Optionen & Aktion -->
-        <div class="panel panel-right">
-          <!-- Aktion: Auswahl behalten oder entfernen -->
-          <fieldset class="mode">
-            <legend>{{ t('operation.legend') }}</legend>
-            <label class="radio" :class="{ active: operation === 'keep' }">
-              <input
-                type="radio"
-                value="keep"
-                :checked="operation === 'keep'"
-                @change="store.setOperation('keep')"
-              />
-              <span>
-                <b>{{ t('operation.keep') }}</b>
-                <small>{{ t('operation.keepHint') }}</small>
-              </span>
-            </label>
-            <label class="radio" :class="{ active: operation === 'remove' }">
-              <input
-                type="radio"
-                value="remove"
-                :checked="operation === 'remove'"
-                @change="store.setOperation('remove')"
-              />
-              <span>
-                <b>{{ t('operation.remove') }}</b>
-                <small>{{ t('operation.removeHint') }}</small>
-              </span>
-            </label>
-          </fieldset>
-
-          <!-- Modus (nur beim Behalten relevant; Entfernen kodiert immer neu) -->
-          <fieldset v-if="operation === 'keep'" class="mode">
-            <legend>{{ t('mode.legend') }}</legend>
-            <label class="radio" :class="{ active: mode === 'copy' }">
-              <input
-                type="radio"
-                value="copy"
-                :checked="mode === 'copy'"
-                @change="store.setMode('copy')"
-              />
-              <span>
-                <b>{{ t('mode.fast') }}</b>
-                <small>{{ t('mode.fastHint') }}</small>
-              </span>
-            </label>
-            <label class="radio" :class="{ active: mode === 'reencode' }">
-              <input
-                type="radio"
-                value="reencode"
-                :checked="mode === 'reencode'"
-                @change="store.setMode('reencode')"
-              />
-              <span>
-                <b>{{ t('mode.accurate') }}</b>
-                <small>{{ t('mode.accurateHint') }}</small>
-              </span>
-            </label>
-          </fieldset>
-          <p v-else class="reencode-note">{{ t('operation.removeNote') }}</p>
-
-          <!-- Export -->
-          <button
-            class="btn primary export"
-            type="button"
-            :disabled="!canExport || busy"
-            @click="onExport"
-          >
-            <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
-            <template v-else>{{ t('actions.export') }}</template>
-          </button>
-
-          <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
-            <div class="bar" :style="{ width: `${progress}%` }"></div>
-          </div>
-          <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
-
-          <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
-            {{ t('actions.cancel') }}
-          </button>
-
-          <p v-if="error" class="error" role="alert">{{ error }}</p>
         </div>
       </div>
     </div>
@@ -717,25 +750,23 @@ async function onDownload(e: MouseEvent): Promise<void> {
   gap: 14px;
 }
 
-/* 3-Spalten-Layout: links Auswahl/Ausschnitte, Mitte Canvas, rechts Optionen.
-   Auf schmalen Displays gestapelt – Canvas zuerst. */
+/* 2-Spalten-Layout: links Auswahl/Ausschnitte, Mitte/rechts der Canvas mit
+   Werkzeugleiste. Optionen (Aktion/Modus) sowie Export sitzen als Menüs bzw.
+   Button oben am Canvas -> mehr Platz fürs Video. Schmal: gestapelt, Canvas
+   zuerst. */
 .editor-grid {
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
   grid-template-areas:
     'canvas'
-    'left'
-    'right';
+    'left';
 }
 .panel-left {
   grid-area: left;
 }
 .canvas {
   grid-area: canvas;
-}
-.panel-right {
-  grid-area: right;
 }
 .panel,
 .canvas {
@@ -744,12 +775,70 @@ async function onDownload(e: MouseEvent): Promise<void> {
   gap: 14px;
   min-width: 0;
 }
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   .editor-grid {
-    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(260px, 320px);
-    grid-template-areas: 'left canvas right';
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-areas: 'left canvas';
     align-items: start;
   }
+}
+
+/* Werkzeugleiste oben am Canvas */
+.canvas-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.toolbar-menus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.canvas-toolbar .export {
+  margin-left: auto;
+  align-self: stretch;
+  padding: 10px 20px;
+}
+
+/* Optionen im Menü (Aktion/Modus) */
+.menu-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vc-text);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-option:hover {
+  background: var(--vc-accent-soft);
+}
+.menu-option.active {
+  background: var(--vc-accent-soft);
+}
+.menu-option:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 1px;
+}
+.menu-check {
+  width: 14px;
+  flex: none;
+  color: var(--vc-accent);
+  font-weight: 700;
+}
+.menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-text small {
+  color: var(--vc-text-dim);
+  font-size: 12px;
 }
 
 /* Karten-Container in den Panels */
@@ -1079,43 +1168,6 @@ async function onDownload(e: MouseEvent): Promise<void> {
   color: var(--vc-text-dim);
 }
 
-/* Modus */
-.mode {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  border: 1px solid var(--vc-border);
-  border-radius: 10px;
-  padding: 12px;
-}
-.mode legend {
-  padding: 0 6px;
-  font-size: 13px;
-  color: var(--vc-text-dim);
-}
-.radio {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px;
-  border: 1px solid var(--vc-border);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.radio.active {
-  border-color: var(--vc-accent);
-  background: var(--vc-accent-soft);
-}
-.radio span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.radio small {
-  color: var(--vc-text-dim);
-  font-size: 12px;
-}
-
 /* Buttons */
 .btn {
   appearance: none;
@@ -1197,6 +1249,20 @@ a.btn {
   margin: -4px 0 0;
   font-size: 12px;
   color: var(--vc-text-dim);
+}
+
+/* Auf schmalen Displays Export-Button in der Werkzeugleiste voll breit. */
+@media (max-width: 600px) {
+  .toolbar-menus {
+    width: 100%;
+  }
+  .toolbar-menus .dropdown {
+    flex: 1;
+  }
+  .canvas-toolbar .export {
+    width: 100%;
+    margin-left: 0;
+  }
 }
 
 .upload-detail {
