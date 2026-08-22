@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
-import { useAnimationPref } from '@/composables/useAnimationPref'
+import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
@@ -46,7 +46,7 @@ const {
   cancel: serverCancel,
 } = useServerCut()
 
-const { animation, transitionName, animations } = useAnimationPref()
+const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
 
 const busy = computed(() => isProcessing.value)
 const statusLabel = computed(() =>
@@ -227,6 +227,7 @@ async function onExport(): Promise<void> {
       mode.value,
       operation.value,
       duration.value,
+      { preset: animation.value, duration: animDuration.value },
     )
 
     store.setResult(blob, `${base}_cut.${ext}`)
@@ -494,6 +495,26 @@ async function onDownload(e: MouseEvent): Promise<void> {
                   </button>
                 </template>
               </DropdownMenu>
+            </div>
+
+            <!-- Übergangsdauer (nur relevant, wenn ein Übergang gewählt ist) -->
+            <div class="field-col" :class="{ disabled: animation === 'none' }">
+              <div class="field-row">
+                <label for="anim-duration" class="field-label">{{ t('anim.duration') }}</label>
+                <span class="field-value">{{ animDuration }} s</span>
+              </div>
+              <input
+                id="anim-duration"
+                v-model.number="animDuration"
+                class="range"
+                type="range"
+                :min="MIN_DURATION"
+                :max="MAX_DURATION"
+                step="1"
+                :disabled="animation === 'none'"
+                :aria-label="t('anim.duration')"
+              />
+              <p class="field-hint">{{ t('anim.durationHint') }}</p>
             </div>
 
             <TransitionGroup tag="ul" :name="transitionName" class="segments-list">
@@ -1011,6 +1032,32 @@ async function onDownload(e: MouseEvent): Promise<void> {
 .field-label {
   font-size: 13px;
   color: var(--vc-text-dim);
+}
+.field-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-col.disabled {
+  opacity: 0.5;
+}
+.field-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
+.range {
+  width: 100%;
+  accent-color: var(--vc-accent);
+  cursor: pointer;
+}
+.range:disabled {
+  cursor: not-allowed;
 }
 .segments-list {
   list-style: none;

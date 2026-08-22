@@ -26,6 +26,8 @@ const messages = {
       slide: 'Gleiten',
       scale: 'Zoomen',
       flip: 'Umklappen',
+      duration: 'Übergangsdauer',
+      durationHint: 'Gleichmäßig auf beide Clips (1–10 s). Nur bei mehreren Ausschnitten.',
     },
     operation: {
       legend: 'Aktion',
@@ -95,6 +97,8 @@ const messages = {
       slide: 'Slide',
       scale: 'Zoom',
       flip: 'Flip',
+      duration: 'Transition duration',
+      durationHint: 'Split evenly across both clips (1–10 s). Only with multiple segments.',
     },
     operation: {
       legend: 'Action',

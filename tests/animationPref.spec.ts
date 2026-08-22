@@ -24,4 +24,20 @@ describe('useAnimationPref', () => {
     await nextTick()
     expect(localStorage.getItem('vc-animation')).toBe('flip')
   })
+
+  it('Übergangsdauer wird auf 1–10 begrenzt und gespeichert', async () => {
+    const { duration } = useAnimationPref()
+    duration.value = 5
+    await nextTick()
+    expect(duration.value).toBe(5)
+    expect(localStorage.getItem('vc-animation-duration')).toBe('5')
+
+    duration.value = 99
+    await nextTick()
+    expect(duration.value).toBe(10)
+
+    duration.value = 0
+    await nextTick()
+    expect(duration.value).toBe(1)
+  })
 })

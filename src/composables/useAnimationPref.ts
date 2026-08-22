@@ -12,7 +12,12 @@ export const ANIMATIONS = [
 export type AnimationId = (typeof ANIMATIONS)[number]['id']
 
 const STORAGE_KEY = 'vc-animation'
+const DURATION_KEY = 'vc-animation-duration'
 const DEFAULT: AnimationId = 'fade'
+/** Grenzen der Übergangsdauer in Sekunden. */
+export const MIN_DURATION = 1
+export const MAX_DURATION = 10
+const DEFAULT_DURATION = 2
 
 function load(): AnimationId {
   try {
@@ -24,12 +29,42 @@ function load(): AnimationId {
   return DEFAULT
 }
 
+function clampDuration(v: number): number {
+  if (!Number.isFinite(v)) return DEFAULT_DURATION
+  return Math.min(MAX_DURATION, Math.max(MIN_DURATION, Math.round(v)))
+}
+
+function loadDuration(): number {
+  try {
+    const v = localStorage.getItem(DURATION_KEY)
+    if (v !== null) return clampDuration(Number(v))
+  } catch {
+    /* localStorage nicht verfügbar -> Standard nutzen */
+  }
+  return DEFAULT_DURATION
+}
+
 // Singleton: alle Komponenten teilen dieselbe Auswahl.
 const animation = ref<AnimationId>(load())
+/** Übergangsdauer in Sekunden (gleichmäßig auf beide Clips), 1–10. */
+const duration = ref<number>(loadDuration())
 
 watch(animation, (v) => {
   try {
     localStorage.setItem(STORAGE_KEY, v)
+  } catch {
+    /* Speichern nicht möglich -> ignorieren */
+  }
+})
+
+watch(duration, (v) => {
+  const c = clampDuration(v)
+  if (c !== v) {
+    duration.value = c
+    return
+  }
+  try {
+    localStorage.setItem(DURATION_KEY, String(c))
   } catch {
     /* Speichern nicht möglich -> ignorieren */
   }
@@ -42,5 +77,5 @@ watch(animation, (v) => {
 const transitionName = computed(() => `anim-${animation.value}`)
 
 export function useAnimationPref() {
-  return { animation, transitionName, animations: ANIMATIONS }
+  return { animation, duration, transitionName, animations: ANIMATIONS }
 }
