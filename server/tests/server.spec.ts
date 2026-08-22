@@ -119,9 +119,9 @@ describe('buildServerArgs', () => {
       transition: { preset: 'fade', duration: 2 },
     })
     const fc = args[args.indexOf('-filter_complex') + 1]
-    // xfade mit Typ fade, Dauer 2, Offset = L0 - d = 8 - 2 = 6.
-    expect(fc).toContain('xfade=transition=fade:duration=2.000:offset=6.000')
-    expect(fc).toContain('acrossfade=d=2.000')
+    // Gesamtdauer 2 -> Überblendung d = 1; Offset = L0 - d = 8 - 1 = 7.
+    expect(fc).toContain('xfade=transition=fade:duration=1.000:offset=7.000')
+    expect(fc).toContain('acrossfade=d=1.000')
     expect(fc).toContain('[outv]')
     expect(fc).toContain('[outa]')
     expect(fc).not.toContain('concat=')
@@ -157,7 +157,7 @@ describe('buildServerArgs', () => {
       transition: { preset: 'fade', duration: 10 },
     })
     const fc = args[args.indexOf('-filter_complex') + 1]
-    // duration auf min(10, 3 - 0.05) = 2.95 begrenzt.
+    // d = min(10/2=5, 3 - 0.05=2.95) = 2.95 (auf Bereichslänge begrenzt).
     expect(fc).toContain('duration=2.950')
   })
 
@@ -184,7 +184,8 @@ describe('buildServerArgs', () => {
       { start: 20, duration: 8 },
     ]
     expect(outputDurationFor(keep, undefined)).toBe(16)
-    expect(outputDurationFor(keep, { preset: 'fade', duration: 2 })).toBe(14)
+    // Gesamtdauer 2 -> Überblendung 1 -> 16 - 1 = 15.
+    expect(outputDurationFor(keep, { preset: 'fade', duration: 2 })).toBe(15)
   })
 
   it('remove am Anfang behält nur den Teil danach (einzelner Trim)', () => {
