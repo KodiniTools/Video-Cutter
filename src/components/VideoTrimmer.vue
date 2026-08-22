@@ -274,33 +274,17 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 // --- Animations-Menü -----------------------------------------------------
-const animMenuOpen = ref(false)
-const animMenu = ref<HTMLElement | null>(null)
 const currentAnimLabel = computed(
   () => animations.find((a) => a.id === animation.value)?.labelKey ?? 'anim.fade',
 )
-
-function toggleAnimMenu(): void {
-  animMenuOpen.value = !animMenuOpen.value
-}
-function chooseAnimation(id: (typeof animations)[number]['id']): void {
+function pickAnimation(id: (typeof animations)[number]['id'], close: () => void): void {
   animation.value = id
-  animMenuOpen.value = false
-}
-function onDocPointerDown(e: PointerEvent): void {
-  if (!animMenuOpen.value) return
-  if (animMenu.value && !animMenu.value.contains(e.target as Node)) {
-    animMenuOpen.value = false
-  }
+  close()
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-  document.addEventListener('pointerdown', onDocPointerDown)
-})
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  document.removeEventListener('pointerdown', onDocPointerDown)
   store.reset()
 })
 
@@ -474,47 +458,42 @@ async function onDownload(e: MouseEvent): Promise<void> {
           </section>
 
           <!-- Ausschnitt-Liste: aktuelle Auswahl festhalten, mehrere möglich -->
-          <div class="segments">
-            <div class="segments-head">
-              <span class="segments-title">{{ t('segments.title') }}</span>
-              <div class="segments-head-actions">
-                <div ref="animMenu" class="anim-menu">
+          <section class="card segments">
+            <div class="card-head">
+              <h3 class="panel-title">{{ t('segments.title') }}</h3>
+              <span v-if="segments.length" class="count">{{ segments.length }}</span>
+            </div>
+
+            <button
+              class="btn block add"
+              type="button"
+              :disabled="!canAddSegment"
+              @click="store.addSegment()"
+            >
+              {{ t('segments.add') }}
+            </button>
+
+            <div class="field-row">
+              <span class="field-label">{{ t('anim.menu') }}</span>
+              <DropdownMenu :label="t(currentAnimLabel)" :title="t('anim.title')">
+                <template #default="{ close }">
                   <button
-                    class="btn tiny"
+                    v-for="a in animations"
+                    :key="a.id"
+                    class="menu-option"
+                    :class="{ active: animation === a.id }"
                     type="button"
-                    :aria-haspopup="true"
-                    :aria-expanded="animMenuOpen"
-                    :title="t('anim.title')"
-                    @click="toggleAnimMenu"
+                    role="menuitemradio"
+                    :aria-checked="animation === a.id"
+                    @click="pickAnimation(a.id, close)"
                   >
-                    ✨ {{ t(currentAnimLabel) }} ▾
+                    <span class="menu-check">{{ animation === a.id ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t(a.labelKey) }}</b>
+                    </span>
                   </button>
-                  <div v-if="animMenuOpen" class="anim-dropdown" role="menu">
-                    <p class="anim-dropdown-title">{{ t('anim.title') }}</p>
-                    <button
-                      v-for="a in animations"
-                      :key="a.id"
-                      class="anim-option"
-                      :class="{ active: animation === a.id }"
-                      type="button"
-                      role="menuitemradio"
-                      :aria-checked="animation === a.id"
-                      @click="chooseAnimation(a.id)"
-                    >
-                      <span class="anim-check">{{ animation === a.id ? '✓' : '' }}</span>
-                      {{ t(a.labelKey) }}
-                    </button>
-                  </div>
-                </div>
-                <button
-                  class="btn tiny add"
-                  type="button"
-                  :disabled="!canAddSegment"
-                  @click="store.addSegment()"
-                >
-                  ＋ {{ t('segments.add') }}
-                </button>
-              </div>
+                </template>
+              </DropdownMenu>
             </div>
 
             <TransitionGroup tag="ul" :name="transitionName" class="segments-list">
@@ -538,7 +517,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
             <p v-if="!segments.length" class="segments-empty">{{ t('segments.empty') }}</p>
 
             <p class="segments-hint">{{ t('segments.hint') }}</p>
-          </div>
+          </section>
         </div>
 
         <!-- MITTE: Canvas (Werkzeugleiste + Video + Timeline + Ergebnis) -->
@@ -988,81 +967,50 @@ async function onDownload(e: MouseEvent): Promise<void> {
 .segments {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--vc-border);
-  border-radius: 10px;
-  padding: 12px;
+  gap: 10px;
 }
-.segments-head {
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-head .panel-title {
+  margin: 0;
+}
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--vc-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Volle-Breite-Button (z. B. Ausschnitt hinzufügen) */
+.btn.block {
+  width: 100%;
+  text-align: center;
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+  font-weight: 600;
+}
+.btn.block:hover:not(:disabled) {
+  background: var(--vc-accent-soft);
+}
+/* Beschriftete Steuerzeile (Label links, Bedienelement rechts) */
+.field-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
-.segments-title {
+.field-label {
   font-size: 13px;
   color: var(--vc-text-dim);
-}
-.segments-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.btn.tiny.add {
-  font-size: 13px;
-  padding: 6px 10px;
-}
-
-/* Animations-Menü */
-.anim-menu {
-  position: relative;
-}
-.anim-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
-  min-width: 200px;
-  padding: 6px;
-  border: 1px solid var(--vc-border);
-  border-radius: 10px;
-  background: var(--vc-surface);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-}
-.anim-dropdown-title {
-  margin: 4px 8px 6px;
-  font-size: 12px;
-  color: var(--vc-text-dim);
-}
-.anim-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 8px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--vc-text);
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-.anim-option:hover {
-  background: var(--vc-accent-soft);
-}
-.anim-option.active {
-  color: var(--vc-accent);
-  font-weight: 600;
-}
-.anim-check {
-  width: 14px;
-  flex: none;
-  color: var(--vc-accent);
-}
-.anim-option:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 1px;
 }
 .segments-list {
   list-style: none;
