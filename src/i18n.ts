@@ -27,7 +27,8 @@ const messages = {
       scale: 'Zoomen',
       flip: 'Umklappen',
       duration: 'Übergangsdauer',
-      durationHint: 'Gleichmäßig auf beide Clips (1–10 s). Nur bei mehreren Ausschnitten.',
+      durationHint:
+        'Gesamtdauer (1–10 s), gleichmäßig auf beide Clips: je zur Hälfte aus- und einblenden. Nur bei mehreren Ausschnitten.',
     },
     operation: {
       legend: 'Aktion',
@@ -98,7 +99,8 @@ const messages = {
       scale: 'Zoom',
       flip: 'Flip',
       duration: 'Transition duration',
-      durationHint: 'Split evenly across both clips (1–10 s). Only with multiple segments.',
+      durationHint:
+        'Total duration (1–10 s), split evenly across both clips: half fades out, half fades in. Only with multiple segments.',
     },
     operation: {
       legend: 'Action',

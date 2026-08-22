@@ -56,11 +56,13 @@ export interface ServerArgsInput {
 }
 
 /**
- * Effektive, sichere Übergangsdauer für die gegebenen Bereiche.
- * - 0, wenn kein/none-Übergang oder weniger als zwei Bereiche.
- * - Sonst auf die Bereichslängen begrenzt, damit xfade nie mehr Material
- *   verlangt, als vorhanden ist (innere Bereiche werden zweimal genutzt ->
- *   halbe Länge als Obergrenze).
+ * Effektive, sichere xfade-Überblenddauer für die gegebenen Bereiche.
+ * - null, wenn kein/none-Übergang oder weniger als zwei Bereiche.
+ * - `transition.duration` ist die GESAMTdauer der Animation, gleichmäßig auf
+ *   beide Clips verteilt (z. B. 4 s = 2 s ausblenden + 2 s einblenden). Die
+ *   xfade-Überblendung (wo beide gleichzeitig laufen) ist daher die Hälfte.
+ * - Auf die Bereichslängen begrenzt, damit xfade nie mehr Material verlangt,
+ *   als vorhanden ist (innere Bereiche werden zweimal genutzt -> halbe Länge).
  */
 export function effectiveTransition(
   ranges: Segment[],
@@ -70,7 +72,8 @@ export function effectiveTransition(
   const type = XFADE_TYPES[transition.preset]
   const minLen = Math.min(...ranges.map((r) => r.duration))
   const cap = ranges.length > 2 ? minLen / 2 : minLen
-  const d = Math.min(transition.duration, Math.max(0, cap - 0.05))
+  // Gesamtdauer -> je Clip die Hälfte = xfade-Überblenddauer.
+  const d = Math.min(transition.duration / 2, Math.max(0, cap - 0.05))
   if (!(d >= 0.1)) return null
   return { type, d }
 }
