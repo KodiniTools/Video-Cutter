@@ -131,9 +131,18 @@ else
   )
 
   # Health-Check (nicht fatal): Port aus .env oder Default 9015.
+  # Dem frisch neugeladenen Prozess kurz Zeit zum Binden geben (mehrere Versuche).
   API_PORT="$(sed -n 's/^PORT=\([0-9]\+\).*/\1/p' "$API_DIR/.env" 2>/dev/null | head -n1)"
   API_PORT="${API_PORT:-9015}"
-  if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+  API_OK=0
+  for _try in 1 2 3 4 5 6; do
+    if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+      API_OK=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$API_OK" == "1" ]]; then
     log "Backend gesund auf 127.0.0.1:${API_PORT}"
   else
     log "WARNUNG: Health-Check auf 127.0.0.1:${API_PORT} fehlgeschlagen – 'pm2 logs video-cutter-api' prüfen."
