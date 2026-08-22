@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
-import { buildServerArgs, computeKeepRanges } from '../lib/args'
+import { buildServerArgs, computeKeepRanges, outputDurationFor } from '../lib/args'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../lib/validate'
 import { jobManager } from '../lib/jobs'
 
@@ -82,11 +82,12 @@ cutRouter.post(
         operation: params.operation,
         total: params.total,
         segments: params.segments,
+        transition: params.transition,
       })
 
       // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
-      // behaltenen Bereiche.
-      const outputDuration = keep.reduce((sum, r) => sum + r.duration, 0)
+      // behaltenen Bereiche (abzüglich Übergangs-Überlappungen).
+      const outputDuration = outputDurationFor(keep, params.transition)
 
       // Nicht awaiten: läuft im Hintergrund, Client verfolgt via SSE.
       void jobManager.run(job, args, outputDuration)

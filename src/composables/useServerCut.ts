@@ -168,11 +168,18 @@ export interface CutSegment {
   duration: number
 }
 
+/** Übergang zwischen den zusammengefügten Ausschnitten. */
+export interface CutTransition {
+  preset: string
+  duration: number
+}
+
 /**
  * Schneidet ein Video serverseitig.
- * @param segments  Ein oder mehrere Ausschnitte ({ start, duration }).
- * @param operation 'keep' behält die Ausschnitte, 'remove' entfernt sie.
- * @param total     Gesamtdauer des Videos (nur für 'remove' nötig).
+ * @param segments   Ein oder mehrere Ausschnitte ({ start, duration }).
+ * @param operation  'keep' behält die Ausschnitte, 'remove' entfernt sie.
+ * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
+ * @param transition Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte.
  */
 async function cut(
   file: File,
@@ -180,6 +187,7 @@ async function cut(
   mode: TrimMode,
   operation: CutOperation = 'keep',
   total = 0,
+  transition?: CutTransition,
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -195,6 +203,10 @@ async function cut(
     form.append('mode', mode)
     form.append('operation', operation)
     if (operation === 'remove') form.append('total', String(total))
+    if (transition && transition.preset !== 'none') {
+      form.append('transitionPreset', transition.preset)
+      form.append('transitionDuration', String(transition.duration))
+    }
 
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
     let lastTime = 0

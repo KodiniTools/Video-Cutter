@@ -23,6 +23,22 @@ export interface Segment {
   duration: number
 }
 
+/** Übergangs-Presets (UI) -> FFmpeg-xfade-Übergangsnamen. */
+export type TransitionPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
+const XFADE_TYPES: Record<Exclude<TransitionPreset, 'none'>, string> = {
+  fade: 'fade',
+  slide: 'slideleft',
+  scale: 'zoomin',
+  flip: 'squeezev',
+}
+
+/** Übergang zwischen zusammengefügten Ausschnitten. */
+export interface Transition {
+  preset: TransitionPreset
+  /** Übergangsdauer in Sekunden (gleichmäßig auf beide Clips). */
+  duration: number
+}
+
 export interface ServerArgsInput {
   inputPath: string
   outputPath: string
@@ -35,6 +51,28 @@ export interface ServerArgsInput {
   total?: number
   /** Mehrere Ausschnitte. Ohne Angabe wird {start,duration} als einziger genutzt. */
   segments?: Segment[]
+  /** Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte. */
+  transition?: Transition
+}
+
+/**
+ * Effektive, sichere Übergangsdauer für die gegebenen Bereiche.
+ * - 0, wenn kein/none-Übergang oder weniger als zwei Bereiche.
+ * - Sonst auf die Bereichslängen begrenzt, damit xfade nie mehr Material
+ *   verlangt, als vorhanden ist (innere Bereiche werden zweimal genutzt ->
+ *   halbe Länge als Obergrenze).
+ */
+export function effectiveTransition(
+  ranges: Segment[],
+  transition?: Transition,
+): { type: string; d: number } | null {
+  if (!transition || transition.preset === 'none' || ranges.length < 2) return null
+  const type = XFADE_TYPES[transition.preset]
+  const minLen = Math.min(...ranges.map((r) => r.duration))
+  const cap = ranges.length > 2 ? minLen / 2 : minLen
+  const d = Math.min(transition.duration, Math.max(0, cap - 0.05))
+  if (!(d >= 0.1)) return null
+  return { type, d }
 }
 
 /**
@@ -204,6 +242,62 @@ function concatArgs(input: string, output: string, ranges: Segment[]): string[] 
 }
 
 /**
+ * Fügt Bereiche mit weichem Übergang (xfade/acrossfade) zusammen. Jeder
+ * Übergang blendet die letzten `d` Sekunden des vorigen Clips mit den ersten
+ * `d` Sekunden des nächsten über (gleichmäßig auf beide Clips). Immer Re-Encode.
+ */
+function xfadeArgs(
+  input: string,
+  output: string,
+  ranges: Segment[],
+  type: string,
+  d: number,
+): string[] {
+  const inputs = ranges.flatMap((r) => [
+    '-ss',
+    formatFfmpegTime(r.start),
+    '-t',
+    formatFfmpegTime(Math.max(0, r.duration)),
+    '-i',
+    input,
+  ])
+
+  // Jeden Clip normieren (PTS, Pixelformat) – xfade verlangt gleiche Basis.
+  let filter = ''
+  ranges.forEach((_, i) => {
+    filter += `[${i}:v]setpts=PTS-STARTPTS,format=yuv420p[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
+  })
+
+  // Video- und Audioketten mit kumulativem Offset aufbauen.
+  let vPrev = 'v0'
+  let aPrev = 'a0'
+  let acc = ranges[0].duration
+  for (let t = 1; t < ranges.length; t++) {
+    const offset = acc - t * d // = sum(L0..L_{t-1}) - t*d
+    const vOut = t === ranges.length - 1 ? 'outv' : `vx${t}`
+    const aOut = t === ranges.length - 1 ? 'outa' : `ax${t}`
+    filter += `[${vPrev}][v${t}]xfade=transition=${type}:duration=${d.toFixed(3)}:offset=${offset.toFixed(3)}[${vOut}];`
+    filter += `[${aPrev}][a${t}]acrossfade=d=${d.toFixed(3)}:c1=tri:c2=tri[${aOut}];`
+    vPrev = vOut
+    aPrev = aOut
+    acc += ranges[t].duration
+  }
+
+  return [
+    ...PROGRESS,
+    ...inputs,
+    '-filter_complex',
+    filter.replace(/;$/, ''),
+    '-map',
+    '[outv]',
+    '-map',
+    '[outa]',
+    ...reencodeCodecs(output),
+    output,
+  ]
+}
+
+/**
  * Baut die vollständige Argumentliste für den nativen FFmpeg-Aufruf.
  * `-progress pipe:1` liefert maschinenlesbaren Fortschritt auf stdout.
  * Wird ausschließlich mit `spawn`/`execFile` genutzt (keine Shell → keine Injection).
@@ -211,7 +305,8 @@ function concatArgs(input: string, output: string, ranges: Segment[]): string[] 
  * Verallgemeinert auf beliebig viele Ausschnitte:
  * - Ein einzelner zu behaltender Bereich + copy  -> verlustfreier Trim.
  * - Ein einzelner Bereich + reencode             -> Re-Encode-Trim.
- * - Mehrere Bereiche                             -> Re-Encode + concat.
+ * - Mehrere Bereiche mit Übergang               -> Re-Encode + xfade-Kette.
+ * - Mehrere Bereiche ohne Übergang              -> Re-Encode + concat.
  */
 export function buildServerArgs({
   inputPath,
@@ -222,6 +317,7 @@ export function buildServerArgs({
   operation = 'keep',
   total,
   segments,
+  transition,
 }: ServerArgsInput): string[] {
   const src = segments && segments.length ? segments : [{ start, duration }]
   const fallbackTotal = operation === 'keep' ? Number.POSITIVE_INFINITY : start + duration
@@ -245,5 +341,20 @@ export function buildServerArgs({
     return reencodeTrim(inputPath, outputPath, r.start, r.duration)
   }
 
+  const xf = effectiveTransition(keep, transition)
+  if (xf) {
+    return xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d)
+  }
   return concatArgs(inputPath, outputPath, keep)
+}
+
+/**
+ * Erwartete Ausgabedauer (Sekunden) für die Fortschrittsanzeige.
+ * Summe der behaltenen Bereiche, abzüglich der Überlappungen durch Übergänge.
+ */
+export function outputDurationFor(keep: Segment[], transition?: Transition): number {
+  const sum = keep.reduce((s, r) => s + r.duration, 0)
+  const xf = effectiveTransition(keep, transition)
+  if (!xf) return sum
+  return Math.max(0, sum - (keep.length - 1) * xf.d)
 }

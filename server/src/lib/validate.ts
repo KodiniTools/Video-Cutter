@@ -1,4 +1,11 @@
-import { computeKeepRanges, type TrimMode, type CutOperation, type Segment } from './args'
+import {
+  computeKeepRanges,
+  type TrimMode,
+  type CutOperation,
+  type Segment,
+  type Transition,
+  type TransitionPreset,
+} from './args'
 
 export class ValidationError extends Error {
   statusCode = 400
@@ -14,6 +21,25 @@ export interface CutParams {
   operation: CutOperation
   /** Gesamtdauer des Videos – nur bei operation 'remove' gesetzt. */
   total?: number
+  /** Übergang beim Zusammenfügen mehrerer Ausschnitte. */
+  transition?: Transition
+}
+
+const TRANSITION_PRESETS: TransitionPreset[] = ['none', 'fade', 'slide', 'scale', 'flip']
+/** Höchste erlaubte Übergangsdauer in Sekunden. */
+const MAX_TRANSITION_SEC = 10
+
+/** Liest optionalen Übergang (Preset + Dauer 1–10 s). */
+function parseTransition(body: Record<string, unknown>): Transition | undefined {
+  const preset = body.transitionPreset
+  if (typeof preset !== 'string' || !TRANSITION_PRESETS.includes(preset as TransitionPreset)) {
+    return undefined
+  }
+  if (preset === 'none') return undefined
+  let duration = Number(body.transitionDuration)
+  if (!Number.isFinite(duration)) duration = 1
+  duration = Math.min(MAX_TRANSITION_SEC, Math.max(1, duration))
+  return { preset: preset as TransitionPreset, duration }
 }
 
 /** Liest die Segment-Liste (JSON) oder – als Fallback – das einzelne start/duration. */
@@ -81,7 +107,9 @@ export function parseCutParams(body: Record<string, unknown>, maxDurationSec: nu
     )
   }
 
-  return { segments, mode, operation, total }
+  const transition = parseTransition(body)
+
+  return { segments, mode, operation, total, transition }
 }
 
 /** Endung in Kleinbuchstaben (1–5 Zeichen), Fallback `mp4`. */

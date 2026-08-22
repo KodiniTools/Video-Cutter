@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildServerArgs, formatFfmpegTime } from '../src/lib/args'
+import { buildServerArgs, formatFfmpegTime, outputDurationFor } from '../src/lib/args'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../src/lib/validate'
 
 describe('formatFfmpegTime', () => {
@@ -104,6 +104,87 @@ describe('buildServerArgs', () => {
     expect(fc).toContain('concat=n=3:v=1:a=1')
     expect(fc).toContain('[2:v]')
     expect(args).toContain('libx264')
+  })
+
+  it('Übergang: zwei Segmente werden per xfade/acrossfade überblendet', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 8 },
+        { start: 20, duration: 8 },
+      ],
+      transition: { preset: 'fade', duration: 2 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    // xfade mit Typ fade, Dauer 2, Offset = L0 - d = 8 - 2 = 6.
+    expect(fc).toContain('xfade=transition=fade:duration=2.000:offset=6.000')
+    expect(fc).toContain('acrossfade=d=2.000')
+    expect(fc).toContain('[outv]')
+    expect(fc).toContain('[outa]')
+    expect(fc).not.toContain('concat=')
+    expect(args).toContain('libx264')
+  })
+
+  it('Übergang: Preset wird auf xfade-Typ abgebildet (slide -> slideleft)', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 6 },
+        { start: 20, duration: 6 },
+      ],
+      transition: { preset: 'slide', duration: 3 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    expect(fc).toContain('xfade=transition=slideleft:')
+  })
+
+  it('Übergang: zu lange Dauer wird auf die Bereichslänge begrenzt', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 3 },
+        { start: 20, duration: 3 },
+      ],
+      transition: { preset: 'fade', duration: 10 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    // duration auf min(10, 3 - 0.05) = 2.95 begrenzt.
+    expect(fc).toContain('duration=2.950')
+  })
+
+  it('Übergang none: normaler concat ohne xfade', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 5 },
+        { start: 10, duration: 5 },
+      ],
+      transition: { preset: 'none', duration: 2 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    expect(fc).toContain('concat=n=2')
+    expect(fc).not.toContain('xfade')
+  })
+
+  it('outputDurationFor zieht die Übergangs-Überlappungen ab', () => {
+    const keep = [
+      { start: 0, duration: 8 },
+      { start: 20, duration: 8 },
+    ]
+    expect(outputDurationFor(keep, undefined)).toBe(16)
+    expect(outputDurationFor(keep, { preset: 'fade', duration: 2 })).toBe(14)
   })
 
   it('remove am Anfang behält nur den Teil danach (einzelner Trim)', () => {
