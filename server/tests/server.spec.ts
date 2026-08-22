@@ -106,7 +106,7 @@ describe('buildServerArgs', () => {
     expect(args).toContain('libx264')
   })
 
-  it('Übergang: zwei Segmente werden per xfade/acrossfade überblendet', () => {
+  it('Übergang fade: Dip to Black (ausblenden + einblenden, kein xfade)', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
       outputPath: '/tmp/out.mp4',
@@ -116,35 +116,39 @@ describe('buildServerArgs', () => {
         { start: 0, duration: 8 },
         { start: 20, duration: 8 },
       ],
-      transition: { preset: 'fade', duration: 2 },
+      transition: { preset: 'fade', duration: 4 },
     })
     const fc = args[args.indexOf('-filter_complex') + 1]
-    // Gesamtdauer 2 -> Überblendung d = 1; Offset = L0 - d = 8 - 1 = 7.
-    expect(fc).toContain('xfade=transition=fade:duration=1.000:offset=7.000')
-    expect(fc).toContain('acrossfade=d=1.000')
-    expect(fc).toContain('[outv]')
-    expect(fc).toContain('[outa]')
-    expect(fc).not.toContain('concat=')
+    // Gesamtdauer 4 -> je Seite f = 2 s.
+    // Clip 0 blendet am Ende aus (st = 8 - 2 = 6), Clip 1 blendet am Anfang ein.
+    expect(fc).toContain('fade=t=out:st=6.000:d=2.000')
+    expect(fc).toContain('fade=t=in:st=0:d=2.000')
+    expect(fc).toContain('afade=t=out:st=6.000:d=2.000')
+    expect(fc).toContain('afade=t=in:st=0:d=2.000')
+    expect(fc).toContain('concat=n=2:v=1:a=1')
+    expect(fc).not.toContain('xfade')
     expect(args).toContain('libx264')
   })
 
-  it('Übergang: Preset wird auf xfade-Typ abgebildet (slide -> slideleft)', () => {
+  it('Übergang: geometrisches Preset nutzt xfade (slide -> slideleft)', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
       outputPath: '/tmp/out.mp4',
       mode: 'reencode',
       operation: 'keep',
       segments: [
-        { start: 0, duration: 6 },
-        { start: 20, duration: 6 },
+        { start: 0, duration: 8 },
+        { start: 20, duration: 8 },
       ],
-      transition: { preset: 'slide', duration: 3 },
+      transition: { preset: 'slide', duration: 4 },
     })
     const fc = args[args.indexOf('-filter_complex') + 1]
-    expect(fc).toContain('xfade=transition=slideleft:')
+    // Gesamtdauer 4 -> Überblendung d = 2; Offset = L0 - d = 8 - 2 = 6.
+    expect(fc).toContain('xfade=transition=slideleft:duration=2.000:offset=6.000')
+    expect(fc).toContain('acrossfade=d=2.000')
   })
 
-  it('Übergang: zu lange Dauer wird auf die Bereichslänge begrenzt', () => {
+  it('Übergang: zu lange Dauer wird auf die Bereichslänge begrenzt (xfade)', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
       outputPath: '/tmp/out.mp4',
@@ -154,14 +158,14 @@ describe('buildServerArgs', () => {
         { start: 0, duration: 3 },
         { start: 20, duration: 3 },
       ],
-      transition: { preset: 'fade', duration: 10 },
+      transition: { preset: 'scale', duration: 10 },
     })
     const fc = args[args.indexOf('-filter_complex') + 1]
     // d = min(10/2=5, 3 - 0.05=2.95) = 2.95 (auf Bereichslänge begrenzt).
     expect(fc).toContain('duration=2.950')
   })
 
-  it('Übergang none: normaler concat ohne xfade', () => {
+  it('Übergang none: normaler concat ohne xfade/fade', () => {
     const args = buildServerArgs({
       inputPath: '/tmp/in.mp4',
       outputPath: '/tmp/out.mp4',
@@ -176,16 +180,19 @@ describe('buildServerArgs', () => {
     const fc = args[args.indexOf('-filter_complex') + 1]
     expect(fc).toContain('concat=n=2')
     expect(fc).not.toContain('xfade')
+    expect(fc).not.toContain('fade=t=')
   })
 
-  it('outputDurationFor zieht die Übergangs-Überlappungen ab', () => {
+  it('outputDurationFor: xfade verkürzt, Dip-to-Black behält die Länge', () => {
     const keep = [
       { start: 0, duration: 8 },
       { start: 20, duration: 8 },
     ]
     expect(outputDurationFor(keep, undefined)).toBe(16)
-    // Gesamtdauer 2 -> Überblendung 1 -> 16 - 1 = 15.
-    expect(outputDurationFor(keep, { preset: 'fade', duration: 2 })).toBe(15)
+    // Dip to Black überlappt nicht -> volle Länge.
+    expect(outputDurationFor(keep, { preset: 'fade', duration: 4 })).toBe(16)
+    // xfade (slide) überlappt um d = 2 -> 16 - 2 = 14.
+    expect(outputDurationFor(keep, { preset: 'slide', duration: 4 })).toBe(14)
   })
 
   it('remove am Anfang behält nur den Teil danach (einzelner Trim)', () => {

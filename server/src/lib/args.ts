@@ -67,15 +67,15 @@ export interface ServerArgsInput {
 export function effectiveTransition(
   ranges: Segment[],
   transition?: Transition,
-): { type: string; d: number } | null {
+): { preset: Exclude<TransitionPreset, 'none'>; type: string; d: number } | null {
   if (!transition || transition.preset === 'none' || ranges.length < 2) return null
   const type = XFADE_TYPES[transition.preset]
   const minLen = Math.min(...ranges.map((r) => r.duration))
   const cap = ranges.length > 2 ? minLen / 2 : minLen
-  // Gesamtdauer -> je Clip die Hälfte = xfade-Überblenddauer.
+  // Gesamtdauer -> je Clip die Hälfte (ausblenden + einblenden).
   const d = Math.min(transition.duration / 2, Math.max(0, cap - 0.05))
   if (!(d >= 0.1)) return null
-  return { type, d }
+  return { preset: transition.preset, type, d }
 }
 
 /**
@@ -301,6 +301,55 @@ function xfadeArgs(
 }
 
 /**
+ * Fügt Bereiche mit „Dip to Black" zusammen: der vorige Clip blendet über `f`
+ * Sekunden nach Schwarz aus, der nächste blendet über `f` Sekunden aus Schwarz
+ * ein (nacheinander, ohne Überlappung). Deutlich sichtbar. Immer Re-Encode.
+ */
+function fadeDipArgs(input: string, output: string, ranges: Segment[], f: number): string[] {
+  const inputs = ranges.flatMap((r) => [
+    '-ss',
+    formatFfmpegTime(r.start),
+    '-t',
+    formatFfmpegTime(Math.max(0, r.duration)),
+    '-i',
+    input,
+  ])
+  const fd = f.toFixed(3)
+  let filter = ''
+  ranges.forEach((r, i) => {
+    const outStart = Math.max(0, r.duration - f).toFixed(3)
+    const vfx = ['setpts=PTS-STARTPTS']
+    const afx = ['asetpts=PTS-STARTPTS']
+    if (i > 0) {
+      vfx.push(`fade=t=in:st=0:d=${fd}`)
+      afx.push(`afade=t=in:st=0:d=${fd}`)
+    }
+    if (i < ranges.length - 1) {
+      vfx.push(`fade=t=out:st=${outStart}:d=${fd}`)
+      afx.push(`afade=t=out:st=${outStart}:d=${fd}`)
+    }
+    vfx.push('format=yuv420p')
+    filter += `[${i}:v]${vfx.join(',')}[v${i}];[${i}:a]${afx.join(',')}[a${i}];`
+  })
+  filter +=
+    ranges.map((_, i) => `[v${i}][a${i}]`).join('') +
+    `concat=n=${ranges.length}:v=1:a=1[outv][outa]`
+
+  return [
+    ...PROGRESS,
+    ...inputs,
+    '-filter_complex',
+    filter,
+    '-map',
+    '[outv]',
+    '-map',
+    '[outa]',
+    ...reencodeCodecs(output),
+    output,
+  ]
+}
+
+/**
  * Baut die vollständige Argumentliste für den nativen FFmpeg-Aufruf.
  * `-progress pipe:1` liefert maschinenlesbaren Fortschritt auf stdout.
  * Wird ausschließlich mit `spawn`/`execFile` genutzt (keine Shell → keine Injection).
@@ -346,6 +395,10 @@ export function buildServerArgs({
 
   const xf = effectiveTransition(keep, transition)
   if (xf) {
+    // 'fade' = Dip to Black (nacheinander, keine Überlappung), sonst xfade.
+    if (xf.preset === 'fade') {
+      return fadeDipArgs(inputPath, outputPath, keep, xf.d)
+    }
     return xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d)
   }
   return concatArgs(inputPath, outputPath, keep)
@@ -353,11 +406,12 @@ export function buildServerArgs({
 
 /**
  * Erwartete Ausgabedauer (Sekunden) für die Fortschrittsanzeige.
- * Summe der behaltenen Bereiche, abzüglich der Überlappungen durch Übergänge.
+ * Summe der behaltenen Bereiche – bei xfade abzüglich der Überlappungen; das
+ * Dip-to-Black ('fade') überlappt nicht und behält die volle Länge.
  */
 export function outputDurationFor(keep: Segment[], transition?: Transition): number {
   const sum = keep.reduce((s, r) => s + r.duration, 0)
   const xf = effectiveTransition(keep, transition)
-  if (!xf) return sum
+  if (!xf || xf.preset === 'fade') return sum
   return Math.max(0, sum - (keep.length - 1) * xf.d)
 }
