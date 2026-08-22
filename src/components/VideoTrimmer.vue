@@ -476,7 +476,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
 
             <div class="field-row">
               <span class="field-label">{{ t('anim.menu') }}</span>
-              <DropdownMenu :label="t(currentAnimLabel)" :title="t('anim.title')">
+              <DropdownMenu :label="t(currentAnimLabel)">
                 <template #default="{ close }">
                   <button
                     v-for="a in animations"

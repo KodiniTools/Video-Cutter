@@ -265,10 +265,11 @@ function xfadeArgs(
     input,
   ])
 
-  // Jeden Clip normieren (PTS, Pixelformat) – xfade verlangt gleiche Basis.
+  // Jeden Clip normieren – xfade verlangt gleiche Basis UND konstante Bildrate
+  // (variable Framerate lässt den Übergang sonst „verschwinden"/verrutschen).
   let filter = ''
   ranges.forEach((_, i) => {
-    filter += `[${i}:v]setpts=PTS-STARTPTS,format=yuv420p[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
+    filter += `[${i}:v]fps=30,format=yuv420p,setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
   })
 
   // Video- und Audioketten mit kumulativem Offset aufbauen.
