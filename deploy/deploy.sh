@@ -80,4 +80,64 @@ sudo mkdir -p "$WEB_ROOT"
 sudo rsync -a --delete dist/ "$WEB_ROOT/"
 sudo chown -R "$WEB_USER:$WEB_USER" "$WEB_ROOT"
 
-log "Deploy fertig – $WEB_ROOT (Branch $BRANCH)"
+log "Frontend-Deploy fertig – $WEB_ROOT (Branch $BRANCH)"
+
+# --- 5) Backend (API) aktualisieren --------------------------------------
+# Der Schnitt inkl. Übergänge läuft serverseitig (Node/Express + FFmpeg) als
+# eigener PM2-Dienst aus API_DIR. Ohne diesen Schritt bleibt der laufende
+# Prozess auf altem Stand, egal wie oft das Frontend neu gebaut wird.
+#
+#   API_DIR     Laufverzeichnis des Backends   (default: /opt/video-cutter-server)
+#   SKIP_API=1  Backend-Update überspringen
+API_DIR="${API_DIR:-/opt/video-cutter-server}"
+
+if [[ "${SKIP_API:-0}" == "1" ]]; then
+  log "SKIP_API=1 – Backend-Update übersprungen"
+else
+  log "Backend nach $API_DIR spiegeln (server/)"
+  sudo mkdir -p "$API_DIR"
+  # Quellcode spiegeln; .env, node_modules und dist auf dem Ziel behalten
+  # (.env = Serverkonfig, node_modules/dist werden neu erzeugt/gebaut).
+  sudo rsync -a --delete \
+    --exclude '.env' \
+    --exclude 'node_modules' \
+    --exclude 'dist' \
+    server/ "$API_DIR/"
+  # Ab jetzt dem aufrufenden Nutzer gehören lassen, damit npm/pm2 ohne sudo laufen.
+  sudo chown -R "$(id -un):$(id -gn)" "$API_DIR"
+
+  log "Backend: npm ci + build"
+  (
+    cd "$API_DIR"
+    if [ ! -f .env ] && [ -f .env.example ]; then
+      cp .env.example .env
+      log ".env aus Vorlage erstellt – bei Bedarf ALLOWED_ORIGINS/PORT prüfen."
+    fi
+    npm ci
+    npm run build
+  )
+
+  log "Backend: PM2 neu laden/starten"
+  (
+    cd "$API_DIR"
+    if pm2 describe video-cutter-api >/dev/null 2>&1; then
+      pm2 reload ecosystem.config.cjs
+    else
+      # Evtl. unter root laufende Alt-Instanz freigeben (Portkonflikt vermeiden).
+      sudo -n pm2 delete video-cutter-api >/dev/null 2>&1 || true
+      pm2 start ecosystem.config.cjs
+    fi
+    pm2 save
+  )
+
+  # Health-Check (nicht fatal): Port aus .env oder Default 9015.
+  API_PORT="$(sed -n 's/^PORT=\([0-9]\+\).*/\1/p' "$API_DIR/.env" 2>/dev/null | head -n1)"
+  API_PORT="${API_PORT:-9015}"
+  if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+    log "Backend gesund auf 127.0.0.1:${API_PORT}"
+  else
+    log "WARNUNG: Health-Check auf 127.0.0.1:${API_PORT} fehlgeschlagen – 'pm2 logs video-cutter-api' prüfen."
+  fi
+fi
+
+log "Deploy fertig (Frontend + Backend, Branch $BRANCH)"
