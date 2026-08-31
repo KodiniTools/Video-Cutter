@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
+import { useClientRemux } from '@/composables/useClientRemux'
+import { isClientRemuxEligible } from '@/lib/remux'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -36,8 +38,8 @@ const {
 } = storeToRefs(store)
 
 const {
-  isProcessing,
-  progress,
+  isProcessing: serverBusy,
+  progress: serverProgress,
   phase,
   uploadedBytes,
   totalBytes,
@@ -46,11 +48,26 @@ const {
   cancel: serverCancel,
 } = useServerCut()
 
+// Client-seitiger Fast-Path (verlustfreier Remux ohne Upload/Download).
+const {
+  isProcessing: remuxBusy,
+  progress: remuxProgress,
+  remux: clientRemux,
+  cancel: remuxCancel,
+} = useClientRemux()
+
 const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
 
-const busy = computed(() => isProcessing.value)
+// Vereinheitlichter Status über beide Verarbeitungswege (Server vs. lokal).
+const busy = computed(() => serverBusy.value || remuxBusy.value)
+const isProcessing = busy
+const progress = computed(() => (remuxBusy.value ? remuxProgress.value : serverProgress.value))
 const statusLabel = computed(() =>
-  phase.value === 'upload' ? t('status.uploading') : t('status.processing'),
+  remuxBusy.value
+    ? t('status.local')
+    : phase.value === 'upload'
+      ? t('status.uploading')
+      : t('status.processing'),
 )
 
 // Beschriftungen für die Menü-Buttons oben am Canvas.
@@ -221,6 +238,29 @@ async function onExport(): Promise<void> {
     const isWebm = inputExt === 'webm'
     const lossless = operation.value === 'keep' && mode.value === 'copy' && cutSegments.length === 1
     const ext = lossless ? inputExt : isWebm ? 'webm' : 'mp4'
+
+    // Fast-Path: verlustfreier Einzel-Ausschnitt in MP4/MOV -> lokal remuxen
+    // (kein Upload). Schlägt der Remux fehl, transparent auf den Server ausweichen.
+    if (
+      isClientRemuxEligible({
+        operation: operation.value,
+        mode: mode.value,
+        segmentCount: cutSegments.length,
+        ext: inputExt,
+      })
+    ) {
+      try {
+        const seg = cutSegments[0]
+        const { blob } = await clientRemux(store.file, seg.start, seg.start + seg.duration)
+        store.setResult(blob, `${base}_cut.${ext}`)
+        return
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return
+        // Kein Nutzerfehler: Fast-Path nicht möglich -> Server übernimmt.
+        console.warn('[client-remux] Fallback auf Server:', e)
+      }
+    }
+
     const blob = await serverCut(
       store.file,
       cutSegments,
@@ -240,11 +280,15 @@ async function onExport(): Promise<void> {
 
 function onCancel(): void {
   serverCancel()
+  remuxCancel()
 }
 
 /** Geladenes Video entfernen und zur Upload-Ansicht zurückkehren. */
 function onDeleteVideo(): void {
-  if (isProcessing.value) serverCancel() // laufenden Upload/Job stoppen
+  if (busy.value) {
+    serverCancel() // laufenden Upload/Job stoppen
+    remuxCancel() // laufenden lokalen Remux stoppen
+  }
   store.reset()
 }
 

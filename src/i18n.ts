@@ -63,6 +63,7 @@ const messages = {
     status: {
       uploading: 'Lädt hoch …',
       processing: 'Verarbeite …',
+      local: 'Lokal schneiden …',
       remaining: 'noch',
     },
     result: {
@@ -135,6 +136,7 @@ const messages = {
     status: {
       uploading: 'Uploading …',
       processing: 'Processing …',
+      local: 'Cutting locally …',
       remaining: 'left',
     },
     result: {

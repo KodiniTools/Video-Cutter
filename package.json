@@ -15,6 +15,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "mp4box": "^0.5.4",
     "pinia": "^2.3.1",
     "vue": "^3.5.41",
     "vue-i18n": "^10.0.8"
