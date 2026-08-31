@@ -59,6 +59,7 @@ const messages = {
       fastHint: 'Kopiert die Streams. Sehr schnell, schneidet an Keyframes.',
       accurate: 'Genau (neu kodieren)',
       accurateHint: 'Frame-genau, neu kodiert. Langsamer. WebM bleibt WebM, sonst .mp4.',
+      willBeLocal: 'Wird lokal geschnitten – kein Upload.',
     },
     status: {
       uploading: 'Lädt hoch …',
@@ -134,6 +135,7 @@ const messages = {
       fastHint: 'Copies the streams. Very fast, cuts at keyframes.',
       accurate: 'Accurate (re-encode)',
       accurateHint: 'Frame-accurate, re-encoded. Slower. WebM stays WebM, otherwise .mp4.',
+      willBeLocal: 'Will be cut locally – no upload.',
     },
     status: {
       uploading: 'Uploading …',

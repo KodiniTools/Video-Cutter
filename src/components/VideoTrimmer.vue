@@ -59,6 +59,21 @@ const {
 
 const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
 
+// Wird der aktuelle Schnitt lokal (ohne Upload) laufen? Steuert den Hinweis
+// unter dem Export-Button, damit der schnelle Pfad schon VOR dem Klick sichtbar
+// ist (gleiche Bedingung wie im Export selbst).
+const willCutLocally = computed(
+  () =>
+    hasVideo.value &&
+    isClientRemuxEligible({
+      operation: operation.value,
+      mode: mode.value,
+      segmentCount: effectiveSegments.value.length,
+      ext: getExtension(fileName.value),
+      sizeBytes: store.file?.size,
+    }),
+)
+
 // Vereinheitlichter Status über beide Verarbeitungswege (Server vs. lokal).
 const busy = computed(() => serverBusy.value || remuxBusy.value)
 const isProcessing = busy
@@ -670,6 +685,7 @@ async function onDownload(e: MouseEvent): Promise<void> {
             </button>
           </div>
 
+          <p v-if="willCutLocally && !busy" class="local-hint">⚡ {{ t('mode.willBeLocal') }}</p>
           <p v-if="modeDisabled" class="reencode-note">{{ t('operation.removeNote') }}</p>
 
           <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
@@ -1342,6 +1358,12 @@ a.btn {
 .result-title {
   font-weight: 600;
   margin: 0;
+}
+.local-hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vc-accent);
 }
 .badge-local {
   display: inline-block;
