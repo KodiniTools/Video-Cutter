@@ -34,6 +34,7 @@ const {
   resultUrl,
   resultName,
   resultBlob,
+  resultViaClient,
   error,
 } = storeToRefs(store)
 
@@ -247,12 +248,13 @@ async function onExport(): Promise<void> {
         mode: mode.value,
         segmentCount: cutSegments.length,
         ext: inputExt,
+        sizeBytes: store.file.size,
       })
     ) {
       try {
         const seg = cutSegments[0]
         const { blob } = await clientRemux(store.file, seg.start, seg.start + seg.duration)
-        store.setResult(blob, `${base}_cut.${ext}`)
+        store.setResult(blob, `${base}_cut.${ext}`, true)
         return
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return
@@ -270,7 +272,7 @@ async function onExport(): Promise<void> {
       { preset: animation.value, duration: animDuration.value },
     )
 
-    store.setResult(blob, `${base}_cut.${ext}`)
+    store.setResult(blob, `${base}_cut.${ext}`, false)
   } catch (e) {
     // Nutzer-Abbruch nicht als Fehler anzeigen.
     const msg = e instanceof Error ? e.message : String(e)
@@ -704,7 +706,12 @@ async function onDownload(e: MouseEvent): Promise<void> {
 
           <!-- Ergebnis -->
           <div v-if="resultUrl" class="result">
-            <p class="result-title">{{ t('result.ready') }}</p>
+            <p class="result-title">
+              {{ t('result.ready') }}
+              <span v-if="resultViaClient" class="badge-local" :title="t('result.localHint')">
+                ⚡ {{ t('result.local') }}
+              </span>
+            </p>
             <video class="player" :src="resultUrl" controls preload="metadata"></video>
             <div class="result-actions">
               <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
@@ -1335,6 +1342,17 @@ a.btn {
 .result-title {
   font-weight: 600;
   margin: 0;
+}
+.badge-local {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--vc-accent);
+  vertical-align: middle;
 }
 .result-hint {
   margin: 0;
