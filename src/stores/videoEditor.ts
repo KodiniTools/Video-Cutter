@@ -47,6 +47,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const resultUrl = ref('')
   const resultName = ref('')
   const resultBlob = ref<Blob | null>(null)
+  /** Wurde das Ergebnis lokal (client-seitiger Remux) statt am Server erzeugt? */
+  const resultViaClient = ref(false)
   const error = ref('')
 
   const selectionDuration = computed(() => Math.max(0, endTime.value - startTime.value))
@@ -189,6 +191,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     }
     resultName.value = ''
     resultBlob.value = null
+    resultViaClient.value = false
   }
 
   function setFile(newFile: File): void {
@@ -278,11 +281,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
   }
 
-  function setResult(blob: Blob, name: string): void {
+  function setResult(blob: Blob, name: string, viaClient = false): void {
     revokeResult()
     resultBlob.value = blob
     resultUrl.value = URL.createObjectURL(blob)
     resultName.value = name
+    resultViaClient.value = viaClient
   }
 
   function setError(message: string): void {
@@ -318,6 +322,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     resultUrl,
     resultName,
     resultBlob,
+    resultViaClient,
     error,
     // getters
     selectionDuration,

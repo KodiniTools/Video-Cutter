@@ -26,6 +26,14 @@ export const EPS = 1e-3
  */
 export const REMUXABLE_EXT: ReadonlySet<string> = new Set(['mp4', 'm4v', 'mov'])
 
+/**
+ * Obergrenze für den lokalen Remux. Datei + extrahierte Samples liegen im RAM;
+ * jenseits dieser Größe droht auf schwächeren/mobilen Geräten ein Tab-Absturz
+ * (OOM), den ein try/catch NICHT abfangen kann – solche Dateien bleiben daher
+ * am Server. Bewusst konservativ; bei Bedarf anheben.
+ */
+export const MAX_CLIENT_REMUX_BYTES = 1_073_741_824 // 1 GiB
+
 export interface RemuxEligibility {
   operation: CutOperation
   mode: TrimMode
@@ -33,25 +41,30 @@ export interface RemuxEligibility {
   segmentCount: number
   /** Datei-Endung ohne Punkt (Groß-/Kleinschreibung egal). */
   ext: string
+  /** Dateigröße in Bytes. Optional; ohne Angabe wird die Größe nicht geprüft. */
+  sizeBytes?: number
 }
 
 /**
  * Der client-seitige Remux passt exakt dann, wenn der Server ohnehin nur
- * verlustfrei kopieren würde: EIN Ausschnitt, „behalten", Modus „copy" und ein
- * remuxbarer Container. Jeder andere Fall (entfernen, mehrere Ausschnitte,
- * Re-Encode, WebM) braucht FFmpeg und geht an den Server.
+ * verlustfrei kopieren würde: EIN Ausschnitt, „behalten", Modus „copy", ein
+ * remuxbarer Container und eine für den RAM verträgliche Größe. Jeder andere
+ * Fall (entfernen, mehrere Ausschnitte, Re-Encode, WebM, sehr groß) braucht
+ * FFmpeg und geht an den Server.
  */
 export function isClientRemuxEligible({
   operation,
   mode,
   segmentCount,
   ext,
+  sizeBytes,
 }: RemuxEligibility): boolean {
   return (
     operation === 'keep' &&
     mode === 'copy' &&
     segmentCount === 1 &&
-    REMUXABLE_EXT.has(ext.toLowerCase())
+    REMUXABLE_EXT.has(ext.toLowerCase()) &&
+    (sizeBytes === undefined || sizeBytes <= MAX_CLIENT_REMUX_BYTES)
   )
 }
 

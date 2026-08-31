@@ -3,6 +3,7 @@ import {
   isClientRemuxEligible,
   selectSampleWindow,
   selectAudioWindow,
+  MAX_CLIENT_REMUX_BYTES,
   type TimedSample,
 } from '@/lib/remux'
 
@@ -31,6 +32,16 @@ describe('isClientRemuxEligible', () => {
     expect(isClientRemuxEligible({ ...base, segmentCount: 0 })).toBe(false)
     expect(isClientRemuxEligible({ ...base, ext: 'webm' })).toBe(false)
     expect(isClientRemuxEligible({ ...base, ext: 'mkv' })).toBe(false)
+  })
+
+  it('ignoriert die Größe, wenn keine angegeben ist', () => {
+    expect(isClientRemuxEligible(base)).toBe(true)
+  })
+
+  it('lehnt Dateien über dem RAM-Limit ab, erlaubt Dateien darunter', () => {
+    expect(isClientRemuxEligible({ ...base, sizeBytes: MAX_CLIENT_REMUX_BYTES + 1 })).toBe(false)
+    expect(isClientRemuxEligible({ ...base, sizeBytes: MAX_CLIENT_REMUX_BYTES })).toBe(true)
+    expect(isClientRemuxEligible({ ...base, sizeBytes: 5_000_000 })).toBe(true)
   })
 })
 

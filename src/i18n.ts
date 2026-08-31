@@ -68,6 +68,8 @@ const messages = {
     },
     result: {
       ready: 'Fertig geschnitten:',
+      local: 'Lokal – kein Upload',
+      localHint: 'Verlustfrei direkt im Browser geschnitten (kein Server-Upload nötig).',
       iosHint:
         'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.',
     },
@@ -141,6 +143,8 @@ const messages = {
     },
     result: {
       ready: 'Done:',
+      local: 'Local – no upload',
+      localHint: 'Cut losslessly right in the browser (no server upload needed).',
       iosHint:
         'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.',
     },
