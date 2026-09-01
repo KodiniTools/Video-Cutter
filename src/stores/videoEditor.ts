@@ -44,7 +44,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const segments = ref<Segment[]>([])
 
   // --- Ergebnis / Fehler ---
-  const resultUrl = ref('')
   const resultName = ref('')
   const resultBlob = ref<Blob | null>(null)
   /** Wurde das Ergebnis lokal (client-seitiger Remux) statt am Server erzeugt? */
@@ -67,6 +66,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
         : [],
   )
   const canExport = computed(() => hasVideo.value && effectiveSegments.value.length > 0)
+  /** Liegt ein herunterladbares Schnitt-Ergebnis vor? */
+  const hasResult = computed(() => resultBlob.value !== null)
 
   // --- Undo/Redo -----------------------------------------------------------
   // Rückgängig/Wiederherstellen deckt Auswahl (Start/Ende), Ausschnitt-Liste,
@@ -185,10 +186,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   }
 
   function revokeResult(): void {
-    if (resultUrl.value) {
-      URL.revokeObjectURL(resultUrl.value)
-      resultUrl.value = ''
-    }
     resultName.value = ''
     resultBlob.value = null
     resultViaClient.value = false
@@ -281,12 +278,28 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
   }
 
-  function setResult(blob: Blob, name: string, viaClient = false): void {
-    revokeResult()
+  /**
+   * Macht das Schnitt-Ergebnis zum neuen Arbeitsvideo: Es wird im selben
+   * (ersten) Player angezeigt – KEIN zweites Vorschaufenster. Ein weiterer
+   * Schnitt arbeitet damit auf dem Ergebnis (kumulativ, wie im Audio-Cutter).
+   * Der Blob bleibt für den separaten „Herunterladen"-Button erhalten.
+   */
+  function applyCutResult(blob: Blob, name: string, viaClient = false): void {
+    revokeObjectUrl()
+    file.value = new File([blob], name, { type: blob.type || 'video/mp4' })
+    fileName.value = name
+    objectUrl.value = URL.createObjectURL(blob)
+    duration.value = 0
+    startTime.value = 0
+    endTime.value = 0
+    currentTime.value = 0
+    segments.value = []
+    error.value = ''
+    // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
-    resultUrl.value = URL.createObjectURL(blob)
     resultName.value = name
     resultViaClient.value = viaClient
+    // Die History wird nach dem Laden (setDuration) neu aufgesetzt.
   }
 
   function setError(message: string): void {
@@ -319,10 +332,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     mode,
     operation,
     segments,
-    resultUrl,
     resultName,
     resultBlob,
     resultViaClient,
+    hasResult,
     error,
     // getters
     selectionDuration,
@@ -345,7 +358,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     addSegment,
     removeSegment,
     clearSegments,
-    setResult,
+    applyCutResult,
     setError,
     revokeResult,
     reset,
