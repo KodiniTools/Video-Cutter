@@ -276,7 +276,7 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
     expect(store.hasResult).toBe(false)
 
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' })
-    store.applyCutResult(blob, 'clip_cut.mp4', true)
+    store.applyCutResult(blob, 'clip_cut.mp4')
 
     // Ergebnis ist jetzt das geladene Video (kein zweites Vorschaufenster).
     expect(store.fileName).toBe('clip_cut.mp4')
@@ -290,7 +290,6 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
     expect(store.hasResult).toBe(true)
     expect(store.resultBlob).toBe(blob)
     expect(store.resultName).toBe('clip_cut.mp4')
-    expect(store.resultViaClient).toBe(true)
   })
 
   it('erlaubt kumulatives Schneiden auf dem Ergebnis', () => {
