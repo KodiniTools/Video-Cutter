@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
@@ -166,13 +166,53 @@ function onDrop(e: DragEvent): void {
   pickFile(e.dataTransfer?.files ?? null)
 }
 
+// Beim In-place-Wechsel (Ergebnis wird zum neuen Arbeitsvideo) muss die Dauer
+// neu gelesen werden. Ein fragmentiertes MP4 (client-seitiger Remux) meldet
+// anfangs `Infinity` – dann bis ans Ende springen, damit der Browser die echte
+// Dauer ermittelt (kommt danach per `durationchange`).
+let seekingForDuration = false
+
+function readDuration(): void {
+  const el = videoEl.value
+  if (!el) return
+  const d = el.duration
+  if (Number.isFinite(d) && d > 0) {
+    if (seekingForDuration) {
+      seekingForDuration = false
+      el.currentTime = 0
+    }
+    store.setDuration(d)
+  } else if (d === Infinity && !seekingForDuration) {
+    seekingForDuration = true
+    try {
+      el.currentTime = 1e101
+    } catch {
+      seekingForDuration = false
+    }
+  }
+}
+
 function onLoadedMetadata(): void {
-  store.setDuration(videoEl.value?.duration ?? 0)
+  readDuration()
+}
+
+function onDurationChange(): void {
+  readDuration()
 }
 
 function onTimeUpdate(): void {
+  if (seekingForDuration) return // Erzwungenes Spulen nicht als Position werten.
   store.setCurrentTime(videoEl.value?.currentTime ?? 0)
 }
+
+// Quelle gewechselt (neues Video ODER Schnitt-Ergebnis) -> Element sicher neu
+// laden, damit loadedmetadata/durationchange erneut feuern und die Dauer stimmt.
+watch(objectUrl, () => {
+  seekingForDuration = false
+  const el = videoEl.value
+  if (!el) return
+  nextTick(() => el.load())
+})
 
 function seekTo(sec: number): void {
   if (videoEl.value) videoEl.value.currentTime = sec
@@ -709,6 +749,7 @@ async function downloadResult(): Promise<void> {
             controls
             preload="metadata"
             @loadedmetadata="onLoadedMetadata"
+            @durationchange="onDurationChange"
             @timeupdate="onTimeUpdate"
           ></video>
 
