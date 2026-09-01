@@ -46,8 +46,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
   const resultBlob = ref<Blob | null>(null)
-  /** Wurde das Ergebnis lokal (client-seitiger Remux) statt am Server erzeugt? */
-  const resultViaClient = ref(false)
   const error = ref('')
 
   const selectionDuration = computed(() => Math.max(0, endTime.value - startTime.value))
@@ -188,7 +186,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   function revokeResult(): void {
     resultName.value = ''
     resultBlob.value = null
-    resultViaClient.value = false
   }
 
   function setFile(newFile: File): void {
@@ -284,7 +281,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
    * Schnitt arbeitet damit auf dem Ergebnis (kumulativ, wie im Audio-Cutter).
    * Der Blob bleibt für den separaten „Herunterladen"-Button erhalten.
    */
-  function applyCutResult(blob: Blob, name: string, viaClient = false): void {
+  function applyCutResult(blob: Blob, name: string): void {
     revokeObjectUrl()
     file.value = new File([blob], name, { type: blob.type || 'video/mp4' })
     fileName.value = name
@@ -298,7 +295,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
     resultName.value = name
-    resultViaClient.value = viaClient
     // Die History wird nach dem Laden (setDuration) neu aufgesetzt.
   }
 
@@ -334,7 +330,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments,
     resultName,
     resultBlob,
-    resultViaClient,
     hasResult,
     error,
     // getters

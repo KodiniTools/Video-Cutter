@@ -15,7 +15,6 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "mp4box": "^0.5.4",
     "pinia": "^2.3.1",
     "vue": "^3.5.41",
     "vue-i18n": "^10.0.8"
@@ -28,7 +27,6 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^9.32.0",
     "jsdom": "^25.0.1",
-    "mp4-muxer": "^5.2.2",
     "prettier": "^3.4.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0",

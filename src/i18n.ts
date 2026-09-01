@@ -60,18 +60,14 @@ const messages = {
       fastHint: 'Kopiert die Streams. Sehr schnell, schneidet an Keyframes.',
       accurate: 'Genau (neu kodieren)',
       accurateHint: 'Frame-genau, neu kodiert. Langsamer. WebM bleibt WebM, sonst .mp4.',
-      willBeLocal: 'Wird lokal geschnitten – kein Upload.',
     },
     status: {
       uploading: 'Lädt hoch …',
       processing: 'Verarbeite …',
-      local: 'Lokal schneiden …',
       remaining: 'noch',
     },
     result: {
       ready: 'Fertig geschnitten:',
-      local: 'Lokal – kein Upload',
-      localHint: 'Verlustfrei direkt im Browser geschnitten (kein Server-Upload nötig).',
       iosHint:
         'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.',
     },
@@ -137,18 +133,14 @@ const messages = {
       fastHint: 'Copies the streams. Very fast, cuts at keyframes.',
       accurate: 'Accurate (re-encode)',
       accurateHint: 'Frame-accurate, re-encoded. Slower. WebM stays WebM, otherwise .mp4.',
-      willBeLocal: 'Will be cut locally – no upload.',
     },
     status: {
       uploading: 'Uploading …',
       processing: 'Processing …',
-      local: 'Cutting locally …',
       remaining: 'left',
     },
     result: {
       ready: 'Done:',
-      local: 'Local – no upload',
-      localHint: 'Cut losslessly right in the browser (no server upload needed).',
       iosHint:
         'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.',
     },

@@ -4,8 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
-import { useClientRemux } from '@/composables/useClientRemux'
-import { isClientRemuxEligible } from '@/lib/remux'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -33,14 +31,13 @@ const {
   selectionDuration,
   resultName,
   resultBlob,
-  resultViaClient,
   hasResult,
   error,
 } = storeToRefs(store)
 
 const {
-  isProcessing: serverBusy,
-  progress: serverProgress,
+  isProcessing,
+  progress,
   phase,
   uploadedBytes,
   totalBytes,
@@ -49,41 +46,11 @@ const {
   cancel: serverCancel,
 } = useServerCut()
 
-// Client-seitiger Fast-Path (verlustfreier Remux ohne Upload/Download).
-const {
-  isProcessing: remuxBusy,
-  progress: remuxProgress,
-  remux: clientRemux,
-  cancel: remuxCancel,
-} = useClientRemux()
-
 const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
 
-// Wird der aktuelle Schnitt lokal (ohne Upload) laufen? Steuert den Hinweis
-// unter dem Export-Button, damit der schnelle Pfad schon VOR dem Klick sichtbar
-// ist (gleiche Bedingung wie im Export selbst).
-const willCutLocally = computed(
-  () =>
-    hasVideo.value &&
-    isClientRemuxEligible({
-      operation: operation.value,
-      mode: mode.value,
-      segmentCount: effectiveSegments.value.length,
-      ext: getExtension(fileName.value),
-      sizeBytes: store.file?.size,
-    }),
-)
-
-// Vereinheitlichter Status über beide Verarbeitungswege (Server vs. lokal).
-const busy = computed(() => serverBusy.value || remuxBusy.value)
-const isProcessing = busy
-const progress = computed(() => (remuxBusy.value ? remuxProgress.value : serverProgress.value))
+const busy = computed(() => isProcessing.value)
 const statusLabel = computed(() =>
-  remuxBusy.value
-    ? t('status.local')
-    : phase.value === 'upload'
-      ? t('status.uploading')
-      : t('status.processing'),
+  phase.value === 'upload' ? t('status.uploading') : t('status.processing'),
 )
 
 // Beschriftungen für die Menü-Buttons oben am Canvas.
@@ -295,29 +262,6 @@ async function onExport(): Promise<void> {
     const lossless = operation.value === 'keep' && mode.value === 'copy' && cutSegments.length === 1
     const ext = lossless ? inputExt : isWebm ? 'webm' : 'mp4'
 
-    // Fast-Path: verlustfreier Einzel-Ausschnitt in MP4/MOV -> lokal remuxen
-    // (kein Upload). Schlägt der Remux fehl, transparent auf den Server ausweichen.
-    if (
-      isClientRemuxEligible({
-        operation: operation.value,
-        mode: mode.value,
-        segmentCount: cutSegments.length,
-        ext: inputExt,
-        sizeBytes: store.file.size,
-      })
-    ) {
-      try {
-        const seg = cutSegments[0]
-        const { blob } = await clientRemux(store.file, seg.start, seg.start + seg.duration)
-        store.applyCutResult(blob, `${base}_cut.${ext}`, true)
-        return
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return
-        // Kein Nutzerfehler: Fast-Path nicht möglich -> Server übernimmt.
-        console.warn('[client-remux] Fallback auf Server:', e)
-      }
-    }
-
     const blob = await serverCut(
       store.file,
       cutSegments,
@@ -327,7 +271,7 @@ async function onExport(): Promise<void> {
       { preset: animation.value, duration: animDuration.value },
     )
 
-    store.applyCutResult(blob, `${base}_cut.${ext}`, false)
+    store.applyCutResult(blob, `${base}_cut.${ext}`)
   } catch (e) {
     // Nutzer-Abbruch nicht als Fehler anzeigen.
     const msg = e instanceof Error ? e.message : String(e)
@@ -337,14 +281,12 @@ async function onExport(): Promise<void> {
 
 function onCancel(): void {
   serverCancel()
-  remuxCancel()
 }
 
 /** Geladenes Video entfernen und zur Upload-Ansicht zurückkehren. */
 function onDeleteVideo(): void {
   if (busy.value) {
     serverCancel() // laufenden Upload/Job stoppen
-    remuxCancel() // laufenden lokalen Remux stoppen
   }
   store.reset()
 }
@@ -730,7 +672,6 @@ async function downloadResult(): Promise<void> {
             </div>
           </div>
 
-          <p v-if="willCutLocally && !busy" class="local-hint">⚡ {{ t('mode.willBeLocal') }}</p>
           <p v-if="modeDisabled" class="reencode-note">{{ t('operation.removeNote') }}</p>
 
           <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
@@ -770,9 +711,6 @@ async function downloadResult(): Promise<void> {
                kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
           <p v-if="hasResult && !busy" class="result-status">
             {{ t('result.ready') }} {{ resultName }}
-            <span v-if="resultViaClient" class="badge-local" :title="t('result.localHint')">
-              ⚡ {{ t('result.local') }}
-            </span>
           </p>
           <p v-if="hasResult && appleMobile && !busy" class="result-hint">
             {{ t('result.iosHint') }}
@@ -1394,12 +1332,6 @@ a.btn {
   font-weight: 600;
   margin: 0;
 }
-.local-hint {
-  margin: 6px 0 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--vc-accent);
-}
 .action-buttons {
   display: flex;
   gap: 8px;
@@ -1409,17 +1341,6 @@ a.btn {
   margin: 8px 0 0;
   font-size: 13px;
   font-weight: 600;
-}
-.badge-local {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--vc-accent);
-  vertical-align: middle;
 }
 .result-hint {
   margin: 0;
