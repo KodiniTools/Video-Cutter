@@ -267,3 +267,49 @@ describe('videoEditor store – Undo/Redo', () => {
     expect(store.canUndo).toBe(false)
   })
 })
+
+describe('applyCutResult (Ergebnis im selben Player)', () => {
+  it('macht das Ergebnis zum neuen Arbeitsvideo und hält den Download bereit', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.setEnd(12)
+    expect(store.hasResult).toBe(false)
+
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' })
+    store.applyCutResult(blob, 'clip_cut.mp4', true)
+
+    // Ergebnis ist jetzt das geladene Video (kein zweites Vorschaufenster).
+    expect(store.fileName).toBe('clip_cut.mp4')
+    expect(store.file).not.toBeNull()
+    expect(store.objectUrl).toBe('blob:mock')
+    // Auswahl/Segmente sind zurückgesetzt, Dauer folgt beim Laden.
+    expect(store.startTime).toBe(0)
+    expect(store.endTime).toBe(0)
+    expect(store.segments).toEqual([])
+    // Download-Status.
+    expect(store.hasResult).toBe(true)
+    expect(store.resultBlob).toBe(blob)
+    expect(store.resultName).toBe('clip_cut.mp4')
+    expect(store.resultViaClient).toBe(true)
+  })
+
+  it('erlaubt kumulatives Schneiden auf dem Ergebnis', () => {
+    const store = loadVideo(30)
+    store.applyCutResult(new Blob([new Uint8Array([1])], { type: 'video/mp4' }), 'clip_cut.mp4')
+    // Neue Dauer des Ergebnisses laden und erneut schneiden können.
+    store.setDuration(10)
+    expect(store.duration).toBe(10)
+    store.setStart(2)
+    store.setEnd(6)
+    expect(store.canExport).toBe(true)
+  })
+
+  it('reset() entfernt auch das Ergebnis', () => {
+    const store = loadVideo(30)
+    store.applyCutResult(new Blob([new Uint8Array([1])], { type: 'video/mp4' }), 'clip_cut.mp4')
+    expect(store.hasResult).toBe(true)
+    store.reset()
+    expect(store.hasResult).toBe(false)
+    expect(store.resultBlob).toBeNull()
+  })
+})

@@ -31,10 +31,10 @@ const {
   canRedo,
   effectiveSegments,
   selectionDuration,
-  resultUrl,
   resultName,
   resultBlob,
   resultViaClient,
+  hasResult,
   error,
 } = storeToRefs(store)
 
@@ -239,9 +239,9 @@ function stepEnd(delta: number): void {
 async function onExport(): Promise<void> {
   if (!store.file || !canExport.value) return
   store.setError('')
-  store.revokeResult()
   try {
-    const base = fileName.value.replace(/\.[^.]+$/, '') || 'video'
+    // Vorhandenes „_cut" nicht stapeln (kumulatives Schneiden).
+    const base = fileName.value.replace(/\.[^.]+$/, '').replace(/_cut$/, '') || 'video'
     const cutSegments = effectiveSegments.value.map((s) => ({
       start: s.start,
       duration: Math.max(0, s.end - s.start),
@@ -269,7 +269,7 @@ async function onExport(): Promise<void> {
       try {
         const seg = cutSegments[0]
         const { blob } = await clientRemux(store.file, seg.start, seg.start + seg.duration)
-        store.setResult(blob, `${base}_cut.${ext}`, true)
+        store.applyCutResult(blob, `${base}_cut.${ext}`, true)
         return
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return
@@ -287,7 +287,7 @@ async function onExport(): Promise<void> {
       { preset: animation.value, duration: animDuration.value },
     )
 
-    store.setResult(blob, `${base}_cut.${ext}`, false)
+    store.applyCutResult(blob, `${base}_cut.${ext}`, false)
   } catch (e) {
     // Nutzer-Abbruch nicht als Fehler anzeigen.
     const msg = e instanceof Error ? e.message : String(e)
@@ -352,16 +352,11 @@ onBeforeUnmount(() => {
 
 const appleMobile = isAppleMobile()
 
-/** Ergebnis verwerfen: Vorschau schließen, Blob freigeben – Quellvideo bleibt geladen. */
-function discardResult(): void {
-  store.revokeResult()
-}
-
-async function onDownload(e: MouseEvent): Promise<void> {
+/** Lädt das aktuelle Schnitt-Ergebnis herunter (getrennt vom Schneiden). */
+async function downloadResult(): Promise<void> {
   const blob = resultBlob.value
-  if (!blob) return // ohne Blob: nativen <a>-Download nicht verhindern
+  if (!blob) return
   // Einheitlicher, robuster Pfad (iOS-Teilen / Anker / neuer Tab).
-  e.preventDefault()
   try {
     await saveFile({ blob, name: resultName.value })
   } catch (err) {
@@ -674,15 +669,25 @@ async function onDownload(e: MouseEvent): Promise<void> {
               </DropdownMenu>
             </div>
 
-            <button
-              class="btn primary export"
-              type="button"
-              :disabled="!canExport || busy"
-              @click="onExport"
-            >
-              <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
-              <template v-else>{{ t('actions.export') }}</template>
-            </button>
+            <div class="action-buttons">
+              <button
+                class="btn primary export"
+                type="button"
+                :disabled="!canExport || busy"
+                @click="onExport"
+              >
+                <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
+                <template v-else>{{ t('actions.cut') }}</template>
+              </button>
+              <button
+                class="btn primary"
+                type="button"
+                :disabled="!hasResult || busy"
+                @click="downloadResult"
+              >
+                {{ t('actions.download') }}
+              </button>
+            </div>
           </div>
 
           <p v-if="willCutLocally && !busy" class="local-hint">⚡ {{ t('mode.willBeLocal') }}</p>
@@ -720,28 +725,17 @@ async function onDownload(e: MouseEvent): Promise<void> {
             @seek="seekTo"
           />
 
-          <!-- Ergebnis -->
-          <div v-if="resultUrl" class="result">
-            <p class="result-title">
-              {{ t('result.ready') }}
-              <span v-if="resultViaClient" class="badge-local" :title="t('result.localHint')">
-                ⚡ {{ t('result.local') }}
-              </span>
-            </p>
-            <video class="player" :src="resultUrl" controls preload="metadata"></video>
-            <div class="result-actions">
-              <a class="btn primary" :href="resultUrl" :download="resultName" @click="onDownload">
-                {{ t('actions.download') }} — {{ resultName }}
-              </a>
-              <button class="btn ghost" type="button" @click="discardResult">
-                {{ t('actions.discard') }}
-              </button>
-              <button class="btn ghost" type="button" @click="store.reset()">
-                {{ t('actions.change') }}
-              </button>
-            </div>
-            <p v-if="appleMobile" class="result-hint">{{ t('result.iosHint') }}</p>
-          </div>
+          <!-- Ergebnis-Status: das Ergebnis läuft im selben Player oben,
+               kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
+          <p v-if="hasResult && !busy" class="result-status">
+            {{ t('result.ready') }} {{ resultName }}
+            <span v-if="resultViaClient" class="badge-local" :title="t('result.localHint')">
+              ⚡ {{ t('result.local') }}
+            </span>
+          </p>
+          <p v-if="hasResult && appleMobile && !busy" class="result-hint">
+            {{ t('result.iosHint') }}
+          </p>
         </div>
       </div>
     </div>
@@ -1364,6 +1358,16 @@ a.btn {
   font-size: 13px;
   font-weight: 600;
   color: var(--vc-accent);
+}
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.result-status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 .badge-local {
   display: inline-block;
