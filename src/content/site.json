@@ -42,41 +42,45 @@
     }
   },
   "styles": {
-    "app.title": {
-      "font": "",
-      "size": 0,
-      "weight": "",
-      "spacing": 0,
-      "transform": "",
-      "colorLight": "",
-      "colorDark": ""
+    "app": {
+      "title": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      },
+      "subtitle": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      }
     },
-    "app.subtitle": {
-      "font": "",
-      "size": 0,
-      "weight": "",
-      "spacing": 0,
-      "transform": "",
-      "colorLight": "",
-      "colorDark": ""
-    },
-    "drop.title": {
-      "font": "",
-      "size": 0,
-      "weight": "",
-      "spacing": 0,
-      "transform": "",
-      "colorLight": "",
-      "colorDark": ""
-    },
-    "drop.hint": {
-      "font": "",
-      "size": 0,
-      "weight": "",
-      "spacing": 0,
-      "transform": "",
-      "colorLight": "",
-      "colorDark": ""
+    "drop": {
+      "title": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      },
+      "hint": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      }
     },
     "footer": {
       "font": "",

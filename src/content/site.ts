@@ -26,7 +26,9 @@ export interface SiteContent {
   meta?: { title?: string; description?: string }
   texts?: Record<string, unknown>
   theme?: SiteTheme
-  styles?: Record<string, SlotStyle>
+  // Verschachtelt wie die Slot-Schlüssel (styles.app.title …); der Designer
+  // schreibt Pfade wie styles.app.title.size.
+  styles?: Record<string, unknown>
 }
 
 export const site: SiteContent = siteJson as SiteContent
@@ -97,32 +99,63 @@ function fontFaceCss(file: string): string {
   return `@font-face{font-family:"${fontFamilyId(file)}";src:${src};font-display:swap;}`
 }
 
+const STYLE_KEYS = new Set([
+  'font',
+  'size',
+  'weight',
+  'spacing',
+  'transform',
+  'colorLight',
+  'colorDark',
+])
+/** Verschachteltes styles-Objekt in { 'app.title': SlotStyle, … } auflösen. */
+export function flattenSlotStyles(styles: unknown, prefix = ''): Record<string, SlotStyle> {
+  const out: Record<string, SlotStyle> = {}
+  if (!isTree(styles)) return out
+  const isLeaf =
+    Object.keys(styles).some((k) => STYLE_KEYS.has(k)) && !Object.values(styles).some(isTree)
+  if (isLeaf) {
+    if (prefix) out[prefix] = styles as SlotStyle
+    return out
+  }
+  for (const [k, v] of Object.entries(styles)) {
+    if (!isTree(v)) continue
+    Object.assign(out, flattenSlotStyles(v, prefix ? `${prefix}.${k}` : k))
+  }
+  return out
+}
+
 /**
  * CSS für die Text-Slots ([data-slot="…"] in den Komponenten): Schrift, Größe,
  * Gewicht, Abstand, Schreibweise sowie Farbe je Hell/Dunkel. '' wenn nichts gesetzt.
+ * Die Deklarationen tragen !important, damit sie die scoped Komponenten-Styles
+ * (z. B. `.brand h1[data-v-…]`) sicher überstimmen – es sind bewusste Vorgaben
+ * aus dem Designer.
  */
-export function slotCss(styles: Record<string, SlotStyle> | undefined): string {
-  if (!styles) return ''
+export function slotCss(styles: unknown): string {
+  const flat = flattenSlotStyles(styles)
   const faces = new Set<string>()
   const rules: string[] = []
-  for (const [key, st] of Object.entries(styles)) {
+  for (const [key, st] of Object.entries(flat)) {
     if (!SLOT_KEY.test(key) || !st || typeof st !== 'object') continue
     const sel = `[data-slot="${key}"]`
     const decl: string[] = []
     if (st.font && FONT_FILE.test(st.font)) {
       faces.add(fontFaceCss(st.font))
-      decl.push(`font-family:"${fontFamilyId(st.font)}",system-ui,sans-serif`)
+      decl.push(`font-family:"${fontFamilyId(st.font)}",system-ui,sans-serif !important`)
     }
-    if (typeof st.size === 'number' && st.size > 0) decl.push(`font-size:${st.size}px`)
-    if (st.weight && WEIGHTS.has(String(st.weight))) decl.push(`font-weight:${st.weight}`)
+    if (typeof st.size === 'number' && st.size > 0) decl.push(`font-size:${st.size}px !important`)
+    if (st.weight && WEIGHTS.has(String(st.weight)))
+      decl.push(`font-weight:${st.weight} !important`)
     if (typeof st.spacing === 'number' && st.spacing !== 0)
-      decl.push(`letter-spacing:${st.spacing}px`)
-    if (st.transform && TRANSFORMS.has(st.transform)) decl.push(`text-transform:${st.transform}`)
+      decl.push(`letter-spacing:${st.spacing}px !important`)
+    if (st.transform && TRANSFORMS.has(st.transform))
+      decl.push(`text-transform:${st.transform} !important`)
     if (decl.length) rules.push(`${sel}{${decl.join(';')}}`)
     if (st.colorLight && HEX.test(st.colorLight))
-      rules.push(`:root[data-theme='light'] ${sel}{color:${st.colorLight}}`)
+      rules.push(`:root[data-theme='light'] ${sel}{color:${st.colorLight} !important}`)
     if (st.colorDark && HEX.test(st.colorDark))
-      rules.push(`:root[data-theme='dark'] ${sel}{color:${st.colorDark}}`)
+      rules.push(`:root[data-theme='dark'] ${sel}{color:${st.colorDark} !important}`)
   }
   return [...faces, ...rules].join('\n')
 }

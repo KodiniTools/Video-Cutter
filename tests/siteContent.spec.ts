@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeMessages, themeCss, slotCss, applySiteTheme } from '@/content/site'
+import { mergeMessages, themeCss, slotCss, flattenSlotStyles, applySiteTheme } from '@/content/site'
 
 describe('Content-Schicht (Kodini Designer)', () => {
   const base = {
@@ -57,33 +57,48 @@ describe('Content-Schicht (Kodini Designer)', () => {
 describe('slotCss', () => {
   it('liefert leer ohne Styles', () => {
     expect(slotCss(undefined)).toBe('')
-    expect(slotCss({ 'app.title': {} })).toBe('')
-    expect(slotCss({ 'app.title': { size: 0, spacing: 0, weight: '', font: '' } })).toBe('')
+    expect(slotCss({ app: { title: {} } })).toBe('')
+    expect(slotCss({ app: { title: { size: 0, spacing: 0, weight: '', font: '' } } })).toBe('')
   })
   it('baut Regeln je Slot inkl. @font-face und Farben je Modus', () => {
     const css = slotCss({
-      'app.title': {
-        font: 'Supreme-Bold.woff2',
-        size: 28,
-        weight: '700',
-        spacing: 1.5,
-        transform: 'uppercase',
-        colorLight: '#112233',
-        colorDark: '#eeeeee',
+      app: {
+        title: {
+          font: 'Supreme-Bold.woff2',
+          size: 28,
+          weight: '700',
+          spacing: 1.5,
+          transform: 'uppercase',
+          colorLight: '#112233',
+          colorDark: '#eeeeee',
+        },
       },
-      'drop.hint': { colorLight: 'rot', size: -3, weight: '999' },
+      drop: { hint: { colorLight: 'rot', size: -3, weight: '999' } },
     })
     expect(css).toContain(
       '@font-face{font-family:"kodini-font-Supreme-Bold";src:url("/fonts/Supreme-Bold.woff2") format("woff2")',
     )
     expect(css).toContain(
-      '[data-slot="app.title"]{font-family:"kodini-font-Supreme-Bold",system-ui,sans-serif;font-size:28px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}',
+      '[data-slot="app.title"]{font-family:"kodini-font-Supreme-Bold",system-ui,sans-serif !important;font-size:28px !important;font-weight:700 !important;letter-spacing:1.5px !important;text-transform:uppercase !important}',
     )
-    expect(css).toContain(`:root[data-theme='light'] [data-slot="app.title"]{color:#112233}`)
-    expect(css).toContain(`:root[data-theme='dark'] [data-slot="app.title"]{color:#eeeeee}`)
+    expect(css).toContain(
+      `:root[data-theme='light'] [data-slot="app.title"]{color:#112233 !important}`,
+    )
+    expect(css).toContain(
+      `:root[data-theme='dark'] [data-slot="app.title"]{color:#eeeeee !important}`,
+    )
     expect(css).not.toContain('drop.hint')
   })
   it('ignoriert ungültige Slot-Schlüssel und Schriftdateien', () => {
     expect(slotCss({ 'x"y': { size: 10 }, ok: { font: '../evil.woff2' } })).toBe('')
+  })
+  it('flattenSlotStyles löst verschachtelte Schlüssel zu Slot-Namen auf', () => {
+    const flat = flattenSlotStyles({
+      app: { title: { size: 20 }, subtitle: { weight: '600' } },
+      footer: { colorDark: '#fff' },
+      junk: 'x',
+    })
+    expect(Object.keys(flat).sort()).toEqual(['app.subtitle', 'app.title', 'footer'])
+    expect(flat['app.title'].size).toBe(20)
   })
 })
