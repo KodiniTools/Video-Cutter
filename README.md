@@ -64,11 +64,12 @@ Texte, Titel/Meta und Farben sind ohne Code-Änderung über den
 Grundlage ist die Content-Schicht `src/content/site.json` (leerer Wert =
 eingebauter Standard aus `src/i18n.ts` bzw. `src/style.css`):
 
-| Bereich                 | Felder                                                                | Wirkung                                                                     |
-| ----------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `meta`                  | `title`, `description`                                                | `<title>` und Meta-Beschreibung der `index.html` (Build, `vite.config.ts`)  |
-| `texts.de` / `texts.en` | `app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`      | überschreiben die vue-i18n-Texte (`src/i18n.ts` → `mergeMessages`)          |
-| `theme`                 | `accent`, `playhead`, `light.bg/surface/text`, `dark.bg/surface/text` | CSS-Variablen `--vc-*` (Laufzeit, `src/content/site.ts` → `applySiteTheme`) |
+| Bereich                 | Felder                                                                                                                                                                     | Wirkung                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `meta`                  | `title`, `description`                                                                                                                                                     | `<title>` und Meta-Beschreibung der `index.html` (Build, `vite.config.ts`)              |
+| `texts.de` / `texts.en` | `app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`                                                                                                           | überschreiben die vue-i18n-Texte (`src/i18n.ts` → `mergeMessages`)                      |
+| `theme`                 | `accent`, `playhead`, `light.bg/surface/text`, `dark.bg/surface/text`                                                                                                      | CSS-Variablen `--vc-*` (Laufzeit, `src/content/site.ts` → `applySiteTheme`)             |
+| `styles`                | verschachtelt je Text-Slot (`app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`): `font`, `size`, `weight`, `spacing`, `transform`, `colorLight`, `colorDark` | Slot-Design auf `[data-slot="…"]` (`slotCss`, `!important`, `@font-face` aus `/fonts/`) |
 
 Der Designer schreibt nur diese Datei, baut die Vorschau (`VITE_BASE`,
 `VITE_OUT_DIR`) und veröffentlicht per Commit, Push und `deploy/deploy.sh`

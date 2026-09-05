@@ -40,5 +40,56 @@
       "surface": "",
       "text": ""
     }
+  },
+  "styles": {
+    "app": {
+      "title": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      },
+      "subtitle": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      }
+    },
+    "drop": {
+      "title": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      },
+      "hint": {
+        "font": "",
+        "size": 0,
+        "weight": "",
+        "spacing": 0,
+        "transform": "",
+        "colorLight": "",
+        "colorDark": ""
+      }
+    },
+    "footer": {
+      "font": "",
+      "size": 0,
+      "weight": "",
+      "spacing": 0,
+      "transform": "",
+      "colorLight": "",
+      "colorDark": ""
+    }
   }
 }

@@ -28,8 +28,8 @@ onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChang
       <div class="brand">
         <span class="logo" aria-hidden="true">✂</span>
         <div>
-          <h1>{{ t('app.title') }}</h1>
-          <p>{{ t('app.subtitle') }}</p>
+          <h1 data-slot="app.title">{{ t('app.title') }}</h1>
+          <p data-slot="app.subtitle">{{ t('app.subtitle') }}</p>
         </div>
       </div>
     </header>
@@ -38,7 +38,7 @@ onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChang
       <VideoTrimmer />
     </main>
 
-    <footer class="footer">{{ t('footer') }}</footer>
+    <footer class="footer" data-slot="footer">{{ t('footer') }}</footer>
   </div>
 </template>
 

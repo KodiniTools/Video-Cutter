@@ -360,8 +360,8 @@ async function downloadResult(): Promise<void> {
     >
       <input type="file" accept="video/*" class="sr-only" @change="onInputChange" />
       <div class="dz-icon" aria-hidden="true">▶</div>
-      <p class="dz-title">{{ t('drop.title') }}</p>
-      <p class="dz-hint">{{ t('drop.hint') }}</p>
+      <p class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</p>
+      <p class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</p>
     </label>
 
     <!-- Editor -->
