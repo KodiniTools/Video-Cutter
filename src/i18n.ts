@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { mergeMessages, site } from '@/content/site'
 
 const messages = {
   de: {
@@ -153,7 +154,8 @@ export const i18n = createI18n({
   legacy: false,
   locale: 'de',
   fallbackLocale: 'en',
-  messages,
+  // Designer-Texte (src/content/site.json) über die eingebauten Standards legen.
+  messages: mergeMessages(messages, site.texts),
 })
 
 export type AppLocale = 'de' | 'en'

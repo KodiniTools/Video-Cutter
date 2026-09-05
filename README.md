@@ -57,6 +57,24 @@ und `nginx -t && systemctl reload nginx`.
 > Remote-Stand. Der Deploy-Checkout ist damit eine reine Ableitung von Git –
 > lokale Änderungen auf dem Server gehen dabei verloren (gewollt).
 
+## Bearbeiten im Kodini Designer
+
+Texte, Titel/Meta und Farben sind ohne Code-Änderung über den
+[Kodini Designer](https://github.com/KodiniTools/Kodini-Designer) editierbar.
+Grundlage ist die Content-Schicht `src/content/site.json` (leerer Wert =
+eingebauter Standard aus `src/i18n.ts` bzw. `src/style.css`):
+
+| Bereich                 | Felder                                                                | Wirkung                                                                     |
+| ----------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `meta`                  | `title`, `description`                                                | `<title>` und Meta-Beschreibung der `index.html` (Build, `vite.config.ts`)  |
+| `texts.de` / `texts.en` | `app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`      | überschreiben die vue-i18n-Texte (`src/i18n.ts` → `mergeMessages`)          |
+| `theme`                 | `accent`, `playhead`, `light.bg/surface/text`, `dark.bg/surface/text` | CSS-Variablen `--vc-*` (Laufzeit, `src/content/site.ts` → `applySiteTheme`) |
+
+Der Designer schreibt nur diese Datei, baut die Vorschau (`VITE_BASE`,
+`VITE_OUT_DIR`) und veröffentlicht per Commit, Push und `deploy/deploy.sh`
+(mit `SKIP_API=1`, Frontend-only; ohne sudo, wenn der Webroot beschreibbar ist).
+Das Profil dafür liegt im Designer-Repo unter `profiles/video-cutter/`.
+
 ## Server-Backend
 
 Der eigentliche Schnitt passiert im VPS-Backend in `server/` (Express + FFmpeg,
