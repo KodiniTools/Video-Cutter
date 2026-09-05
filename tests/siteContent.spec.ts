@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeMessages, themeCss, applySiteTheme } from '@/content/site'
+import { mergeMessages, themeCss, slotCss, applySiteTheme } from '@/content/site'
 
 describe('Content-Schicht (Kodini Designer)', () => {
   const base = {
@@ -51,5 +51,39 @@ describe('Content-Schicht (Kodini Designer)', () => {
     const els = document.querySelectorAll('#site-theme')
     expect(els.length).toBe(1)
     expect(els[0].textContent).toContain('--vc-accent:#abcdef')
+  })
+})
+
+describe('slotCss', () => {
+  it('liefert leer ohne Styles', () => {
+    expect(slotCss(undefined)).toBe('')
+    expect(slotCss({ 'app.title': {} })).toBe('')
+    expect(slotCss({ 'app.title': { size: 0, spacing: 0, weight: '', font: '' } })).toBe('')
+  })
+  it('baut Regeln je Slot inkl. @font-face und Farben je Modus', () => {
+    const css = slotCss({
+      'app.title': {
+        font: 'Supreme-Bold.woff2',
+        size: 28,
+        weight: '700',
+        spacing: 1.5,
+        transform: 'uppercase',
+        colorLight: '#112233',
+        colorDark: '#eeeeee',
+      },
+      'drop.hint': { colorLight: 'rot', size: -3, weight: '999' },
+    })
+    expect(css).toContain(
+      '@font-face{font-family:"kodini-font-Supreme-Bold";src:url("/fonts/Supreme-Bold.woff2") format("woff2")',
+    )
+    expect(css).toContain(
+      '[data-slot="app.title"]{font-family:"kodini-font-Supreme-Bold",system-ui,sans-serif;font-size:28px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}',
+    )
+    expect(css).toContain(`:root[data-theme='light'] [data-slot="app.title"]{color:#112233}`)
+    expect(css).toContain(`:root[data-theme='dark'] [data-slot="app.title"]{color:#eeeeee}`)
+    expect(css).not.toContain('drop.hint')
+  })
+  it('ignoriert ungültige Slot-Schlüssel und Schriftdateien', () => {
+    expect(slotCss({ 'x"y': { size: 10 }, ok: { font: '../evil.woff2' } })).toBe('')
   })
 })

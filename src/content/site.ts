@@ -12,10 +12,21 @@ export interface SiteTheme {
   light?: { bg?: string; surface?: string; text?: string }
   dark?: { bg?: string; surface?: string; text?: string }
 }
+/** Design eines Text-Slots (Designer, Tab „Felder“); ''/0 = Standard der App. */
+export interface SlotStyle {
+  font?: string // Dateiname unter /fonts (z. B. Supreme-Bold.woff2)
+  size?: number // px, 0 = Standard
+  weight?: string // '', '300' … '800'
+  spacing?: number // Buchstabenabstand in px
+  transform?: string // '', 'uppercase', 'lowercase', 'capitalize'
+  colorLight?: string // Hex, Hellmodus
+  colorDark?: string // Hex, Dunkelmodus
+}
 export interface SiteContent {
   meta?: { title?: string; description?: string }
   texts?: Record<string, unknown>
   theme?: SiteTheme
+  styles?: Record<string, SlotStyle>
 }
 
 export const site: SiteContent = siteJson as SiteContent
@@ -69,6 +80,53 @@ export function themeCss(theme: SiteTheme | undefined): string {
   return rules.join('\n')
 }
 
+const FONT_FILE = /^[a-zA-Z0-9][a-zA-Z0-9._ -]*\.(woff2|woff|ttf|otf)$/i
+const WEIGHTS = new Set(['300', '400', '500', '600', '700', '800'])
+const TRANSFORMS = new Set(['uppercase', 'lowercase', 'capitalize'])
+const SLOT_KEY = /^[a-zA-Z0-9_.-]+$/
+
+function fontFamilyId(file: string): string {
+  return 'kodini-font-' + file.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]+/g, '-')
+}
+function fontFaceCss(file: string): string {
+  const ext = (file.split('.').pop() || '').toLowerCase()
+  const fmt = (
+    { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype' } as Record<string, string>
+  )[ext]
+  const src = `url("/fonts/${encodeURIComponent(file)}")${fmt ? ` format("${fmt}")` : ''}`
+  return `@font-face{font-family:"${fontFamilyId(file)}";src:${src};font-display:swap;}`
+}
+
+/**
+ * CSS für die Text-Slots ([data-slot="…"] in den Komponenten): Schrift, Größe,
+ * Gewicht, Abstand, Schreibweise sowie Farbe je Hell/Dunkel. '' wenn nichts gesetzt.
+ */
+export function slotCss(styles: Record<string, SlotStyle> | undefined): string {
+  if (!styles) return ''
+  const faces = new Set<string>()
+  const rules: string[] = []
+  for (const [key, st] of Object.entries(styles)) {
+    if (!SLOT_KEY.test(key) || !st || typeof st !== 'object') continue
+    const sel = `[data-slot="${key}"]`
+    const decl: string[] = []
+    if (st.font && FONT_FILE.test(st.font)) {
+      faces.add(fontFaceCss(st.font))
+      decl.push(`font-family:"${fontFamilyId(st.font)}",system-ui,sans-serif`)
+    }
+    if (typeof st.size === 'number' && st.size > 0) decl.push(`font-size:${st.size}px`)
+    if (st.weight && WEIGHTS.has(String(st.weight))) decl.push(`font-weight:${st.weight}`)
+    if (typeof st.spacing === 'number' && st.spacing !== 0)
+      decl.push(`letter-spacing:${st.spacing}px`)
+    if (st.transform && TRANSFORMS.has(st.transform)) decl.push(`text-transform:${st.transform}`)
+    if (decl.length) rules.push(`${sel}{${decl.join(';')}}`)
+    if (st.colorLight && HEX.test(st.colorLight))
+      rules.push(`:root[data-theme='light'] ${sel}{color:${st.colorLight}}`)
+    if (st.colorDark && HEX.test(st.colorDark))
+      rules.push(`:root[data-theme='dark'] ${sel}{color:${st.colorDark}}`)
+  }
+  return [...faces, ...rules].join('\n')
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   let h = hex.slice(1)
   if (h.length === 3)
@@ -82,9 +140,9 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-/** Hängt die Designer-Farben als <style id="site-theme"> in den Kopf ein. */
+/** Hängt Designer-Farben und Slot-Design als <style id="site-theme"> in den Kopf ein. */
 export function applySiteTheme(doc: Document, content: SiteContent = site): void {
-  const css = themeCss(content.theme)
+  const css = [themeCss(content.theme), slotCss(content.styles)].filter(Boolean).join('\n')
   if (!css) return
   let el = doc.getElementById('site-theme') as HTMLStyleElement | null
   if (!el) {
