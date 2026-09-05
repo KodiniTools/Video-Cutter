@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "title": "",
+    "description": ""
+  },
+  "texts": {
+    "de": {
+      "app": {
+        "title": "",
+        "subtitle": ""
+      },
+      "drop": {
+        "title": "",
+        "hint": ""
+      },
+      "footer": ""
+    },
+    "en": {
+      "app": {
+        "title": "",
+        "subtitle": ""
+      },
+      "drop": {
+        "title": "",
+        "hint": ""
+      },
+      "footer": ""
+    }
+  },
+  "theme": {
+    "accent": "",
+    "playhead": "",
+    "light": {
+      "bg": "",
+      "surface": "",
+      "text": ""
+    },
+    "dark": {
+      "bg": "",
+      "surface": "",
+      "text": ""
+    }
+  }
+}

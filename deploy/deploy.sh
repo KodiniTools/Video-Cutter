@@ -14,6 +14,7 @@
 #   WEB_ROOT      Zielverzeichnis im Webroot           (default: /var/www/kodinitools.com/video-cutter)
 #   WEB_USER      Eigentümer der ausgelieferten Dateien(default: www-data)
 #   SKIP_PULL=1   Git-Sync überspringen (nur bauen/deployen)
+#   SKIP_API=1    Backend-Update (server/, PM2) überspringen – z. B. beim Kodini Designer
 #
 # Beispiel mit abweichendem Pfad:
 #   BASE_PATH=/videoschneiden/ WEB_ROOT=/var/www/kodinitools/videoschneiden bash deploy/deploy.sh
@@ -36,6 +37,13 @@ VITE_API_BASE="${VITE_API_BASE:-$BASE_NO_SLASH}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_DIR"
+
+# npm braucht ein beschreibbares HOME (Cache); unter systemd ist das des
+# Dienst-Users oft nicht beschreibbar -> Build-Home neben dem Repo.
+if [[ ! -w "${HOME:-/nonexistent}" ]]; then
+  export HOME="$(dirname "$REPO_DIR")/.build-home"
+  mkdir -p "$HOME"
+fi
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
@@ -76,9 +84,16 @@ VITE_API_BASE="$VITE_API_BASE" \
 # Ein Browser-/WASM-Weg existiert nicht mehr, daher wird kein ffmpeg-core mehr
 # mit ausgeliefert.
 log "Rsync nach $WEB_ROOT"
-sudo mkdir -p "$WEB_ROOT"
-sudo rsync -a --delete dist/ "$WEB_ROOT/"
-sudo chown -R "$WEB_USER:$WEB_USER" "$WEB_ROOT"
+# Ohne sudo, wenn der Webroot (bzw. sein Elternordner) bereits beschreibbar ist –
+# so kann auch der Kodini Designer (Dienst-User www-data, kein sudo) deployen.
+if [[ -w "$WEB_ROOT" || ( ! -e "$WEB_ROOT" && -w "$(dirname "$WEB_ROOT")" ) ]]; then
+  mkdir -p "$WEB_ROOT"
+  rsync -a --delete dist/ "$WEB_ROOT/"
+else
+  sudo mkdir -p "$WEB_ROOT"
+  sudo rsync -a --delete dist/ "$WEB_ROOT/"
+  sudo chown -R "$WEB_USER:$WEB_USER" "$WEB_ROOT"
+fi
 
 log "Frontend-Deploy fertig – $WEB_ROOT (Branch $BRANCH)"
 
