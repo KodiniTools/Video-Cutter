@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { mergeMessages, themeCss, slotCss, flattenSlotStyles, applySiteTheme } from '@/content/site'
+import {
+  mergeMessages,
+  themeCss,
+  slotCss,
+  flattenSlotStyles,
+  bgImageCss,
+  applySiteTheme,
+} from '@/content/site'
 
 describe('Content-Schicht (Kodini Designer)', () => {
   const base = {
@@ -100,5 +107,29 @@ describe('slotCss', () => {
     })
     expect(Object.keys(flat).sort()).toEqual(['app.subtitle', 'app.title', 'footer'])
     expect(flat['app.title'].size).toBe(20)
+  })
+})
+
+describe('bgImageCss', () => {
+  it('liefert leer ohne gültige URL', () => {
+    expect(bgImageCss(undefined)).toBe('')
+    expect(bgImageCss({ bgImage: '' })).toBe('')
+    expect(bgImageCss({ bgImage: 'javascript:alert(1)' })).toBe('')
+    expect(bgImageCss({ bgImage: '/x") } body{' })).toBe('')
+  })
+  it('baut die fixierte Ebene mit Deckkraft, Abdunkelung und Weichzeichner', () => {
+    const css = bgImageCss({
+      bgImage: '/uploads/bg.jpg',
+      bgImageOpacity: 60,
+      bgImageDarken: 30,
+      bgImageBlur: 4,
+    })
+    expect(css).toContain(`body::before{content:'';position:fixed;inset:-8px;z-index:-1;`)
+    expect(css).toContain('background:url("/uploads/bg.jpg") center/cover no-repeat;opacity:0.600;')
+    expect(css).toContain('filter:blur(4px) brightness(0.700)')
+    expect(bgImageCss({ bgImage: 'https://example.com/a.webp' })).toContain(
+      'opacity:1.000;filter:none',
+    )
+    expect(themeCss({ bgImage: '/uploads/bg.jpg' })).toContain('body::before')
   })
 })

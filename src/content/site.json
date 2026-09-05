@@ -39,7 +39,11 @@
       "bg": "",
       "surface": "",
       "text": ""
-    }
+    },
+    "bgImage": "",
+    "bgImageOpacity": 100,
+    "bgImageDarken": 0,
+    "bgImageBlur": 0
   },
   "styles": {
     "app": {
