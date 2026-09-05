@@ -11,6 +11,12 @@ export interface SiteTheme {
   playhead?: string
   light?: { bg?: string; surface?: string; text?: string }
   dark?: { bg?: string; surface?: string; text?: string }
+  // Hintergrundbild der App (URL unter /uploads/… oder https://…), fixiert
+  // hinter dem Inhalt; Deckkraft 0–100 %, Abdunkelung 0–100 %, Weichzeichner px.
+  bgImage?: string
+  bgImageOpacity?: number
+  bgImageDarken?: number
+  bgImageBlur?: number
 }
 /** Design eines Text-Slots (Designer, Tab „Felder“); ''/0 = Standard der App. */
 export interface SlotStyle {
@@ -79,7 +85,35 @@ export function themeCss(theme: SiteTheme | undefined): string {
     if (side.text && HEX.test(side.text)) vars.push(`--vc-text:${side.text}`)
     if (vars.length) rules.push(`:root[data-theme='${mode}']{${vars.join(';')}}`)
   }
+  const bg = bgImageCss(theme)
+  if (bg) rules.push(bg)
   return rules.join('\n')
+}
+
+const IMAGE_URL = /^(\/[^\s"'()\\]*|https?:\/\/[^\s"'()\\]+)$/
+const clamp = (v: unknown, min: number, max: number, def: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def
+
+/**
+ * Hintergrundbild als fixierte Ebene hinter dem Inhalt (body::before): Deckkraft,
+ * Abdunkelung (brightness) und Weichzeichner; '' ohne gültiges Bild.
+ */
+export function bgImageCss(theme: SiteTheme | undefined): string {
+  const url = theme?.bgImage
+  if (!url || !IMAGE_URL.test(url)) return ''
+  const opacity = clamp(theme?.bgImageOpacity, 0, 100, 100) / 100
+  const darken = clamp(theme?.bgImageDarken, 0, 100, 0) / 100
+  const blur = clamp(theme?.bgImageBlur, 0, 40, 0)
+  const filters: string[] = []
+  if (blur > 0) filters.push(`blur(${blur}px)`)
+  if (darken > 0) filters.push(`brightness(${(1 - darken).toFixed(3)})`)
+  // Weichzeichner franst am Rand aus -> Ebene etwas über den Rand hinaus vergrößern.
+  const grow = blur > 0 ? blur * 2 : 0
+  return (
+    `body::before{content:'';position:fixed;inset:-${grow}px;z-index:-1;pointer-events:none;` +
+    `background:url("${url}") center/cover no-repeat;opacity:${opacity.toFixed(3)};` +
+    `filter:${filters.join(' ') || 'none'}}`
+  )
 }
 
 const FONT_FILE = /^[a-zA-Z0-9][a-zA-Z0-9._ -]*\.(woff2|woff|ttf|otf)$/i
