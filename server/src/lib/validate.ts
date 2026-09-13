@@ -5,6 +5,7 @@ import {
   type Segment,
   type Transition,
   type TransitionPreset,
+  type CropRect,
 } from './args'
 
 export class ValidationError extends Error {
@@ -23,6 +24,8 @@ export interface CutParams {
   total?: number
   /** Übergang beim Zusammenfügen mehrerer Ausschnitte. */
   transition?: Transition
+  /** Optionaler Bildausschnitt (Anteile 0–1 der Originalbreite/-höhe). */
+  crop?: CropRect
 }
 
 const TRANSITION_PRESETS: TransitionPreset[] = ['none', 'fade', 'slide', 'scale', 'flip']
@@ -40,6 +43,50 @@ function parseTransition(body: Record<string, unknown>): Transition | undefined 
   if (!Number.isFinite(duration)) duration = 1
   duration = Math.min(MAX_TRANSITION_SEC, Math.max(1, duration))
   return { preset: preset as TransitionPreset, duration }
+}
+
+/** Toleranz für Rundungsfehler bei den 0–1-Anteilswerten des Bildausschnitts. */
+const CROP_EPS = 1e-6
+
+/** Liest den optionalen Bildausschnitt (JSON: {x,y,width,height}, Anteile 0–1). */
+function parseCrop(body: Record<string, unknown>): CropRect | undefined {
+  let raw: unknown = body.crop
+  if (typeof raw === 'string') {
+    if (!raw.trim()) return undefined
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      throw new ValidationError('Ungültiger Bildausschnitt.')
+    }
+  }
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'object') throw new ValidationError('Ungültiger Bildausschnitt.')
+
+  const { x, y, width, height } = raw as Record<string, unknown>
+  const nx = Number(x)
+  const ny = Number(y)
+  const nWidth = Number(width)
+  const nHeight = Number(height)
+  if (![nx, ny, nWidth, nHeight].every(Number.isFinite)) {
+    throw new ValidationError('Ungültiger Bildausschnitt.')
+  }
+  if (nWidth <= 0 || nHeight <= 0 || nWidth > 1 || nHeight > 1) {
+    throw new ValidationError('Ungültige Größe des Bildausschnitts.')
+  }
+  if (
+    nx < -CROP_EPS ||
+    ny < -CROP_EPS ||
+    nx + nWidth > 1 + CROP_EPS ||
+    ny + nHeight > 1 + CROP_EPS
+  ) {
+    throw new ValidationError('Bildausschnitt liegt außerhalb des Bildes.')
+  }
+  return {
+    x: Math.max(0, nx),
+    y: Math.max(0, ny),
+    width: nWidth,
+    height: nHeight,
+  }
 }
 
 /** Liest die Segment-Liste (JSON) oder – als Fallback – das einzelne start/duration. */
@@ -108,8 +155,9 @@ export function parseCutParams(body: Record<string, unknown>, maxDurationSec: nu
   }
 
   const transition = parseTransition(body)
+  const crop = parseCrop(body)
 
-  return { segments, mode, operation, total, transition }
+  return { segments, mode, operation, total, transition, crop }
 }
 
 /** Endung in Kleinbuchstaben (1–5 Zeichen), Fallback `mp4`. */

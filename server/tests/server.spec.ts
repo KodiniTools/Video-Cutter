@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { buildServerArgs, formatFfmpegTime, outputDurationFor } from '../src/lib/args'
+import {
+  buildServerArgs,
+  buildCropFilter,
+  formatFfmpegTime,
+  outputDurationFor,
+} from '../src/lib/args'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../src/lib/validate'
 
 describe('formatFfmpegTime', () => {
@@ -211,6 +216,82 @@ describe('buildServerArgs', () => {
   })
 })
 
+describe('buildCropFilter', () => {
+  it('baut den crop-Filter über iw/ih-Ausdrücke mit geraden Pixelzahlen', () => {
+    expect(buildCropFilter({ x: 0.25, y: 0.1, width: 0.5, height: 0.6 })).toBe(
+      'crop=trunc(iw*0.5/2)*2:trunc(ih*0.6/2)*2:trunc(iw*0.25/2)*2:trunc(ih*0.1/2)*2',
+    )
+  })
+  it('begrenzt Position, damit der Ausschnitt nie über den Rand ragt', () => {
+    // x/y = 0.9 mit Breite/Höhe 0.5 würde über den Rand ragen -> auf 1-0.5=0.5 geklemmt.
+    const f = buildCropFilter({ x: 0.9, y: 0.9, width: 0.5, height: 0.5 })
+    expect(f).toBe('crop=trunc(iw*0.5/2)*2:trunc(ih*0.5/2)*2:trunc(iw*0.5/2)*2:trunc(ih*0.5/2)*2')
+  })
+})
+
+describe('buildServerArgs mit Bildausschnitt (Crop)', () => {
+  it('einzelnes Segment + copy + crop -> erzwingt Re-Encode mit -vf crop', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      start: 0,
+      duration: 5,
+      mode: 'copy',
+      crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+    })
+    expect(args).not.toContain('-c')
+    expect(args).toContain('libx264') // kein Stream-Copy mehr möglich
+    const vf = args[args.indexOf('-vf') + 1]
+    expect(vf).toContain('crop=')
+  })
+
+  it('mehrere Segmente (concat) + crop: Filter enthält crop vor setpts', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 5 },
+        { start: 10, duration: 5 },
+      ],
+      crop: { x: 0, y: 0, width: 0.5, height: 0.5 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    expect(fc).toMatch(/\[0:v\]crop=.*,setpts=PTS-STARTPTS\[v0\]/)
+    expect(fc).toMatch(/\[1:v\]crop=.*,setpts=PTS-STARTPTS\[v1\]/)
+  })
+
+  it('Übergang (xfade) + crop: Filter enthält crop vor fps/format', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      mode: 'reencode',
+      operation: 'keep',
+      segments: [
+        { start: 0, duration: 8 },
+        { start: 20, duration: 8 },
+      ],
+      transition: { preset: 'slide', duration: 4 },
+      crop: { x: 0.2, y: 0.2, width: 0.6, height: 0.6 },
+    })
+    const fc = args[args.indexOf('-filter_complex') + 1]
+    expect(fc).toMatch(/\[0:v\]crop=.*,fps=30,format=yuv420p/)
+  })
+
+  it('ohne Crop bleibt der verlustfreie Copy-Pfad unverändert', () => {
+    const args = buildServerArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      start: 0,
+      duration: 5,
+      mode: 'copy',
+    })
+    expect(args).toContain('-c')
+    expect(args).not.toContain('-vf')
+  })
+})
+
 describe('parseCutParams', () => {
   const MAX = 3600
   it('akzeptiert gültige Werte (Fallback start/duration -> segments)', () => {
@@ -317,6 +398,65 @@ describe('parseCutParams', () => {
     expect(() => parseCutParams({ start: '0', duration: '7', mode: 'xyz' }, MAX)).toThrow(
       ValidationError,
     )
+  })
+
+  it('akzeptiert einen gültigen Bildausschnitt (JSON)', () => {
+    const params = parseCutParams(
+      {
+        start: '0',
+        duration: '7',
+        mode: 'copy',
+        crop: JSON.stringify({ x: 0.1, y: 0.2, width: 0.5, height: 0.6 }),
+      },
+      MAX,
+    )
+    expect(params.crop).toEqual({ x: 0.1, y: 0.2, width: 0.5, height: 0.6 })
+  })
+  it('ohne crop-Feld bleibt crop undefined', () => {
+    const params = parseCutParams({ start: '0', duration: '7', mode: 'copy' }, MAX)
+    expect(params.crop).toBeUndefined()
+  })
+  it('lehnt einen Bildausschnitt außerhalb des Bildes ab', () => {
+    expect(() =>
+      parseCutParams(
+        {
+          start: '0',
+          duration: '7',
+          mode: 'copy',
+          crop: JSON.stringify({ x: 0.6, y: 0, width: 0.6, height: 0.5 }),
+        },
+        MAX,
+      ),
+    ).toThrow(ValidationError)
+  })
+  it('lehnt eine Ausschnittgröße von 0 oder > 1 ab', () => {
+    expect(() =>
+      parseCutParams(
+        {
+          start: '0',
+          duration: '7',
+          mode: 'copy',
+          crop: JSON.stringify({ x: 0, y: 0, width: 0, height: 0.5 }),
+        },
+        MAX,
+      ),
+    ).toThrow(ValidationError)
+    expect(() =>
+      parseCutParams(
+        {
+          start: '0',
+          duration: '7',
+          mode: 'copy',
+          crop: JSON.stringify({ x: 0, y: 0, width: 1.5, height: 0.5 }),
+        },
+        MAX,
+      ),
+    ).toThrow(ValidationError)
+  })
+  it('lehnt ungültiges Crop-JSON ab', () => {
+    expect(() =>
+      parseCutParams({ start: '0', duration: '7', mode: 'copy', crop: 'nicht-json' }, MAX),
+    ).toThrow(ValidationError)
   })
 })
 
