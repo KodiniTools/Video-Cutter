@@ -59,11 +59,13 @@ cutRouter.post(
       const keep = computeKeepRanges(params.segments, params.operation, keepTotal)
 
       // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
-      // 'keep' + copy möglich – dann bleibt der Original-Container erhalten.
-      // Sonst (remove oder mehrere Bereiche oder reencode) wird neu kodiert:
-      // WebM-Input -> WebM (VP9/Opus), sonst mp4 (H.264/AAC).
+      // 'keep' + copy + OHNE Zuschnitt möglich – dann bleibt der Original-
+      // Container erhalten. Sonst (remove, mehrere Bereiche, reencode oder
+      // Zuschnitt) wird neu kodiert: WebM-Input -> WebM (VP9/Opus), sonst
+      // mp4 (H.264/AAC).
       const isWebm = inExt === 'webm'
-      const lossless = params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
+      const lossless =
+        !params.crop && params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
       const outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
       const outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
       const outputName = `${safeBaseName(req.file.originalname)}_cut.${outExt}`
@@ -83,6 +85,7 @@ cutRouter.post(
         total: params.total,
         segments: params.segments,
         transition: params.transition,
+        crop: params.crop,
       })
 
       // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der

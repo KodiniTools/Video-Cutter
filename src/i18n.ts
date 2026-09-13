@@ -39,6 +39,13 @@ const messages = {
       removeHint: 'Entfernt die gewählten Ausschnitte, fügt den Rest zusammen.',
       removeNote: 'Beim Entfernen wird neu kodiert. WebM bleibt WebM, sonst .mp4.',
     },
+    crop: {
+      toggle: 'Bildausschnitt',
+      on: 'Bildausschnitt ✕',
+      selection: 'Ausschnitt',
+      hint: 'Rechteck ziehen oder an den Punkten in der Größe ändern.',
+      reset: 'Zurücksetzen',
+    },
     actions: {
       change: 'Anderes Video',
       setStart: 'Start setzen',
@@ -111,6 +118,13 @@ const messages = {
       remove: 'Remove segments',
       removeHint: 'Removes the selected segments, joins the rest together.',
       removeNote: 'Removing re-encodes. WebM stays WebM, otherwise .mp4.',
+    },
+    crop: {
+      toggle: 'Crop',
+      on: 'Crop ✕',
+      selection: 'Selection',
+      hint: 'Drag the rectangle or resize it using the handles.',
+      reset: 'Reset',
     },
     actions: {
       change: 'Change video',

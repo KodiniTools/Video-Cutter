@@ -165,6 +165,53 @@ describe('videoEditor store', () => {
     expect(store.endTime).toBe(12)
   })
 
+  it('enableCrop setzt einen zentrierten Standardausschnitt, toggleCrop schaltet um', () => {
+    const store = loadVideo(30)
+    expect(store.crop).toBeNull()
+    expect(store.hasCrop).toBe(false)
+    store.toggleCrop()
+    expect(store.hasCrop).toBe(true)
+    expect(store.crop).toEqual({ x: 0.1, y: 0.1, width: 0.8, height: 0.8 })
+    store.toggleCrop()
+    expect(store.crop).toBeNull()
+  })
+
+  it('setCrop begrenzt Größe und Position auf [0,1] mit Mindestgröße', () => {
+    const store = loadVideo(30)
+    store.setCrop({ x: 0.9, y: 0.9, width: 0.5, height: 0.5 })
+    expect(store.crop).toEqual({ x: 0.5, y: 0.5, width: 0.5, height: 0.5 })
+    store.setCrop({ x: 0, y: 0, width: 0.01, height: 0.01 })
+    expect(store.crop?.width).toBeCloseTo(0.1, 5)
+    expect(store.crop?.height).toBeCloseTo(0.1, 5)
+  })
+
+  it('clearCrop entfernt den Ausschnitt wieder', () => {
+    const store = loadVideo(30)
+    store.enableCrop()
+    expect(store.hasCrop).toBe(true)
+    store.clearCrop()
+    expect(store.hasCrop).toBe(false)
+    expect(store.crop).toBeNull()
+  })
+
+  it('cropPixelSize berechnet Pixelmaße aus der Videoauflösung', () => {
+    const store = loadVideo(30)
+    store.setVideoDimensions(1920, 1080)
+    store.setCrop({ x: 0, y: 0, width: 0.5, height: 0.5 })
+    expect(store.cropPixelSize).toEqual({ width: 960, height: 540 })
+  })
+
+  it('setFile und reset setzen den Bildausschnitt zurück', () => {
+    const store = loadVideo(30)
+    store.enableCrop()
+    store.setFile(new File([new Uint8Array([0])], 'neu.mp4', { type: 'video/mp4' }))
+    expect(store.crop).toBeNull()
+
+    store.enableCrop()
+    store.reset()
+    expect(store.crop).toBeNull()
+  })
+
   it('setFile leert eine bestehende Segmentliste', () => {
     const store = loadVideo(30)
     store.setStart(1)
@@ -222,6 +269,17 @@ describe('videoEditor store – Undo/Redo', () => {
     store.commitHistory()
     store.undo()
     expect(store.mode).toBe('copy')
+  })
+
+  it('macht das Aktivieren des Bildausschnitts rückgängig', () => {
+    const store = loadVideo(30)
+    store.enableCrop()
+    store.commitHistory()
+    expect(store.hasCrop).toBe(true)
+    store.undo()
+    expect(store.hasCrop).toBe(false)
+    store.redo()
+    expect(store.hasCrop).toBe(true)
   })
 
   it('eine neue Änderung verwirft den Redo-Zweig', () => {

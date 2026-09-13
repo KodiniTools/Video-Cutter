@@ -39,6 +39,32 @@ export interface Transition {
   duration: number
 }
 
+/** Räumlicher Bildausschnitt: Anteile [0,1] der Originalbreite/-höhe. */
+export interface CropRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Mindestgröße des Bildausschnitts (Anteil der jeweiligen Kante). */
+const MIN_CROP_RATIO = 0.1
+
+/**
+ * Baut den FFmpeg-`crop`-Filter aus Anteilswerten – über `iw`/`ih`-Ausdrücke,
+ * damit KEINE Quellauflösung (kein ffprobe) bekannt sein muss. Breite/Höhe
+ * werden auf gerade Pixelzahlen abgerundet (Encoder-Anforderung bei yuv420p).
+ */
+export function buildCropFilter(crop: CropRect): string {
+  const width = Math.min(1, Math.max(MIN_CROP_RATIO, crop.width))
+  const height = Math.min(1, Math.max(MIN_CROP_RATIO, crop.height))
+  const x = Math.min(Math.max(0, crop.x), 1 - width)
+  const y = Math.min(Math.max(0, crop.y), 1 - height)
+  return (
+    `crop=trunc(iw*${width}/2)*2:trunc(ih*${height}/2)*2:` + `trunc(iw*${x}/2)*2:trunc(ih*${y}/2)*2`
+  )
+}
+
 export interface ServerArgsInput {
   inputPath: string
   outputPath: string
@@ -53,6 +79,8 @@ export interface ServerArgsInput {
   segments?: Segment[]
   /** Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte. */
   transition?: Transition
+  /** Optionaler Bildausschnitt. Erzwingt Re-Encode (kein Stream-Copy möglich). */
+  crop?: CropRect
 }
 
 /**
@@ -194,8 +222,14 @@ function keepArgs(
   return [...base, ...reencodeCodecs(output), output]
 }
 
-/** Re-Encode-Trim eines einzelnen Segments [start, start+duration]. */
-function reencodeTrim(input: string, output: string, start: number, duration: number): string[] {
+/** Re-Encode-Trim eines einzelnen Segments [start, start+duration], optional mit Zuschnitt. */
+function reencodeTrim(
+  input: string,
+  output: string,
+  start: number,
+  duration: number,
+  crop?: CropRect,
+): string[] {
   const base = [
     ...PROGRESS,
     '-ss',
@@ -205,7 +239,8 @@ function reencodeTrim(input: string, output: string, start: number, duration: nu
     '-t',
     formatFfmpegTime(Math.max(0, duration)),
   ]
-  return [...base, ...reencodeCodecs(output), output]
+  const filterArgs = crop ? ['-vf', buildCropFilter(crop)] : []
+  return [...base, ...filterArgs, ...reencodeCodecs(output), output]
 }
 
 /**
@@ -213,7 +248,7 @@ function reencodeTrim(input: string, output: string, start: number, duration: nu
  * Input eingelesen (`-ss/-t -i`) – NICHT über einen split, sonst puffern die
  * Zweige den Rest im Speicher (OOM). Immer Re-Encode (concat braucht Frames).
  */
-function concatArgs(input: string, output: string, ranges: Segment[]): string[] {
+function concatArgs(input: string, output: string, ranges: Segment[], crop?: CropRect): string[] {
   const inputs = ranges.flatMap((r) => [
     '-ss',
     formatFfmpegTime(r.start),
@@ -222,9 +257,10 @@ function concatArgs(input: string, output: string, ranges: Segment[]): string[] 
     '-i',
     input,
   ])
+  const cropPre = crop ? `${buildCropFilter(crop)},` : ''
   let filter = ''
   ranges.forEach((_, i) => {
-    filter += `[${i}:v]setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
+    filter += `[${i}:v]${cropPre}setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
   })
   filter +=
     ranges.map((_, i) => `[v${i}][a${i}]`).join('') +
@@ -255,6 +291,7 @@ function xfadeArgs(
   ranges: Segment[],
   type: string,
   d: number,
+  crop?: CropRect,
 ): string[] {
   const inputs = ranges.flatMap((r) => [
     '-ss',
@@ -267,9 +304,10 @@ function xfadeArgs(
 
   // Jeden Clip normieren – xfade verlangt gleiche Basis UND konstante Bildrate
   // (variable Framerate lässt den Übergang sonst „verschwinden"/verrutschen).
+  const cropPre = crop ? `${buildCropFilter(crop)},` : ''
   let filter = ''
   ranges.forEach((_, i) => {
-    filter += `[${i}:v]fps=30,format=yuv420p,setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
+    filter += `[${i}:v]${cropPre}fps=30,format=yuv420p,setpts=PTS-STARTPTS[v${i}];[${i}:a]asetpts=PTS-STARTPTS[a${i}];`
   })
 
   // Video- und Audioketten mit kumulativem Offset aufbauen.
@@ -306,7 +344,13 @@ function xfadeArgs(
  * Sekunden nach Schwarz aus, der nächste blendet über `f` Sekunden aus Schwarz
  * ein (nacheinander, ohne Überlappung). Deutlich sichtbar. Immer Re-Encode.
  */
-function fadeDipArgs(input: string, output: string, ranges: Segment[], f: number): string[] {
+function fadeDipArgs(
+  input: string,
+  output: string,
+  ranges: Segment[],
+  f: number,
+  crop?: CropRect,
+): string[] {
   const inputs = ranges.flatMap((r) => [
     '-ss',
     formatFfmpegTime(r.start),
@@ -319,7 +363,7 @@ function fadeDipArgs(input: string, output: string, ranges: Segment[], f: number
   let filter = ''
   ranges.forEach((r, i) => {
     const outStart = Math.max(0, r.duration - f).toFixed(3)
-    const vfx = ['setpts=PTS-STARTPTS']
+    const vfx = crop ? [buildCropFilter(crop), 'setpts=PTS-STARTPTS'] : ['setpts=PTS-STARTPTS']
     const afx = ['asetpts=PTS-STARTPTS']
     if (i > 0) {
       vfx.push(`fade=t=in:st=0:d=${fd}`)
@@ -371,6 +415,7 @@ export function buildServerArgs({
   total,
   segments,
   transition,
+  crop,
 }: ServerArgsInput): string[] {
   const src = segments && segments.length ? segments : [{ start, duration }]
   const fallbackTotal = operation === 'keep' ? Number.POSITIVE_INFINITY : start + duration
@@ -382,27 +427,29 @@ export function buildServerArgs({
 
   // Sicherheitsnetz (durch Validierung ausgeschlossen): nichts übrig.
   if (keep.length === 0) {
+    if (crop) return reencodeTrim(inputPath, outputPath, start, Math.max(0, duration), crop)
     return keepArgs(inputPath, outputPath, start, Math.max(0, duration), mode)
   }
 
   if (keep.length === 1) {
     const r = keep[0]
-    // Verlustfrei nur bei 'keep' + copy sinnvoll; 'remove' kodiert immer neu.
-    if (operation === 'keep' && mode === 'copy') {
+    // Verlustfrei nur bei 'keep' + copy + ohne Zuschnitt möglich; Zuschneiden
+    // erfordert Decode+Encode, 'remove' kodiert ohnehin immer neu.
+    if (operation === 'keep' && mode === 'copy' && !crop) {
       return keepArgs(inputPath, outputPath, r.start, r.duration, 'copy')
     }
-    return reencodeTrim(inputPath, outputPath, r.start, r.duration)
+    return reencodeTrim(inputPath, outputPath, r.start, r.duration, crop)
   }
 
   const xf = effectiveTransition(keep, transition)
   if (xf) {
     // 'fade' = Dip to Black (nacheinander, keine Überlappung), sonst xfade.
     if (xf.preset === 'fade') {
-      return fadeDipArgs(inputPath, outputPath, keep, xf.d)
+      return fadeDipArgs(inputPath, outputPath, keep, xf.d, crop)
     }
-    return xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d)
+    return xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d, crop)
   }
-  return concatArgs(inputPath, outputPath, keep)
+  return concatArgs(inputPath, outputPath, keep, crop)
 }
 
 /**

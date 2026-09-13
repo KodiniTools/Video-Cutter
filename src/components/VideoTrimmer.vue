@@ -9,6 +9,7 @@ import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
+import CropOverlay from './CropOverlay.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -22,6 +23,9 @@ const {
   mode,
   operation,
   segments,
+  crop,
+  hasCrop,
+  cropPixelSize,
   hasVideo,
   canExport,
   canAddSegment,
@@ -67,15 +71,31 @@ function pickMode(m: 'copy' | 'reencode', close: () => void): void {
   store.setMode(m)
   close()
 }
-// Beim Entfernen wird immer neu kodiert -> Modus ist dann fest & deaktiviert.
-const modeDisabled = computed(() => operation.value === 'remove')
+// Beim Entfernen ODER bei aktivem Zuschnitt wird immer neu kodiert -> Modus
+// ist dann fest & deaktiviert (Zuschneiden erfordert Decode+Encode).
+const modeDisabled = computed(() => operation.value === 'remove' || hasCrop.value)
 const modeLabel = computed(() =>
-  operation.value === 'remove'
+  modeDisabled.value
     ? t('mode.accurate')
     : mode.value === 'copy'
       ? t('mode.fast')
       : t('mode.accurate'),
 )
+
+// --- Bildausschnitt (Crop) ------------------------------------------------
+function onCropUpdate(rect: { x: number; y: number; width: number; height: number }): void {
+  store.setCrop(rect)
+}
+function onToggleCrop(): void {
+  store.toggleCrop()
+}
+const cropSizeLabel = computed(() => {
+  if (!crop.value) return ''
+  const pct = `${Math.round(crop.value.width * 100)}% × ${Math.round(crop.value.height * 100)}%`
+  return cropPixelSize.value
+    ? `${cropPixelSize.value.width}×${cropPixelSize.value.height}px (${pct})`
+    : pct
+})
 
 function formatMB(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(bytes < 100 * 1024 * 1024 ? 1 : 0)
@@ -161,6 +181,8 @@ function readDuration(): void {
 
 function onLoadedMetadata(): void {
   readDuration()
+  const el = videoEl.value
+  if (el) store.setVideoDimensions(el.videoWidth, el.videoHeight)
 }
 
 function onDurationChange(): void {
@@ -269,6 +291,7 @@ async function onExport(): Promise<void> {
       operation.value,
       duration.value,
       { preset: animation.value, duration: animDuration.value },
+      crop.value ?? undefined,
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -649,6 +672,16 @@ async function downloadResult(): Promise<void> {
                   </button>
                 </template>
               </DropdownMenu>
+
+              <button
+                class="btn crop-toggle"
+                type="button"
+                :class="{ active: hasCrop }"
+                :aria-pressed="hasCrop"
+                @click="onToggleCrop"
+              >
+                {{ hasCrop ? t('crop.on') : t('crop.toggle') }}
+              </button>
             </div>
 
             <div class="action-buttons">
@@ -672,7 +705,17 @@ async function downloadResult(): Promise<void> {
             </div>
           </div>
 
-          <p v-if="modeDisabled" class="reencode-note">{{ t('operation.removeNote') }}</p>
+          <p v-if="operation === 'remove'" class="reencode-note">{{ t('operation.removeNote') }}</p>
+
+          <div v-if="hasCrop" class="crop-bar">
+            <span class="crop-size"
+              >{{ t('crop.selection') }}: <b>{{ cropSizeLabel }}</b></span
+            >
+            <span class="crop-hint">{{ t('crop.hint') }}</span>
+            <button class="btn tiny ghost" type="button" @click="store.clearCrop()">
+              {{ t('crop.reset') }}
+            </button>
+          </div>
 
           <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
             <div class="bar" :style="{ width: `${progress}%` }"></div>
@@ -683,16 +726,25 @@ async function downloadResult(): Promise<void> {
           </button>
           <p v-if="error" class="error" role="alert">{{ error }}</p>
 
-          <video
-            ref="videoEl"
-            class="player"
-            :src="objectUrl"
-            controls
-            preload="metadata"
-            @loadedmetadata="onLoadedMetadata"
-            @durationchange="onDurationChange"
-            @timeupdate="onTimeUpdate"
-          ></video>
+          <div class="video-wrap">
+            <video
+              ref="videoEl"
+              class="player"
+              :src="objectUrl"
+              controls
+              preload="metadata"
+              @loadedmetadata="onLoadedMetadata"
+              @durationchange="onDurationChange"
+              @timeupdate="onTimeUpdate"
+            ></video>
+            <CropOverlay
+              v-if="crop"
+              :model-value="crop"
+              :disabled="busy"
+              :target="videoEl"
+              @update:model-value="onCropUpdate"
+            />
+          </div>
 
           <Timeline
             :duration="duration"
@@ -937,11 +989,44 @@ async function downloadResult(): Promise<void> {
   padding: 6px 10px;
 }
 
+.video-wrap {
+  position: relative;
+  /* Video ist ein Replaced Element mit Default-`display:inline` -> ohne
+     `block` bliebe ein paar Pixel „Whitespace-below“, wodurch der Crop-
+     Overlay (absolut, inset:0) nicht exakt auf dem sichtbaren Bild läge. */
+  display: block;
+  line-height: 0;
+}
 .player {
+  display: block;
   width: 100%;
   max-height: 52vh;
   border-radius: 10px;
   background: #000;
+}
+
+.crop-toggle.active {
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+  background: var(--vc-accent-soft);
+}
+.crop-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
+.crop-size {
+  font-variant-numeric: tabular-nums;
+}
+.crop-size b {
+  color: var(--vc-text);
+}
+.crop-hint {
+  flex: 1;
+  min-width: 160px;
 }
 
 .marks {

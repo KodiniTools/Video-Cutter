@@ -11,6 +11,18 @@ export interface Segment {
   end: number
 }
 
+/**
+ * Räumlicher Bildausschnitt (Crop). Alle Werte sind Anteile [0, 1] der
+ * Originalbreite/-höhe – unabhängig von der Vorschaugröße, direkt für den
+ * FFmpeg-`crop`-Filter (iw/ih-Ausdrücke) auf dem Server nutzbar.
+ */
+export interface CropRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands. */
 interface EditorSnapshot {
   startTime: number
@@ -18,10 +30,17 @@ interface EditorSnapshot {
   mode: TrimMode
   operation: CutOperation
   segments: Segment[]
+  crop: CropRect | null
 }
 
 /** Mindestlänge der Auswahl in Sekunden. */
 const MIN_SELECTION = 0.05
+
+/** Mindestgröße des Bildausschnitts (Anteil der jeweiligen Kante). */
+export const MIN_CROP_RATIO = 0.1
+
+/** Voreingestellter Ausschnitt beim Aktivieren (zentriert, 80 %). */
+const DEFAULT_CROP: CropRect = { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }
 
 /** Verzögerung, bis eine Änderungsserie (z. B. Ziehen) als ein Schritt gilt. */
 const HISTORY_DEBOUNCE_MS = 350
@@ -32,6 +51,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const objectUrl = ref('')
   const fileName = ref('')
   const duration = ref(0)
+  /** Intrinsische Video-Auflösung (px), sobald bekannt – nur für die Anzeige. */
+  const videoWidth = ref(0)
+  const videoHeight = ref(0)
 
   // --- Auswahl / Wiedergabe ---
   const startTime = ref(0)
@@ -42,6 +64,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const operation = ref<CutOperation>('keep')
   /** Festgehaltene Ausschnitte. Ist die Liste leer, gilt die aktuelle Auswahl. */
   const segments = ref<Segment[]>([])
+  /** Räumlicher Bildausschnitt. `null` = kein Zuschneiden (volles Bild). */
+  const crop = ref<CropRect | null>(null)
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -66,6 +90,16 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const canExport = computed(() => hasVideo.value && effectiveSegments.value.length > 0)
   /** Liegt ein herunterladbares Schnitt-Ergebnis vor? */
   const hasResult = computed(() => resultBlob.value !== null)
+  /** Zuschneiden aktiv? (erzwingt Re-Encode, da FFmpeg dafür Frames dekodieren muss.) */
+  const hasCrop = computed(() => crop.value !== null)
+  /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
+  const cropPixelSize = computed(() => {
+    if (!crop.value || !videoWidth.value || !videoHeight.value) return null
+    return {
+      width: Math.round(crop.value.width * videoWidth.value),
+      height: Math.round(crop.value.height * videoHeight.value),
+    }
+  })
 
   // --- Undo/Redo -----------------------------------------------------------
   // Rückgängig/Wiederherstellen deckt Auswahl (Start/Ende), Ausschnitt-Liste,
@@ -88,6 +122,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
       mode: mode.value,
       operation: operation.value,
       segments: segments.value.map((s) => ({ ...s })),
+      crop: crop.value ? { ...crop.value } : null,
     }
   }
 
@@ -96,13 +131,19 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     return a.every((s, i) => s.start === b[i].start && s.end === b[i].end)
   }
 
+  function sameCrop(a: CropRect | null, b: CropRect | null): boolean {
+    if (a === null || b === null) return a === b
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  }
+
   function sameSnapshot(a: EditorSnapshot, b: EditorSnapshot): boolean {
     return (
       a.startTime === b.startTime &&
       a.endTime === b.endTime &&
       a.mode === b.mode &&
       a.operation === b.operation &&
-      sameSegments(a.segments, b.segments)
+      sameSegments(a.segments, b.segments) &&
+      sameCrop(a.crop, b.crop)
     )
   }
 
@@ -113,6 +154,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     mode.value = s.mode
     operation.value = s.operation
     segments.value = s.segments.map((seg) => ({ ...seg }))
+    crop.value = s.crop ? { ...s.crop } : null
     applyingHistory = false
   }
 
@@ -167,7 +209,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   // Änderungen am editierbaren Zustand beobachten und (verzögert) festschreiben.
   // flush: 'sync', damit der applyingHistory-Schutz beim Anwenden greift.
   watch(
-    [startTime, endTime, mode, operation, segments],
+    [startTime, endTime, mode, operation, segments, crop],
     () => {
       if (applyingHistory) return
       if (commitTimer) clearTimeout(commitTimer)
@@ -196,10 +238,13 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     fileName.value = newFile.name
     objectUrl.value = URL.createObjectURL(newFile)
     duration.value = 0
+    videoWidth.value = 0
+    videoHeight.value = 0
     startTime.value = 0
     endTime.value = 0
     currentTime.value = 0
     segments.value = []
+    crop.value = null
   }
 
   function setDuration(d: number): void {
@@ -251,6 +296,42 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     operation.value = o
   }
 
+  /** Hält die intrinsische Auflösung fest (nur für die Pixel-Anzeige). */
+  function setVideoDimensions(width: number, height: number): void {
+    videoWidth.value = Number.isFinite(width) && width > 0 ? Math.round(width) : 0
+    videoHeight.value = Number.isFinite(height) && height > 0 ? Math.round(height) : 0
+  }
+
+  /** Begrenzt einen Crop-Rechteck auf [0,1] mit Mindestgröße, ohne über den Rand zu ragen. */
+  function clampCrop(r: CropRect): CropRect {
+    const width = clamp(r.width, MIN_CROP_RATIO, 1)
+    const height = clamp(r.height, MIN_CROP_RATIO, 1)
+    const x = clamp(r.x, 0, 1 - width)
+    const y = clamp(r.y, 0, 1 - height)
+    return { x, y, width, height }
+  }
+
+  /** Setzt/aktualisiert den Bildausschnitt (Anteile 0–1). */
+  function setCrop(r: CropRect): void {
+    crop.value = clampCrop(r)
+  }
+
+  /** Aktiviert das Zuschneiden mit einem zentrierten Standardausschnitt. */
+  function enableCrop(): void {
+    crop.value = { ...DEFAULT_CROP }
+  }
+
+  /** Deaktiviert das Zuschneiden (volles Bild). */
+  function clearCrop(): void {
+    crop.value = null
+  }
+
+  /** Schaltet das Zuschneiden ein/aus (Toolbar-Button). */
+  function toggleCrop(): void {
+    if (crop.value) clearCrop()
+    else enableCrop()
+  }
+
   /** Hält die aktuelle Auswahl als Ausschnitt fest (nach Start sortiert). */
   function addSegment(): void {
     if (selectionDuration.value < MIN_SELECTION) return
@@ -287,10 +368,13 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     fileName.value = name
     objectUrl.value = URL.createObjectURL(blob)
     duration.value = 0
+    videoWidth.value = 0
+    videoHeight.value = 0
     startTime.value = 0
     endTime.value = 0
     currentTime.value = 0
     segments.value = []
+    crop.value = null
     error.value = ''
     // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
@@ -308,11 +392,14 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     file.value = null
     fileName.value = ''
     duration.value = 0
+    videoWidth.value = 0
+    videoHeight.value = 0
     startTime.value = 0
     endTime.value = 0
     currentTime.value = 0
     error.value = ''
     segments.value = []
+    crop.value = null
     resetHistory()
   }
 
@@ -322,12 +409,15 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     objectUrl,
     fileName,
     duration,
+    videoWidth,
+    videoHeight,
     startTime,
     endTime,
     currentTime,
     mode,
     operation,
     segments,
+    crop,
     resultName,
     resultBlob,
     hasResult,
@@ -340,9 +430,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canExport,
     canUndo,
     canRedo,
+    hasCrop,
+    cropPixelSize,
     // actions
     setFile,
     setDuration,
+    setVideoDimensions,
     setStart,
     setEnd,
     markStart,
@@ -353,6 +446,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     addSegment,
     removeSegment,
     clearSegments,
+    setCrop,
+    enableCrop,
+    clearCrop,
+    toggleCrop,
     applyCutResult,
     setError,
     revokeResult,

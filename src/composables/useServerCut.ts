@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import type { TrimMode } from '@/lib/ffmpegCommand'
-import type { CutOperation } from '@/stores/videoEditor'
+import type { CutOperation, CropRect } from '@/stores/videoEditor'
 
 /**
  * Basis-URL des Backends.
@@ -180,6 +180,7 @@ export interface CutTransition {
  * @param operation  'keep' behält die Ausschnitte, 'remove' entfernt sie.
  * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
  * @param transition Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte.
+ * @param crop       Optionaler Bildausschnitt (Anteile 0–1); erzwingt Re-Encode.
  */
 async function cut(
   file: File,
@@ -188,6 +189,7 @@ async function cut(
   operation: CutOperation = 'keep',
   total = 0,
   transition?: CutTransition,
+  crop?: CropRect,
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -207,6 +209,7 @@ async function cut(
       form.append('transitionPreset', transition.preset)
       form.append('transitionDuration', String(transition.duration))
     }
+    if (crop) form.append('crop', JSON.stringify(crop))
 
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
     let lastTime = 0
