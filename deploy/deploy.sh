@@ -68,9 +68,11 @@ fi
 
 # --- 2) Abhängigkeiten reproduzierbar installieren ------------------------
 # "npm ci" installiert exakt nach package-lock.json und stellt sicher, dass
-# node_modules zum Build passt (der ffmpeg-core wird daraus kopiert).
-log "npm ci"
-npm ci
+# node_modules zum Build passt. --include=dev: der Build braucht vite/vue-tsc
+# aus den devDependencies, auch wenn der Aufrufer (systemd, Kodini Designer)
+# NODE_ENV=production gesetzt hat – sonst "vue-tsc: not found".
+log "npm ci (inkl. devDependencies)"
+npm ci --include=dev
 
 # --- 3) Produktions-Build -------------------------------------------------
 log "Build (base=$VITE_BASE, core=$VITE_FFMPEG_CORE_URL, api=$VITE_API_BASE)"
