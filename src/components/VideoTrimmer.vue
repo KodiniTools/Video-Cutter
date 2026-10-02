@@ -196,11 +196,16 @@ function onTimeUpdate(): void {
 
 // Quelle gewechselt (neues Video ODER Schnitt-Ergebnis) -> Element sicher neu
 // laden, damit loadedmetadata/durationchange erneut feuern und die Dauer stimmt.
-watch(objectUrl, () => {
+// Ohne URL (Video gelöscht) gibt es nichts zu laden: Der Player wird dann
+// ausgehängt und trüge noch die alte src – ein load() darauf würde die
+// bereits freigegebene Blob-URL erneut anfordern (ERR_FILE_NOT_FOUND).
+watch(objectUrl, (url) => {
   seekingForDuration = false
   const el = videoEl.value
-  if (!el) return
-  nextTick(() => el.load())
+  if (!el || !url) return
+  nextTick(() => {
+    if (el.isConnected) el.load()
+  })
 })
 
 function seekTo(sec: number): void {
