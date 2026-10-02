@@ -2,6 +2,7 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
 import type { CropRect } from '@/stores/videoEditor'
 import { MIN_CROP_RATIO } from '@/stores/videoEditor'
+import { containedVideoBox } from '@/lib/cropGeometry'
 
 const props = defineProps<{
   modelValue: CropRect
@@ -16,32 +17,46 @@ const emit = defineEmits<{
 
 const root = ref<HTMLDivElement | null>(null)
 
-// Die tatsächlich gerenderte Box des Videos nachbilden (nicht einfach
-// `inset:0` auf den Wrapper legen): Bei Video-Seitenverhältnissen, die vom
-// Container abweichen (z. B. Hochformat), skaliert das <video>-Element als
-// Replaced Element enger als sein Wrapper (Pillarboxing) – der Ausschnitt
-// muss exakt auf dem sichtbaren Bild liegen, sonst stimmen die per Drag
-// erzeugten Anteilswerte nicht mit dem tatsächlichen Bildinhalt überein.
+// Die tatsächlich SICHTBARE Bildfläche nachbilden – nicht die Element-Box:
+// `.player` hat `width:100%` + `max-height`, daher ist die Box oft breiter
+// (oder höher) als das Bild, und das Video sitzt zentriert mit schwarzen
+// Rändern darin (`object-fit: contain`). Läge der Overlay auf der ganzen Box,
+// wären die Anteilswerte gegenüber dem Bildinhalt verschoben und falsch
+// skaliert – der Server schneidet dann einen anderen Bereich aus.
 const box = ref({ left: 0, top: 0, width: 0, height: 0 })
 let observer: ResizeObserver | null = null
+let observed: HTMLVideoElement | null = null
 
 function measure(): void {
   const el = props.target
   if (!el) return
-  box.value = {
-    left: el.offsetLeft,
-    top: el.offsetTop,
-    width: el.offsetWidth,
-    height: el.offsetHeight,
+  box.value = containedVideoBox(
+    { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight },
+    el.videoWidth,
+    el.videoHeight,
+  )
+}
+
+// Intrinsische Größe ändert sich beim Laden (loadedmetadata) und bei einem
+// Quellenwechsel (`resize`-Media-Event) -> neu messen.
+const MEDIA_EVENTS = ['loadedmetadata', 'resize'] as const
+
+function detach(): void {
+  observer?.disconnect()
+  observer = null
+  if (observed) {
+    for (const ev of MEDIA_EVENTS) observed.removeEventListener(ev, measure)
+    observed = null
   }
 }
 
 watch(
   () => props.target,
   (el) => {
-    observer?.disconnect()
-    observer = null
+    detach()
     if (!el) return
+    observed = el
+    for (const ev of MEDIA_EVENTS) el.addEventListener(ev, measure)
     observer = new ResizeObserver(measure)
     observer.observe(el)
     measure()
@@ -49,7 +64,7 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(detach)
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
 type DragMode = 'move' | Handle | null
