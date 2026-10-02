@@ -5,7 +5,8 @@ import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useServerCut, CUT_CANCELLED, CROP_UNSUPPORTED } from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
-import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
+import { getExtension } from '@/lib/ffmpegCommand'
+import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
@@ -224,51 +225,77 @@ function setEndHere(): void {
   store.markEnd(currentTime.value)
 }
 
-// --- Numerische Zeiteingabe für Start/Ende -------------------------------
-// Editierbare Felder; auf Commit setzen sie start/end (der Slider reagiert
-// darüber automatisch). Akzeptiert "SS", "M:SS", "MM:SS", "H:MM:SS".
-function parseTime(input: string): number | null {
-  const s = input.trim().replace(',', '.')
-  if (!s) return null
-  const parts = s.split(':')
-  if (parts.length > 3) return null
-  if (!parts.every((p) => /^\d+(\.\d+)?$/.test(p))) return null
-  return parts.reduce((acc, p) => acc * 60 + Number(p), 0)
-}
-
+// --- Numerische Zeiteingabe für Start/Ende (ms-genau, wie im Audio-Cutter) --
+// Textfeld "[hh:]mm:ss.mmm" + ms-Zahlenfeld mit Spinner + Nudge-Buttons.
+// Auf Commit setzen sie Start/Ende im Store (Slider + Vorschau folgen).
 const startInput = ref('')
 const endInput = ref('')
 // Felder mit den Store-Werten synchron halten (auch bei Slider-Ziehen).
-watch(startTime, (v) => (startInput.value = formatDisplayTime(v)), { immediate: true })
-watch(endTime, (v) => (endInput.value = formatDisplayTime(v)), { immediate: true })
+watch(startTime, (v) => (startInput.value = formatTimeMs(v)), { immediate: true })
+watch(endTime, (v) => (endInput.value = formatTimeMs(v)), { immediate: true })
 
-function commitStart(): void {
-  const t = parseTime(startInput.value)
-  if (t !== null) {
-    store.setStart(t)
-    seekTo(startTime.value)
-  }
-  startInput.value = formatDisplayTime(startTime.value) // normalisieren/zurücksetzen
+function applyStart(sec: number): void {
+  store.setStart(sec)
+  seekTo(startTime.value) // geclampten Wert übernehmen
 }
-
-function commitEnd(): void {
-  const t = parseTime(endInput.value)
-  if (t !== null) {
-    store.setEnd(t)
-    seekTo(endTime.value)
-  }
-  endInput.value = formatDisplayTime(endTime.value)
-}
-
-// Stepper: Start/Ende um `delta` Sekunden anpassen (Slider + Vorschau folgen).
-function stepStart(delta: number): void {
-  store.setStart(startTime.value + delta)
-  seekTo(startTime.value)
-}
-function stepEnd(delta: number): void {
-  store.setEnd(endTime.value + delta)
+function applyEnd(sec: number): void {
+  store.setEnd(sec)
   seekTo(endTime.value)
 }
+
+function commitStart(): void {
+  const sec = parseTimeInput(startInput.value)
+  if (sec !== null) applyStart(sec)
+  startInput.value = formatTimeMs(startTime.value) // normalisieren/zurücksetzen
+}
+function commitEnd(): void {
+  const sec = parseTimeInput(endInput.value)
+  if (sec !== null) applyEnd(sec)
+  endInput.value = formatTimeMs(endTime.value)
+}
+
+/** Ganzzahlige ms für die nativen Spinner (input type=number). */
+const startMs = computed({
+  get: () => toMs(startTime.value),
+  set: (v: number | string) => {
+    const ms = Number(v)
+    if (Number.isFinite(ms)) applyStart(ms / 1000)
+  },
+})
+const endMs = computed({
+  get: () => toMs(endTime.value),
+  set: (v: number | string) => {
+    const ms = Number(v)
+    if (Number.isFinite(ms)) applyEnd(ms / 1000)
+  },
+})
+const maxMs = computed(() => toMs(duration.value))
+
+/** Feinjustierung in Millisekunden (±1 / ±10 / ±100 ms). */
+const nudges = [-100, -10, -1, 1, 10, 100] as const
+function nudgeStart(deltaMs: number): void {
+  applyStart(startTime.value + deltaMs / 1000)
+}
+function nudgeEnd(deltaMs: number): void {
+  applyEnd(endTime.value + deltaMs / 1000)
+}
+function fmtDelta(d: number): string {
+  return `${d > 0 ? '+' : ''}${d}`
+}
+
+/** Auswahl auf die volle Länge zurücksetzen -> neu wählbar. */
+function resetSelection(): void {
+  store.setEnd(duration.value)
+  store.setStart(0)
+}
+/** Auswahl ist nicht bereits die volle Länge? (Reset dann sinnvoll) */
+const canReset = computed(() => startTime.value > 0 || endTime.value < duration.value)
+
+/** Live-Werte: "mm:ss.mmm · 1234 ms" (wie die Statuszeile des Audio-Cutters). */
+function msLabel(sec: number): string {
+  return `${formatTimeMs(sec)} · ${toMs(sec)} ms`
+}
+const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
 async function onExport(): Promise<void> {
   if (!store.file || !canExport.value) return
@@ -439,88 +466,120 @@ async function downloadResult(): Promise<void> {
           <section class="card">
             <h3 class="panel-title">{{ t('labels.selection') }}</h3>
             <div class="marks">
-              <div class="time-field">
-                <label>{{ t('labels.start') }}</label>
-                <input
-                  v-model="startInput"
-                  class="time-input"
-                  type="text"
-                  inputmode="numeric"
-                  :aria-label="t('labels.start')"
-                  @change="commitStart"
-                  @keydown.enter.prevent="commitStart"
-                />
-                <div class="stepper">
+              <div class="time-card">
+                <label class="time-label" for="start-text">{{ t('labels.start') }}</label>
+                <div class="time-main">
+                  <input
+                    id="start-text"
+                    v-model="startInput"
+                    class="time-input start"
+                    type="text"
+                    inputmode="decimal"
+                    :placeholder="t('time.placeholder')"
+                    :aria-label="t('labels.start')"
+                    @change="commitStart"
+                    @keydown.enter.prevent="commitStart"
+                  />
                   <button
-                    class="step"
+                    class="btn tiny"
                     type="button"
-                    :aria-label="t('actions.increase')"
-                    @click="stepStart(1)"
+                    :title="t('actions.toPlayhead')"
+                    :aria-label="t('actions.toPlayhead')"
+                    @click="setStartHere"
                   >
-                    ▲
-                  </button>
-                  <button
-                    class="step"
-                    type="button"
-                    :aria-label="t('actions.decrease')"
-                    @click="stepStart(-1)"
-                  >
-                    ▼
+                    ⏱
                   </button>
                 </div>
-                <button
-                  class="btn tiny"
-                  type="button"
-                  :title="t('actions.toPlayhead')"
-                  :aria-label="t('actions.toPlayhead')"
-                  @click="setStartHere"
-                >
-                  ⏱
-                </button>
+                <div class="ms-field">
+                  <input
+                    v-model.number="startMs"
+                    class="time-input ms start"
+                    type="number"
+                    :min="0"
+                    :max="maxMs"
+                    step="1"
+                    :aria-label="`${t('labels.start')} (ms)`"
+                  />
+                  <span class="ms-unit">{{ t('time.ms') }}</span>
+                </div>
+                <div class="nudges">
+                  <button
+                    v-for="d in nudges"
+                    :key="`s${d}`"
+                    class="btn tiny nudge"
+                    type="button"
+                    @click="nudgeStart(d)"
+                  >
+                    {{ fmtDelta(d) }}{{ t('time.ms') }}
+                  </button>
+                </div>
               </div>
 
-              <div class="time-field">
-                <label>{{ t('labels.end') }}</label>
-                <input
-                  v-model="endInput"
-                  class="time-input"
-                  type="text"
-                  inputmode="numeric"
-                  :aria-label="t('labels.end')"
-                  @change="commitEnd"
-                  @keydown.enter.prevent="commitEnd"
-                />
-                <div class="stepper">
+              <div class="time-card">
+                <label class="time-label" for="end-text">{{ t('labels.end') }}</label>
+                <div class="time-main">
+                  <input
+                    id="end-text"
+                    v-model="endInput"
+                    class="time-input end"
+                    type="text"
+                    inputmode="decimal"
+                    :placeholder="t('time.placeholder')"
+                    :aria-label="t('labels.end')"
+                    @change="commitEnd"
+                    @keydown.enter.prevent="commitEnd"
+                  />
                   <button
-                    class="step"
+                    class="btn tiny"
                     type="button"
-                    :aria-label="t('actions.increase')"
-                    @click="stepEnd(1)"
+                    :title="t('actions.toPlayhead')"
+                    :aria-label="t('actions.toPlayhead')"
+                    @click="setEndHere"
                   >
-                    ▲
-                  </button>
-                  <button
-                    class="step"
-                    type="button"
-                    :aria-label="t('actions.decrease')"
-                    @click="stepEnd(-1)"
-                  >
-                    ▼
+                    ⏱
                   </button>
                 </div>
-                <button
-                  class="btn tiny"
-                  type="button"
-                  :title="t('actions.toPlayhead')"
-                  :aria-label="t('actions.toPlayhead')"
-                  @click="setEndHere"
-                >
-                  ⏱
-                </button>
+                <div class="ms-field">
+                  <input
+                    v-model.number="endMs"
+                    class="time-input ms end"
+                    type="number"
+                    :min="0"
+                    :max="maxMs"
+                    step="1"
+                    :aria-label="`${t('labels.end')} (ms)`"
+                  />
+                  <span class="ms-unit">{{ t('time.ms') }}</span>
+                </div>
+                <div class="nudges">
+                  <button
+                    v-for="d in nudges"
+                    :key="`e${d}`"
+                    class="btn tiny nudge"
+                    type="button"
+                    @click="nudgeEnd(d)"
+                  >
+                    {{ fmtDelta(d) }}{{ t('time.ms') }}
+                  </button>
+                </div>
               </div>
 
               <div class="sel">
-                {{ t('labels.selection') }}: <b>{{ formatDisplayTime(selectionDuration) }}</b>
+                <span>
+                  {{ t('labels.selection') }}: <b>{{ formatTimeMs(selectionDuration) }}</b>
+                  <span class="sel-total"> / {{ formatTimeMs(duration) }}</span>
+                </span>
+                <span v-if="canAddSegment" class="sel-valid">{{ t('time.valid') }}</span>
+                <span v-else class="sel-invalid">{{ t('time.invalid') }}</span>
+                <button
+                  class="btn tiny ghost"
+                  type="button"
+                  :disabled="!canReset"
+                  :title="t('time.reset')"
+                  @click="resetSelection"
+                >
+                  ↺ {{ t('time.reset') }}
+                </button>
               </div>
             </div>
           </section>
@@ -588,8 +647,8 @@ async function downloadResult(): Promise<void> {
               <li v-for="(seg, i) in segments" :key="`${seg.start}-${seg.end}`" class="segment-row">
                 <span class="segment-index">{{ i + 1 }}</span>
                 <span class="segment-time">
-                  {{ formatDisplayTime(seg.start) }} – {{ formatDisplayTime(seg.end) }}
-                  <small>({{ formatDisplayTime(Math.max(0, seg.end - seg.start)) }})</small>
+                  {{ formatTimeMs(seg.start) }} – {{ formatTimeMs(seg.end) }}
+                  <small>({{ formatTimeMs(Math.max(0, seg.end - seg.start)) }})</small>
                 </span>
                 <button
                   class="btn tiny remove"
@@ -750,6 +809,39 @@ async function downloadResult(): Promise<void> {
               :target="videoEl"
               @update:model-value="onCropUpdate"
             />
+          </div>
+
+          <!-- Live-Werte: Gesamtdauer · Auswahl · Cursor · Restdauer -->
+          <div class="live-row">
+            <div class="live-cell">
+              <span class="live-label">{{ t('live.total') }}</span>
+              <span class="live-value strong">{{ msLabel(duration) }}</span>
+            </div>
+            <div class="live-cell center">
+              <span class="live-label">{{ t('live.selection') }}</span>
+              <span class="live-value">{{ msLabel(selectionDuration) }}</span>
+            </div>
+            <div class="live-cell center">
+              <span class="live-label">{{ t('live.cursor') }}</span>
+              <span class="live-value">{{ msLabel(currentTime) }}</span>
+            </div>
+            <div class="live-cell right">
+              <span class="live-label">{{ t('live.remaining') }}</span>
+              <span class="live-value strong">{{ msLabel(remainingTime) }}</span>
+            </div>
+          </div>
+
+          <!-- Cursor: aktuelle Wiedergabeposition als Anfang/Ende übernehmen -->
+          <div class="cursor-row">
+            <span class="cursor-at">
+              {{ t('player.cursorAt') }} <b>{{ formatTimeMs(currentTime) }}</b>
+            </span>
+            <button class="btn tiny" type="button" @click="setStartHere">
+              {{ t('player.setStart') }}
+            </button>
+            <button class="btn tiny" type="button" @click="setEndHere">
+              {{ t('player.setEnd') }}
+            </button>
           </div>
 
           <Timeline
@@ -1040,79 +1132,174 @@ async function downloadResult(): Promise<void> {
   flex-direction: column;
   gap: 10px;
 }
-.sel {
-  font-size: 14px;
-  color: var(--vc-text-dim);
-  font-variant-numeric: tabular-nums;
-  padding-top: 2px;
+/* Eine Zeitkarte (Start bzw. Ende): Textfeld, ms-Feld, Nudges */
+.time-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--vc-border);
+  border-radius: 8px;
 }
-.time-field {
+.time-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vc-text-dim);
+}
+.time-main {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.time-field label {
-  font-size: 13px;
-  color: var(--vc-text-dim);
-  width: 42px;
-  flex: none;
-}
 .time-input {
   flex: 1;
   min-width: 0;
-}
-.time-input {
-  width: 84px;
+  width: 100%;
   padding: 7px 8px;
   border: 1px solid var(--vc-border);
   border-radius: 8px;
   background: var(--vc-surface);
   color: var(--vc-text);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+.time-input.start {
+  color: var(--vc-accent);
+}
+.time-input.end {
+  color: var(--vc-playhead, var(--vc-accent));
+}
+.time-input.ms {
+  flex: none;
+  width: 110px;
+  font-size: 14px;
+  text-align: right;
 }
 .time-input:focus-visible {
   outline: 2px solid var(--vc-focus);
   outline-offset: 1px;
   border-color: var(--vc-accent);
 }
+.ms-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ms-unit {
+  font-size: 12px;
+  color: var(--vc-text-dim);
+}
+.nudges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.btn.tiny.nudge {
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.sel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--vc-text-dim);
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+.sel b {
+  color: var(--vc-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.sel-total {
+  color: var(--vc-text-dim);
+}
+.sel-valid {
+  color: var(--vc-accent);
+  font-weight: 600;
+}
+.sel-invalid {
+  color: var(--vc-error-text, #d33);
+  font-weight: 600;
+}
+.sel .btn {
+  margin-left: auto;
+}
 .btn.tiny {
   padding: 6px 9px;
   font-size: 14px;
   line-height: 1;
 }
-.stepper {
+
+/* Live-Zeile unter dem Player */
+.live-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 700;
+}
+.live-cell {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
-.step {
-  width: 24px;
-  height: 17px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--vc-border);
-  background: var(--vc-surface);
+.live-cell.center {
+  text-align: center;
+}
+.live-cell.right {
+  text-align: right;
+}
+.live-label {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vc-text-dim);
+}
+.live-value {
+  color: var(--vc-text-dim);
+  white-space: nowrap;
+}
+.live-value.strong {
   color: var(--vc-text);
-  cursor: pointer;
-  font-size: 9px;
-  line-height: 1;
 }
-.step:first-child {
-  border-radius: 6px 6px 0 0;
-  border-bottom: none;
+@media (max-width: 640px) {
+  .live-row {
+    flex-wrap: wrap;
+  }
+  .live-cell {
+    flex: 1 1 45%;
+  }
 }
-.step:last-child {
-  border-radius: 0 0 6px 6px;
+
+/* Cursor-Zeile: Position als Anfang/Ende übernehmen */
+.cursor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--vc-text-dim);
 }
-.step:hover {
-  border-color: var(--vc-accent);
-  color: var(--vc-accent);
-}
-.step:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 1px;
+.cursor-at b {
+  color: var(--vc-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Ausschnitt-Liste */
