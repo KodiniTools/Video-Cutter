@@ -12,6 +12,15 @@ const messages = {
       hint: 'MP4, WebM, MOV … Die Datei wird zum Schneiden auf den Server geladen.',
     },
     labels: { selection: 'Auswahl', start: 'Start', end: 'Ende' },
+    time: {
+      placeholder: 'mm:ss.mmm',
+      ms: 'ms',
+      valid: '✓ gültig',
+      invalid: 'Ende muss nach dem Start liegen.',
+      reset: 'Auswahl zurücksetzen',
+    },
+    live: { total: 'Gesamtdauer', selection: 'Auswahl', cursor: 'Cursor', remaining: 'Restdauer' },
+    player: { cursorAt: 'Cursor bei', setStart: 'Als Anfang', setEnd: 'Als Ende' },
     segments: {
       title: 'Ausschnitte',
       add: 'Ausschnitt hinzufügen',
@@ -96,6 +105,15 @@ const messages = {
       hint: 'MP4, WebM, MOV … The file is uploaded to the server for cutting.',
     },
     labels: { selection: 'Selection', start: 'Start', end: 'End' },
+    time: {
+      placeholder: 'mm:ss.mmm',
+      ms: 'ms',
+      valid: '✓ valid',
+      invalid: 'End must be after start.',
+      reset: 'Reset selection',
+    },
+    live: { total: 'Total', selection: 'Selection', cursor: 'Cursor', remaining: 'Remaining' },
+    player: { cursorAt: 'Cursor at', setStart: 'Set as start', setEnd: 'Set as end' },
     segments: {
       title: 'Segments',
       add: 'Add segment',
