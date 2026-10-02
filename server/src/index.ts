@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit'
 import { mkdir } from 'node:fs/promises'
 import { MulterError } from 'multer'
 import { config } from './config'
-import { cutRouter } from './routes/cut'
+import { cutRouter, SERVER_FEATURES } from './routes/cut'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
 
@@ -39,7 +39,12 @@ async function bootstrap(): Promise<void> {
   )
 
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', active: jobManager.activeCount, maxConcurrent: config.maxConcurrent })
+    res.json({
+      status: 'ok',
+      active: jobManager.activeCount,
+      maxConcurrent: config.maxConcurrent,
+      features: SERVER_FEATURES,
+    })
   })
 
   app.use('/api', cutRouter)

@@ -11,6 +11,35 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
 export const CUT_CANCELLED = 'CUT_CANCELLED'
+/**
+ * Fehler-Kennung: Ein Bildausschnitt wurde angefordert, aber das Backend hat
+ * ihn nicht bestätigt (veralteter Server ohne Crop-Unterstützung). Der Job
+ * wird dann abgebrochen, statt stillschweigend ungeschnitten zu liefern.
+ */
+export const CROP_UNSUPPORTED = 'CROP_UNSUPPORTED'
+
+/** Antwort von POST /api/cut. `crop` fehlt bei alten Backends. */
+export interface JobStartResponse {
+  jobId: string
+  crop?: boolean
+}
+
+/**
+ * Liest die Antwort des Job-Starts. Wirft bei fehlender jobId.
+ * Exportiert, damit die Auswertung ohne XHR testbar ist.
+ */
+export function parseJobStart(text: string): JobStartResponse {
+  let data: { jobId?: unknown; crop?: unknown }
+  try {
+    data = JSON.parse(text) as { jobId?: unknown; crop?: unknown }
+  } catch {
+    throw new Error('Ungültige Serverantwort.')
+  }
+  if (typeof data.jobId !== 'string' || !data.jobId) {
+    throw new Error('Ungültige Serverantwort (keine jobId).')
+  }
+  return { jobId: data.jobId, crop: data.crop === true }
+}
 
 interface JobEvent {
   state: 'processing' | 'done' | 'error'
@@ -47,12 +76,12 @@ async function readError(res: Response): Promise<string> {
 
 /**
  * Lädt die Datei per XHR hoch (im Gegensatz zu fetch liefert XHR echten
- * Upload-Fortschritt) und legt den Job an. Gibt die jobId zurück.
+ * Upload-Fortschritt) und legt den Job an. Gibt die Job-Antwort zurück.
  */
 function uploadForJob(
   form: FormData,
   onProgress: (loaded: number, total: number) => void,
-): Promise<string> {
+): Promise<JobStartResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     currentXhr = xhr
@@ -71,11 +100,9 @@ function uploadForJob(
       cleanup()
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const data = JSON.parse(xhr.responseText) as { jobId?: string }
-          if (data.jobId) resolve(data.jobId)
-          else reject(new Error('Ungültige Serverantwort (keine jobId).'))
-        } catch {
-          reject(new Error('Ungültige Serverantwort.'))
+          resolve(parseJobStart(xhr.responseText))
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error('Ungültige Serverantwort.'))
         }
       } else {
         let msg = `Serverfehler (${xhr.status}).`
@@ -214,7 +241,7 @@ async function cut(
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
     let lastTime = 0
     let lastLoaded = 0
-    const jobId = await uploadForJob(form, (loaded, tot) => {
+    const started = await uploadForJob(form, (loaded, tot) => {
       progress.value = tot > 0 ? Math.round((loaded / tot) * 100) : 0
       uploadedBytes.value = loaded
       totalBytes.value = tot
@@ -229,7 +256,17 @@ async function cut(
         lastLoaded = loaded
       }
     })
+    const jobId = started.jobId
     currentJobId = jobId
+
+    // Zuschnitt angefordert, aber vom Backend nicht bestätigt: Der Server ist
+    // veraltet und würde das volle Bild liefern. Job abbrechen (kein unnötiger
+    // Encode) und klar melden, statt ein falsches Ergebnis anzuzeigen.
+    if (crop && !started.crop) {
+      currentJobId = null
+      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      throw new Error(CROP_UNSUPPORTED)
+    }
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
     phase.value = 'process'

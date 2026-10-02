@@ -79,7 +79,11 @@ const messages = {
       iosHint:
         'Auf iPhone/iPad: „Herunterladen“ → im Teilen-Dialog „In Dateien sichern“ oder „Video sichern“.',
     },
-    errors: { notVideo: 'Bitte eine Videodatei auswählen.' },
+    errors: {
+      notVideo: 'Bitte eine Videodatei auswählen.',
+      cropUnsupported:
+        'Das Server-Backend ist veraltet und unterstützt den Bildausschnitt noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder den Bildausschnitt deaktivieren.',
+    },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
   en: {
@@ -159,7 +163,11 @@ const messages = {
       iosHint:
         'On iPhone/iPad: tap “Download” → in the share sheet choose “Save to Files” or “Save Video”.',
     },
-    errors: { notVideo: 'Please choose a video file.' },
+    errors: {
+      notVideo: 'Please choose a video file.',
+      cropUnsupported:
+        'The server backend is outdated and does not support cropping yet. Please update the backend (deploy/deploy.sh without SKIP_API) or disable the crop.',
+    },
     footer: 'Server-side processing with FFmpeg.',
   },
 } as const

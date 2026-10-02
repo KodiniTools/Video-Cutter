@@ -28,8 +28,16 @@ const asyncHandler =
 export const cutRouter = Router()
 
 /**
- * POST /api/cut  (multipart: video, segments|start+duration, mode, operation, total)
- * Legt einen Job an und startet die Verarbeitung. Antwort: { jobId }.
+ * Features dieses Backends. Das Frontend prüft darüber (Health + Job-Antwort),
+ * ob der laufende Server neue Felder wie `crop` überhaupt kennt – ein altes
+ * Backend würde sie sonst stillschweigend ignorieren und ungeschnitten liefern.
+ */
+export const SERVER_FEATURES = ['crop'] as const
+
+/**
+ * POST /api/cut  (multipart: video, segments|start+duration, mode, operation, total, crop)
+ * Legt einen Job an und startet die Verarbeitung.
+ * Antwort: { jobId, crop } – `crop` bestätigt, ob ein Bildausschnitt übernommen wurde.
  */
 cutRouter.post(
   '/cut',
@@ -95,7 +103,7 @@ cutRouter.post(
       // Nicht awaiten: läuft im Hintergrund, Client verfolgt via SSE.
       void jobManager.run(job, args, outputDuration)
 
-      res.status(202).json({ jobId: id })
+      res.status(202).json({ jobId: id, crop: params.crop !== undefined })
     } catch (err) {
       await rm(req.file.path, { force: true }).catch(() => {})
       throw err
