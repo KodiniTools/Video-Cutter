@@ -85,3 +85,9 @@ Job-basiert mit SSE-Fortschritt).
 - Prod-Build der SPA mit `VITE_API_BASE=/video-cutter` (macht `deploy/deploy.sh`).
 - Der Backend-Port (`server/.env` → `PORT`) muss mit dem Nginx-Proxy übereinstimmen (`:9015`).
 - Deployment + Nginx: siehe `server/README.md`.
+- **Nach Änderungen in `server/` muss das Backend mit deployt werden**
+  (`bash deploy/deploy.sh` ohne `SKIP_API=1`; der Kodini Designer aktualisiert
+  nur das Frontend). Ein veraltetes Backend ignoriert neue Felder wie den
+  Bildausschnitt (`crop`); das Frontend bricht den Schnitt dann mit einem
+  Hinweis ab. Prüfen: `curl https://kodinitools.com/video-cutter/api/health`
+  → `"features":["crop"]`.

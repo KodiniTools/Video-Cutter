@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useServerCut, CUT_CANCELLED } from '@/composables/useServerCut'
+import { useServerCut, CUT_CANCELLED, CROP_UNSUPPORTED } from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatDisplayTime, getExtension } from '@/lib/ffmpegCommand'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -298,7 +298,8 @@ async function onExport(): Promise<void> {
   } catch (e) {
     // Nutzer-Abbruch nicht als Fehler anzeigen.
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg !== CUT_CANCELLED) store.setError(msg)
+    if (msg === CUT_CANCELLED) return
+    store.setError(msg === CROP_UNSUPPORTED ? t('errors.cropUnsupported') : msg)
   }
 }
 

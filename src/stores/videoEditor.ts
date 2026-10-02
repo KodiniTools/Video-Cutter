@@ -218,11 +218,19 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     { deep: true, flush: 'sync' },
   )
 
+  /**
+   * Gibt die aktuelle Blob-URL frei – aber erst NACH dem nächsten DOM-Update.
+   * Der <video>-Player hält die alte URL bis zum Re-Render und lädt daraus
+   * ggf. noch Daten (Range-Requests); ein sofortiges Revoke löst in Chrome
+   * „blob:… net::ERR_FILE_NOT_FOUND" in der Konsole aus.
+   */
   function revokeObjectUrl(): void {
-    if (objectUrl.value) {
-      URL.revokeObjectURL(objectUrl.value)
-      objectUrl.value = ''
-    }
+    const old = objectUrl.value
+    if (!old) return
+    objectUrl.value = ''
+    setTimeout(() => {
+      if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(old)
+    }, 0)
   }
 
   function revokeResult(): void {

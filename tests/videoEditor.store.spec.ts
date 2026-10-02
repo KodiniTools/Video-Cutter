@@ -369,4 +369,24 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
     expect(store.hasResult).toBe(false)
     expect(store.resultBlob).toBeNull()
   })
+
+  it('gibt die alte Blob-URL erst nach dem DOM-Update frei (kein ERR_FILE_NOT_FOUND)', () => {
+    vi.useFakeTimers()
+    const revoke = vi.fn()
+    let n = 0
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => `blob:${++n}`, revokeObjectURL: revoke })
+    try {
+      const store = loadVideo(10)
+      expect(store.objectUrl).toBe('blob:1')
+      store.applyCutResult(new Blob(['x']), 'clip_cut.mp4')
+      // Neue URL sofort aktiv, alte noch NICHT freigegeben (Player hält sie bis zum Re-Render).
+      expect(store.objectUrl).toBe('blob:2')
+      expect(revoke).not.toHaveBeenCalled()
+      vi.runAllTimers()
+      expect(revoke).toHaveBeenCalledTimes(1)
+      expect(revoke).toHaveBeenCalledWith('blob:1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

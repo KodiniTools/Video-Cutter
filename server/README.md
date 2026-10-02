@@ -10,7 +10,7 @@ Browser-Variante (FFmpeg.wasm) – das Backend ist ein Zusatz, kein Ersatz.
 2. `GET  /api/cut/:jobId/events` → **SSE**-Stream: `{ state, progress, error }`
 3. `GET  /api/cut/:jobId/download` → geschnittene Datei (danach Auto-Cleanup)
 4. `DELETE /api/cut/:jobId` → laufenden Job abbrechen
-5. `GET  /api/health` → Status + Auslastung
+5. `GET  /api/health` → Status + Auslastung + `features` (z. B. `["crop"]`)
 
 `mode`: `copy` (verlustfrei, keyframe-genau) oder `reencode` (H.264/AAC, frame-genau).
 
