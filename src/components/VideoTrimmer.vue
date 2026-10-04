@@ -271,6 +271,8 @@ const endMs = computed({
 })
 const maxMs = computed(() => toMs(duration.value))
 
+/** Schrittweite der ▲▼-Spinner an den Zeitfeldern (ms). */
+const SPINNER_MS = 100
 /** Feinjustierung in Millisekunden (±1 / ±10 / ±100 ms). */
 const nudges = [-100, -10, -1, 1, 10, 100] as const
 function nudgeStart(deltaMs: number): void {
@@ -480,6 +482,26 @@ async function downloadResult(): Promise<void> {
                     @change="commitStart"
                     @keydown.enter.prevent="commitStart"
                   />
+                  <div class="spinner" role="group">
+                    <button
+                      class="spin"
+                      type="button"
+                      :title="t('time.spinUp')"
+                      :aria-label="`${t('labels.start')}: ${t('time.spinUp')}`"
+                      @click="nudgeStart(SPINNER_MS)"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      class="spin"
+                      type="button"
+                      :title="t('time.spinDown')"
+                      :aria-label="`${t('labels.start')}: ${t('time.spinDown')}`"
+                      @click="nudgeStart(-SPINNER_MS)"
+                    >
+                      ▼
+                    </button>
+                  </div>
                   <button
                     class="btn tiny"
                     type="button"
@@ -529,6 +551,26 @@ async function downloadResult(): Promise<void> {
                     @change="commitEnd"
                     @keydown.enter.prevent="commitEnd"
                   />
+                  <div class="spinner" role="group">
+                    <button
+                      class="spin"
+                      type="button"
+                      :title="t('time.spinUp')"
+                      :aria-label="`${t('labels.end')}: ${t('time.spinUp')}`"
+                      @click="nudgeEnd(SPINNER_MS)"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      class="spin"
+                      type="button"
+                      :title="t('time.spinDown')"
+                      :aria-label="`${t('labels.end')}: ${t('time.spinDown')}`"
+                      @click="nudgeEnd(-SPINNER_MS)"
+                    >
+                      ▼
+                    </button>
+                  </div>
                   <button
                     class="btn tiny"
                     type="button"
@@ -1183,6 +1225,40 @@ async function downloadResult(): Promise<void> {
   outline: 2px solid var(--vc-focus);
   outline-offset: 1px;
   border-color: var(--vc-accent);
+}
+/* ▲▼-Spinner am Zeitfeld (schrittweises Setzen der Position) */
+.spinner {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+.spin {
+  width: 26px;
+  height: 17px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-surface);
+  color: var(--vc-text);
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+}
+.spin:first-child {
+  border-radius: 6px 6px 0 0;
+  border-bottom: none;
+}
+.spin:last-child {
+  border-radius: 0 0 6px 6px;
+}
+.spin:hover {
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+}
+.spin:focus-visible {
+  outline: 2px solid var(--vc-focus);
+  outline-offset: 1px;
 }
 .ms-field {
   display: flex;
