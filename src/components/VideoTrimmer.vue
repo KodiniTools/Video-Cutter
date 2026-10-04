@@ -272,7 +272,7 @@ const endMs = computed({
 const maxMs = computed(() => toMs(duration.value))
 
 /** Schrittweite der ▲▼-Spinner an den Zeitfeldern (ms). */
-const SPINNER_MS = 100
+const SPINNER_MS = 10
 /** Feinjustierung in Millisekunden (±1 / ±10 / ±100 ms). */
 const nudges = [-100, -10, -1, 1, 10, 100] as const
 function nudgeStart(deltaMs: number): void {
@@ -283,6 +283,28 @@ function nudgeEnd(deltaMs: number): void {
 }
 function fmtDelta(d: number): string {
   return `${d > 0 ? '+' : ''}${d}`
+}
+
+// Gedrückt-halten der Spinner: sofort ein Schritt, nach kurzer Verzögerung
+// wiederholt – die Vorschau springt bei jedem Schritt mit (Frames scrubben).
+let holdDelay: ReturnType<typeof setTimeout> | null = null
+let holdTimer: ReturnType<typeof setInterval> | null = null
+function holdStart(step: () => void): void {
+  holdStop()
+  step() // sofortiger erster Schritt
+  holdDelay = setTimeout(() => {
+    holdTimer = setInterval(step, 70)
+  }, 300)
+}
+function holdStop(): void {
+  if (holdDelay) {
+    clearTimeout(holdDelay)
+    holdDelay = null
+  }
+  if (holdTimer) {
+    clearInterval(holdTimer)
+    holdTimer = null
+  }
 }
 
 /** Auswahl auf die volle Länge zurücksetzen -> neu wählbar. */
@@ -387,6 +409,7 @@ function pickAnimation(id: (typeof animations)[number]['id'], close: () => void)
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  holdStop()
   store.reset()
 })
 
@@ -488,7 +511,12 @@ async function downloadResult(): Promise<void> {
                       type="button"
                       :title="t('time.spinUp')"
                       :aria-label="`${t('labels.start')}: ${t('time.spinUp')}`"
-                      @click="nudgeStart(SPINNER_MS)"
+                      @pointerdown.prevent="holdStart(() => nudgeStart(SPINNER_MS))"
+                      @pointerup="holdStop"
+                      @pointerleave="holdStop"
+                      @pointercancel="holdStop"
+                      @keydown.enter.prevent="nudgeStart(SPINNER_MS)"
+                      @keydown.space.prevent="nudgeStart(SPINNER_MS)"
                     >
                       ▲
                     </button>
@@ -497,7 +525,12 @@ async function downloadResult(): Promise<void> {
                       type="button"
                       :title="t('time.spinDown')"
                       :aria-label="`${t('labels.start')}: ${t('time.spinDown')}`"
-                      @click="nudgeStart(-SPINNER_MS)"
+                      @pointerdown.prevent="holdStart(() => nudgeStart(-SPINNER_MS))"
+                      @pointerup="holdStop"
+                      @pointerleave="holdStop"
+                      @pointercancel="holdStop"
+                      @keydown.enter.prevent="nudgeStart(-SPINNER_MS)"
+                      @keydown.space.prevent="nudgeStart(-SPINNER_MS)"
                     >
                       ▼
                     </button>
@@ -557,7 +590,12 @@ async function downloadResult(): Promise<void> {
                       type="button"
                       :title="t('time.spinUp')"
                       :aria-label="`${t('labels.end')}: ${t('time.spinUp')}`"
-                      @click="nudgeEnd(SPINNER_MS)"
+                      @pointerdown.prevent="holdStart(() => nudgeEnd(SPINNER_MS))"
+                      @pointerup="holdStop"
+                      @pointerleave="holdStop"
+                      @pointercancel="holdStop"
+                      @keydown.enter.prevent="nudgeEnd(SPINNER_MS)"
+                      @keydown.space.prevent="nudgeEnd(SPINNER_MS)"
                     >
                       ▲
                     </button>
@@ -566,7 +604,12 @@ async function downloadResult(): Promise<void> {
                       type="button"
                       :title="t('time.spinDown')"
                       :aria-label="`${t('labels.end')}: ${t('time.spinDown')}`"
-                      @click="nudgeEnd(-SPINNER_MS)"
+                      @pointerdown.prevent="holdStart(() => nudgeEnd(-SPINNER_MS))"
+                      @pointerup="holdStop"
+                      @pointerleave="holdStop"
+                      @pointercancel="holdStop"
+                      @keydown.enter.prevent="nudgeEnd(-SPINNER_MS)"
+                      @keydown.space.prevent="nudgeEnd(-SPINNER_MS)"
                     >
                       ▼
                     </button>
@@ -891,9 +934,6 @@ async function downloadResult(): Promise<void> {
             :start="startTime"
             :end="endTime"
             :current="currentTime"
-            :segments="segments"
-            :operation="operation"
-            :transition-name="transitionName"
             @update:start="store.setStart"
             @update:end="store.setEnd"
             @seek="seekTo"
