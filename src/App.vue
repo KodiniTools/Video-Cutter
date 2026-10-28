@@ -1,25 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VideoTrimmer from '@/components/VideoTrimmer.vue'
-import type { AppLocale } from '@/i18n'
+import { useSettingsStore } from '@/stores/settings'
 
-const { t, locale } = useI18n()
+// Settings-Store früh initialisieren: Theme-Watcher und Listener der globalen
+// Navigation (localStorage 'theme'/'locale', 'locale-changed') sind ab App-Start aktiv.
+useSettingsStore()
 
-// Sprache mit der globalen Navigation synchron halten (Theme + Sprache steuert
-// die Nav via localStorage 'theme'/'locale' und dem 'locale-changed'-Event).
-function onLocaleChanged(e: Event): void {
-  const detail = (e as CustomEvent<{ locale?: string }>).detail
-  const l = detail?.locale
-  if (l === 'de' || l === 'en') locale.value = l satisfies AppLocale
-}
-
-onMounted(() => {
-  const stored = localStorage.getItem('locale')
-  if (stored === 'de' || stored === 'en') locale.value = stored satisfies AppLocale
-  window.addEventListener('locale-changed', onLocaleChanged)
-})
-onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChanged))
+const { t } = useI18n()
 </script>
 
 <template>
@@ -44,46 +32,49 @@ onBeforeUnmount(() => window.removeEventListener('locale-changed', onLocaleChang
 
 <style scoped>
 .shell {
-  max-width: 1160px;
+  max-width: var(--ds-container);
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: var(--ds-space-6) var(--ds-space-5) var(--ds-space-10);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--ds-gap);
 }
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--ds-space-4);
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--ds-space-3);
 }
 .logo {
-  width: 40px;
-  height: 40px;
+  width: var(--ds-control-lg);
+  height: var(--ds-control-lg);
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: var(--vc-accent);
-  color: #fff;
-  font-size: 20px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-size: var(--ds-text-xl);
 }
 .brand h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--ds-text-xl);
+  font-weight: var(--ds-weight-bold);
+  line-height: var(--ds-leading-tight);
+  letter-spacing: var(--ds-tracking-tight);
 }
 .brand p {
   margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
 }
 .footer {
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-3);
   text-align: center;
 }
 </style>

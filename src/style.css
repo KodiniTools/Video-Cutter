@@ -1,59 +1,276 @@
+/* ==========================================================================
+   Video Cutter · Globale Basis-Styles
+   --------------------------------------------------------------------------
+   Tokens: src/design-system/tokens-v2.css (--ds-*, gemeinsam mit Collage Maker
+   und Playlist Generator). Komponenten nutzen keine festen Farbwerte, sondern
+   die Tokens direkt in ihren scoped Styles (Rollen: src/design-system/README.md).
+   Hier steht nur, was keiner Komponente gehört: Schrift, Reset, Body, die
+   Angleichung der SSI-Partials, App-eigene Tokens, Bewegung.
+   ========================================================================== */
+
+@import './design-system/tokens-v2.css';
+
+/* === App-eigene Tokens (kein Gegenstück im Design-System) ===
+   Abspielkopf der Timeline und Ende-Zeit: blau, damit er sich vom Gold der
+   Auswahl abhebt. Der Kodini Designer kann ihn überschreiben (theme.playhead). */
 :root {
-  --vc-accent: #4f8cff;
-  --vc-accent-soft: rgba(79, 140, 255, 0.16);
-  --vc-focus: #9ec1ff;
-  --vc-playhead: #ffd24a;
-  --vc-error-bg: rgba(220, 60, 60, 0.14);
-  --vc-error-text: #ff9a9a;
+  --vc-playhead: var(--ds-link);
 }
 
-:root[data-theme='dark'] {
-  --vc-bg: #0e1116;
-  --vc-surface: #161b22;
-  --vc-track-bg: #262d38;
-  --vc-border: #2c333d;
-  --vc-text: #e6edf3;
-  --vc-text-dim: #9aa4b2;
-}
-
-:root[data-theme='light'] {
-  --vc-bg: #f6f7f9;
-  --vc-surface: #ffffff;
-  --vc-track-bg: #e6e9ee;
-  --vc-border: #d5dae1;
-  --vc-text: #1a1f26;
-  --vc-text-dim: #667085;
-  --vc-error-text: #b42318;
-}
-
+/* === Reset === */
 * {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--vc-bg);
-  color: var(--vc-text);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* === Schrift: Supreme in den drei genutzten Gewichten (500 Medium,
+   600/700 Bold), gebündelt aus src/assets/fonts. === */
+@font-face {
+  font-family: 'Supreme';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('./assets/fonts/Supreme-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Supreme';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('./assets/fonts/Supreme-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Supreme';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./assets/fonts/Supreme-Bold.woff2') format('woff2');
 }
 
-/* Globale Nav (oben), App (Mitte), Footer (unten) als Sticky-Footer-Layout. */
+/* === Farbschema für native Controls (Video-Controls, Scrollbalken) === */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* === Body ===
+   Globale Nav (oben), App (Mitte), Footer (unten) als Sticky-Footer-Layout. */
 body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-lg);
+  line-height: var(--ds-leading);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+  transition:
+    background-color var(--ds-duration-slow) var(--ds-ease),
+    color var(--ds-duration-slow) var(--ds-ease);
 }
 
 #app {
   flex: 1 0 auto;
+}
+
+/* Formular-Elemente erben die Schrift (Browser-Standard wäre System-UI). */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* === SSI-Partials (nav/footer außerhalb von #app) — wie im Collage Maker ===
+   Eigene Hintergründe entfernen, damit die Seitenfläche durchscheint — außer
+   beim Cookie-Banner. Direkte Wrapper (nav, footer): normale Spezifität. */
+body > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']) {
+  background-color: transparent !important;
+}
+/* Alle inneren Nachfahren: :where() hat Spezifität 0, damit die Restore-Regeln gewinnen */
+:where(
+    body > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie'])
+  )
+  :where(*:not(.cookie-banner):not(.cookie-consent):not([class*='cookie'])) {
+  background-color: transparent !important;
+}
+
+/* Dropdowns/Submenüs der SSI-Navigation bekommen wieder eine feste Fläche */
+body > :not(#app):not(script) [class*='drop'],
+body > :not(#app):not(script) [class*='sub-menu'],
+body > :not(#app):not(script) [class*='submenu'],
+body > :not(#app):not(script) [class*='popup'],
+body > :not(#app):not(script) [class*='popover'],
+body > :not(#app):not(script) [class*='megamenu'] {
+  background-color: var(--ds-surface-1) !important;
+}
+
+/* ── Hamburger / Toggle-Menü in der SSI-Navigation ── */
+/* 1. Leere Spans sind dekorative Elemente (Hamburger-Balken via background-color) */
+body > :not(#app):not(script) span:empty {
+  background-color: currentColor !important;
+  border-color: currentColor !important;
+}
+/* 2. Spans in aria-expanded-Toggles (Hamburger-Buttons nutzen dieses Attribut) */
+body > :not(#app):not(script) [aria-expanded] > span:empty,
+body > :not(#app):not(script) [aria-expanded] > span > span:empty,
+body > :not(#app):not(script) [aria-expanded] > div > span:empty {
+  background-color: currentColor !important;
+  border-color: currentColor !important;
+}
+/* 3. SVG-Hamburger-Icons in Buttons / Toggles — stroke & fill erzwingen */
+body > :not(#app):not(script) button svg line,
+body > :not(#app):not(script) button svg path,
+body > :not(#app):not(script) button svg rect,
+body > :not(#app):not(script) [aria-expanded] svg line,
+body > :not(#app):not(script) [aria-expanded] svg path,
+body > :not(#app):not(script) [aria-expanded] svg rect,
+body > :not(#app):not(script) [role='button'] svg line,
+body > :not(#app):not(script) [role='button'] svg path,
+body > :not(#app):not(script) [role='button'] svg rect {
+  stroke: currentColor !important;
+  fill: currentColor !important;
+}
+/* 4. Bootstrap toggler-icon (background-image SVG) — Kontrast per CSS-Filter */
+body > :not(#app):not(script) [class*='toggler-icon'] {
+  filter: brightness(0) saturate(100%) !important;
+}
+:root[data-theme='dark'] body > :not(#app):not(script) [class*='toggler-icon'] {
+  filter: brightness(0) saturate(100%) invert(1) !important;
+}
+
+/* Cookie Banner: immer im Vordergrund, über Nav und Dropdowns */
+.cookie-banner,
+.cookie-consent,
+[class*='cookie-banner'],
+[class*='cookie-consent'],
+[id*='cookie-banner'],
+[id*='cookie-consent'] {
+  z-index: 10000 !important;
+  position: fixed !important;
+}
+
+/* Textfarben der SSI-Partials aus den Tokens; die Variablen wechseln mit dem
+   Theme, deshalb gibt es keine Dark-Varianten. Cookie-Banner ausgenommen. */
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  ),
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  )
+  *:not([class*='cookie']):not([id*='cookie']) {
+  color: var(--ds-text) !important;
+}
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  )
+  a:not([class*='cookie']):not([id*='cookie']),
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  )
+  a:not([class*='cookie']):not([id*='cookie'])
+  * {
+  color: var(--ds-link) !important;
+}
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  )
+  a:hover:not([class*='cookie']):not([id*='cookie']),
+body
+  > :not(#app):not(script):not(.cookie-banner):not(.cookie-consent):not([class*='cookie']):not(
+    [id*='cookie']
+  )
+  a:hover:not([class*='cookie']):not([id*='cookie'])
+  * {
+  color: var(--ds-accent) !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Touch / Mobile
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Kein grauer Tap-Highlight, keine 300ms-Klickverzögerung auf Bedienelementen */
+#app button,
+#app [role='button'],
+#app select,
+#app input[type='range'] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Range-Slider im System-Look (Spur Rahmenfarbe, Daumen Akzent, Fokus-Ring).
+   Vertikales Scrollen bleibt möglich, horizontales Ziehen bewegt den Regler. */
+#app input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-border-strong);
+  outline: none;
+  touch-action: pan-y;
+}
+#app input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-accent);
+  border: 2px solid var(--ds-surface-1);
+  cursor: pointer;
+}
+#app input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-accent);
+  border: 2px solid var(--ds-surface-1);
+  cursor: pointer;
+}
+#app input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-border-strong);
+}
+#app input[type='range']:focus-visible {
+  box-shadow: var(--ds-focus-ring);
+}
+
+/* Auf Touch-Geräten (grober Zeiger) größere Trefferflächen */
+@media (pointer: coarse) {
+  #app input[type='range'] {
+    height: 8px;
+  }
+  #app input[type='range']::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+  }
+  #app input[type='range']::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* === Reduzierte Bewegung === */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

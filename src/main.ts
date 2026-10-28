@@ -5,13 +5,10 @@ import { i18n } from '@/i18n'
 import { applySiteTheme } from '@/content/site'
 import '@/style.css'
 
-// Anfangssprache aus der globalen Navigation übernehmen (localStorage 'locale').
-const storedLocale = localStorage.getItem('locale')
-if (storedLocale === 'de' || storedLocale === 'en') {
-  i18n.global.locale.value = storedLocale
-}
-
-// Farben aus dem Kodini Designer (src/content/site.json) anwenden.
+// Farben aus dem Kodini Designer (src/content/site.json) als Overrides der
+// Design-Tokens anwenden – nach style.css, damit sie gewinnen.
 applySiteTheme(document)
 
+// Theme/Sprache übernimmt der Settings-Store (App.vue) aus localStorage und
+// der globalen Navigation.
 createApp(App).use(createPinia()).use(i18n).mount('#app')

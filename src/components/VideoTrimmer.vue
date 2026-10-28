@@ -983,18 +983,18 @@ async function downloadResult(): Promise<void> {
   max-width: 680px;
   margin: 0 auto;
   padding: 56px 24px;
-  border: 2px dashed var(--vc-border);
-  border-radius: 14px;
-  background: var(--vc-surface);
+  border: 2px dashed var(--ds-border-strong);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-2);
   cursor: pointer;
   text-align: center;
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--ds-duration) var(--ds-ease),
+    background var(--ds-duration) var(--ds-ease);
 }
 .dropzone.over {
-  border-color: var(--vc-accent);
-  background: var(--vc-accent-soft);
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
 }
 .dz-icon {
   width: 52px;
@@ -1002,17 +1002,17 @@ async function downloadResult(): Promise<void> {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--vc-accent);
-  color: #fff;
-  font-size: 20px;
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-size: var(--ds-text-xl);
 }
 .dz-title {
-  font-weight: 600;
-  font-size: 16px;
+  font-weight: var(--ds-weight-semibold);
+  font-size: var(--ds-text-lg);
 }
 .dz-hint {
-  color: var(--vc-text-dim);
-  font-size: 14px;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-md);
 }
 
 /* Editor */
@@ -1081,27 +1081,27 @@ async function downloadResult(): Promise<void> {
   width: 100%;
   padding: 9px 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-md);
   background: transparent;
-  color: var(--vc-text);
+  color: var(--ds-text);
   text-align: left;
   cursor: pointer;
 }
 .menu-option:hover {
-  background: var(--vc-accent-soft);
+  background: var(--ds-accent-soft);
 }
 .menu-option.active {
-  background: var(--vc-accent-soft);
+  background: var(--ds-accent-soft);
 }
 .menu-option:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .menu-check {
   width: 14px;
   flex: none;
-  color: var(--vc-accent);
-  font-weight: 700;
+  color: var(--ds-text);
+  font-weight: var(--ds-weight-bold);
 }
 .menu-text {
   display: flex;
@@ -1109,20 +1109,21 @@ async function downloadResult(): Promise<void> {
   gap: 2px;
 }
 .menu-text small {
-  color: var(--vc-text-dim);
-  font-size: 12px;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
 }
 
 /* Karten-Container in den Panels */
 .card {
-  border: 1px solid var(--vc-border);
-  border-radius: 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
   padding: 12px;
+  background: var(--ds-surface-1);
 }
 .panel-title {
   margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
 }
 
 .filebar {
@@ -1138,20 +1139,20 @@ async function downloadResult(): Promise<void> {
   min-width: 0;
 }
 .filename {
-  font-size: 14px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-md);
+  color: var(--ds-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .filesize {
   flex: none;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
   font-variant-numeric: tabular-nums;
   padding: 2px 7px;
-  border: 1px solid var(--vc-border);
-  border-radius: 999px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-full);
 }
 .filebar-actions {
   display: flex;
@@ -1164,7 +1165,7 @@ async function downloadResult(): Promise<void> {
   gap: 4px;
 }
 .history .btn.tiny {
-  font-size: 16px;
+  font-size: var(--ds-text-lg);
   line-height: 1;
   padding: 6px 10px;
 }
@@ -1181,28 +1182,28 @@ async function downloadResult(): Promise<void> {
   display: block;
   width: 100%;
   max-height: 52vh;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-md);
   background: #000;
 }
 
 .crop-toggle.active {
-  border-color: var(--vc-accent);
-  color: var(--vc-accent);
-  background: var(--vc-accent-soft);
+  border-color: var(--ds-accent);
+  color: var(--ds-text);
+  background: var(--ds-accent-soft);
 }
 .crop-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 .crop-size {
   font-variant-numeric: tabular-nums;
 }
 .crop-size b {
-  color: var(--vc-text);
+  color: var(--ds-text);
 }
 .crop-hint {
   flex: 1;
@@ -1220,14 +1221,14 @@ async function downloadResult(): Promise<void> {
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  border: 1px solid var(--vc-border);
-  border-radius: 8px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
 }
 .time-label {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
 }
 .time-main {
   display: flex;
@@ -1239,32 +1240,26 @@ async function downloadResult(): Promise<void> {
   min-width: 0;
   width: 100%;
   padding: 7px 8px;
-  border: 1px solid var(--vc-border);
-  border-radius: 8px;
-  background: var(--vc-surface);
-  color: var(--vc-text);
-  font-size: 16px;
-  font-weight: 700;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-size: var(--ds-text-lg);
+  font-weight: var(--ds-weight-bold);
+  font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
   text-align: center;
-}
-.time-input.start {
-  color: var(--vc-accent);
-}
-.time-input.end {
-  color: var(--vc-playhead, var(--vc-accent));
 }
 .time-input.ms {
   flex: none;
   width: 110px;
-  font-size: 14px;
+  font-size: var(--ds-text-md);
   text-align: right;
 }
 .time-input:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 1px;
-  border-color: var(--vc-accent);
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+  border-color: var(--ds-accent);
 }
 /* ▲▼-Spinner am Zeitfeld (schrittweises Setzen der Position) */
 .spinner {
@@ -1278,27 +1273,27 @@ async function downloadResult(): Promise<void> {
   padding: 0;
   display: grid;
   place-items: center;
-  border: 1px solid var(--vc-border);
-  background: var(--vc-surface);
-  color: var(--vc-text);
+  border: 1px solid var(--ds-border-strong);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
   cursor: pointer;
   font-size: 9px;
   line-height: 1;
 }
 .spin:first-child {
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--ds-radius-sm) var(--ds-radius-sm) 0 0;
   border-bottom: none;
 }
 .spin:last-child {
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--ds-radius-sm) var(--ds-radius-sm);
 }
 .spin:hover {
-  border-color: var(--vc-accent);
-  color: var(--vc-accent);
+  border-color: var(--ds-accent);
+  color: var(--ds-text);
 }
 .spin:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .ms-field {
   display: flex;
@@ -1306,8 +1301,8 @@ async function downloadResult(): Promise<void> {
   gap: 6px;
 }
 .ms-unit {
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 .nudges {
   display: flex;
@@ -1317,7 +1312,7 @@ async function downloadResult(): Promise<void> {
 .btn.tiny.nudge {
   padding: 4px 6px;
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
 }
 .sel {
@@ -1325,32 +1320,32 @@ async function downloadResult(): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
   font-variant-numeric: tabular-nums;
   padding-top: 2px;
 }
 .sel b {
-  color: var(--vc-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ds-text);
+  font-family: var(--ds-font-mono);
 }
 .sel-total {
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
 }
 .sel-valid {
-  color: var(--vc-accent);
-  font-weight: 600;
+  color: var(--ds-success);
+  font-weight: var(--ds-weight-semibold);
 }
 .sel-invalid {
-  color: var(--vc-error-text, #d33);
-  font-weight: 600;
+  color: var(--ds-danger);
+  font-weight: var(--ds-weight-semibold);
 }
 .sel .btn {
   margin-left: auto;
 }
 .btn.tiny {
   padding: 6px 9px;
-  font-size: 14px;
+  font-size: var(--ds-text-md);
   line-height: 1;
 }
 
@@ -1360,10 +1355,10 @@ async function downloadResult(): Promise<void> {
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-bold);
 }
 .live-cell {
   display: flex;
@@ -1380,17 +1375,17 @@ async function downloadResult(): Promise<void> {
 .live-label {
   font-family: inherit;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: var(--ds-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
 }
 .live-value {
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
   white-space: nowrap;
 }
 .live-value.strong {
-  color: var(--vc-text);
+  color: var(--ds-text);
 }
 @media (max-width: 640px) {
   .live-row {
@@ -1409,12 +1404,12 @@ async function downloadResult(): Promise<void> {
   justify-content: center;
   gap: 8px;
   margin-top: 8px;
-  font-size: 13px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
 }
 .cursor-at b {
-  color: var(--vc-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ds-text);
+  font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1438,23 +1433,23 @@ async function downloadResult(): Promise<void> {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
-  background: var(--vc-accent);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 /* Volle-Breite-Button (z. B. Ausschnitt hinzufügen) */
 .btn.block {
   width: 100%;
   text-align: center;
-  border-color: var(--vc-accent);
-  color: var(--vc-accent);
-  font-weight: 600;
+  border-color: var(--ds-accent);
+  color: var(--ds-text);
+  font-weight: var(--ds-weight-semibold);
 }
 .btn.block:hover:not(:disabled) {
-  background: var(--vc-accent-soft);
+  background: var(--ds-accent-soft);
 }
 /* Beschriftete Steuerzeile (Label links, Bedienelement rechts) */
 .field-row {
@@ -1464,8 +1459,8 @@ async function downloadResult(): Promise<void> {
   gap: 10px;
 }
 .field-label {
-  font-size: 13px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
 }
 .field-col {
   display: flex;
@@ -1476,18 +1471,18 @@ async function downloadResult(): Promise<void> {
   opacity: 0.5;
 }
 .field-value {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 .field-hint {
   margin: 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 .range {
   width: 100%;
-  accent-color: var(--vc-accent);
+  accent-color: var(--ds-accent);
   cursor: pointer;
 }
 .range:disabled {
@@ -1507,9 +1502,9 @@ async function downloadResult(): Promise<void> {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--vc-border);
-  border-radius: 8px;
-  background: var(--vc-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
 }
 .segment-index {
   display: grid;
@@ -1517,19 +1512,19 @@ async function downloadResult(): Promise<void> {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--vc-accent);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
   flex: none;
 }
 .segment-time {
   flex: 1;
-  font-size: 14px;
+  font-size: var(--ds-text-md);
   font-variant-numeric: tabular-nums;
 }
 .segment-time small {
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
 }
 .btn.tiny.remove {
   padding: 4px 8px;
@@ -1537,8 +1532,8 @@ async function downloadResult(): Promise<void> {
 }
 .segments-empty {
   margin: 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 
 /* Übergänge der Listenzeilen – Stil je nach Menüauswahl (anim-*).
@@ -1593,54 +1588,55 @@ async function downloadResult(): Promise<void> {
 
 .segments-hint {
   margin: 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 
 /* Buttons */
 .btn {
   appearance: none;
-  border: 1px solid var(--vc-border);
-  background: var(--vc-surface);
-  color: var(--vc-text);
+  border: 1px solid var(--ds-border-strong);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
   padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: var(--ds-radius-md);
+  font-size: var(--ds-text-md);
   cursor: pointer;
   transition:
-    background 0.15s,
-    border-color 0.15s,
-    opacity 0.15s;
+    background var(--ds-duration) var(--ds-ease),
+    border-color var(--ds-duration) var(--ds-ease),
+    opacity var(--ds-duration) var(--ds-ease);
 }
 .btn:hover {
-  border-color: var(--vc-accent);
+  border-color: var(--ds-accent);
 }
 .btn.ghost {
   background: transparent;
 }
 .btn.ghost.danger {
-  color: var(--vc-error-text, #d33);
+  color: var(--ds-danger);
 }
 .btn.ghost.danger:hover {
-  border-color: var(--vc-error-text, #d33);
-  background: var(--vc-error-bg, transparent);
+  border-color: var(--ds-danger);
+  background: color-mix(in srgb, var(--ds-danger) 10%, transparent);
 }
 .btn.primary {
-  background: var(--vc-accent);
-  border-color: var(--vc-accent);
-  color: #fff;
-  font-weight: 600;
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-weight: var(--ds-weight-semibold);
 }
-.btn.primary:hover {
-  filter: brightness(1.08);
+.btn.primary:hover:not(:disabled) {
+  background: var(--ds-accent-hover);
+  border-color: var(--ds-accent-hover);
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .btn:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .export {
   align-self: stretch;
@@ -1655,29 +1651,29 @@ a.btn {
 /* Progress */
 .progress {
   height: 8px;
-  border-radius: 6px;
-  background: var(--vc-track-bg);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-3);
   overflow: hidden;
 }
 .bar {
   height: 100%;
-  background: var(--vc-accent);
+  background: var(--ds-accent);
   transition: width 0.2s;
 }
 
 .error {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--vc-error-bg);
-  color: var(--vc-error-text);
-  font-size: 14px;
+  border-radius: var(--ds-radius-md);
+  background: color-mix(in srgb, var(--ds-danger) 10%, transparent);
+  color: var(--ds-danger);
+  font-size: var(--ds-text-md);
 }
 
 .reencode-note {
   margin: -4px 0 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 
 /* Auf schmalen Displays Export-Button in der Werkzeugleiste voll breit. */
@@ -1696,8 +1692,8 @@ a.btn {
 
 .upload-detail {
   margin: -4px 0 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -1723,7 +1719,7 @@ a.btn {
   flex: 2 1 240px;
 }
 .result-title {
-  font-weight: 600;
+  font-weight: var(--ds-weight-semibold);
   margin: 0;
 }
 .action-buttons {
@@ -1733,13 +1729,13 @@ a.btn {
 }
 .result-status {
   margin: 8px 0 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-semibold);
 }
 .result-hint {
   margin: 0;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
