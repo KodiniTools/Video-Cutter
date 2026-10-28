@@ -143,8 +143,8 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
 .track {
   position: relative;
   height: 40px;
-  border-radius: 8px;
-  background: var(--vc-track-bg);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-3);
   cursor: pointer;
   overflow: visible;
 }
@@ -153,9 +153,9 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: var(--vc-accent-soft);
-  border-top: 2px solid var(--vc-accent);
-  border-bottom: 2px solid var(--vc-accent);
+  background: var(--ds-accent-soft);
+  border-top: 2px solid var(--ds-accent);
+  border-bottom: 2px solid var(--ds-accent);
   pointer-events: none;
 }
 
@@ -168,14 +168,14 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   opacity: 0.9;
 }
 .band-keep {
-  background: color-mix(in srgb, var(--vc-accent) 28%, transparent);
-  border-top: 2px solid var(--vc-accent);
-  border-bottom: 2px solid var(--vc-accent);
+  background: color-mix(in srgb, var(--ds-accent) 28%, transparent);
+  border-top: 2px solid var(--ds-accent);
+  border-bottom: 2px solid var(--ds-accent);
 }
 .band-remove {
-  background: color-mix(in srgb, var(--vc-error-text, #d33) 26%, transparent);
-  border-top: 2px solid var(--vc-error-text, #d33);
-  border-bottom: 2px solid var(--vc-error-text, #d33);
+  background: color-mix(in srgb, var(--ds-danger) 26%, transparent);
+  border-top: 2px solid var(--ds-danger);
+  border-bottom: 2px solid var(--ds-danger);
 }
 
 /* Übergänge der Bänder – Stil je nach Menüauswahl (anim-*) */
@@ -241,8 +241,8 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   padding: 0;
   transform: translate(-50%, -50%);
   border: none;
-  border-radius: 5px;
-  background: var(--vc-accent);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-accent);
   cursor: ew-resize;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
@@ -254,21 +254,22 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   margin: auto;
   width: 2px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--ds-on-accent);
+  opacity: 0.6;
   border-radius: 2px;
 }
 
 .handle:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 
 .scale {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  font-size: 12px;
-  color: var(--vc-text-dim);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
   font-variant-numeric: tabular-nums;
 }
 </style>

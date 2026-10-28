@@ -27,6 +27,23 @@ cd server && npm install && npm run dev   # startet auf :9015
 
 > Node 18+ empfohlen. `pnpm` funktioniert genauso (Skripte identisch).
 
+## Design-System, Navigation und Footer
+
+Der Video Cutter nutzt dasselbe Design-System wie der
+[Collage Maker](https://github.com/KodiniTools/Collage-Maker):
+
+- **Tokens v2** (`src/design-system/`, CSS-Namespace `--ds-*`): unveränderte
+  Kopie aus dem Collage Maker – Palette, Schrift (Supreme, gebündelt unter
+  `src/assets/fonts/`), Radien, Motion. Rollen und Regeln:
+  `src/design-system/README.md`.
+- **Globale Partials** per NGINX-SSI wie im Collage Maker: `index.html` bindet
+  `/partials/nav.html`, `/partials/footer.html` und `/partials/cookie-banner.html`
+  ein (Nginx: `ssi on;`, siehe `deploy/nginx-video-cutter.conf`). Im Vite-Dev-
+  Server bleiben die Includes wirkungslos, Nav und Footer fehlen dort also.
+- **Einstellungen** (`src/stores/settings.ts`, Pinia): Theme (Standard Light)
+  und Sprache (Standard DE) wie im Collage Maker über `localStorage`
+  `theme`/`locale`, `html[data-theme]` und das `locale-changed`-Event der Nav.
+
 ## Schnittmodi
 
 - **Schnell (verlustfrei):** `-c copy`, extrem schnell, schneidet an Keyframes.
@@ -62,14 +79,14 @@ und `nginx -t && systemctl reload nginx`.
 Texte, Titel/Meta und Farben sind ohne Code-Änderung über den
 [Kodini Designer](https://github.com/KodiniTools/Kodini-Designer) editierbar.
 Grundlage ist die Content-Schicht `src/content/site.json` (leerer Wert =
-eingebauter Standard aus `src/i18n.ts` bzw. `src/style.css`):
+eingebauter Standard aus `src/i18n.ts` bzw. den Design-Tokens):
 
-| Bereich                 | Felder                                                                                                                                                                     | Wirkung                                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `meta`                  | `title`, `description`                                                                                                                                                     | `<title>` und Meta-Beschreibung der `index.html` (Build, `vite.config.ts`)                                                 |
-| `texts.de` / `texts.en` | `app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`                                                                                                           | überschreiben die vue-i18n-Texte (`src/i18n.ts` → `mergeMessages`)                                                         |
-| `theme`                 | `accent`, `playhead`, `light.bg/surface/text`, `dark.bg/surface/text`, `bgImage`, `bgImageOpacity`, `bgImageDarken`, `bgImageBlur`                                         | CSS-Variablen `--vc-*` und fixiertes Hintergrundbild (`body::before`) (Laufzeit, `src/content/site.ts` → `applySiteTheme`) |
-| `styles`                | verschachtelt je Text-Slot (`app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`): `font`, `size`, `weight`, `spacing`, `transform`, `colorLight`, `colorDark` | Slot-Design auf `[data-slot="…"]` (`slotCss`, `!important`, `@font-face` aus `/fonts/`)                                    |
+| Bereich                 | Felder                                                                                                                                                                     | Wirkung                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta`                  | `title`, `description`                                                                                                                                                     | `<title>` und Meta-Beschreibung der `index.html` (Build, `vite.config.ts`)                                                                                                                        |
+| `texts.de` / `texts.en` | `app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`                                                                                                           | überschreiben die vue-i18n-Texte (`src/i18n.ts` → `mergeMessages`)                                                                                                                                |
+| `theme`                 | `accent`, `playhead`, `light.bg/surface/text`, `dark.bg/surface/text`, `bgImage`, `bgImageOpacity`, `bgImageDarken`, `bgImageBlur`                                         | überschreibt Design-Tokens (`--ds-accent*`, `--ds-surface-0/1`, `--ds-text`) und `--vc-playhead`; fixiertes Hintergrundbild (`body::before`) (Laufzeit, `src/content/site.ts` → `applySiteTheme`) |
+| `styles`                | verschachtelt je Text-Slot (`app.title`, `app.subtitle`, `drop.title`, `drop.hint`, `footer`): `font`, `size`, `weight`, `spacing`, `transform`, `colorLight`, `colorDark` | Slot-Design auf `[data-slot="…"]` (`slotCss`, `!important`, `@font-face` aus `/fonts/`)                                                                                                           |
 
 Der Designer schreibt nur diese Datei, baut die Vorschau (`VITE_BASE`,
 `VITE_OUT_DIR`) und veröffentlicht per Commit, Push und `deploy/deploy.sh`

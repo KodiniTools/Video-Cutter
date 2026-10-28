@@ -6,6 +6,7 @@ import {
   flattenSlotStyles,
   bgImageCss,
   applySiteTheme,
+  onColor,
 } from '@/content/site'
 
 describe('Content-Schicht (Kodini Designer)', () => {
@@ -43,11 +44,25 @@ describe('Content-Schicht (Kodini Designer)', () => {
       dark: { text: '#e6edf3' },
     })
     expect(css).toContain(
-      ':root{--vc-accent:#ff0000;--vc-accent-soft:rgba(255, 0, 0, 0.16);--vc-focus:rgba(255, 0, 0, 0.6)}',
+      ":root,:root[data-theme='light'],:root[data-theme='dark']{--ds-accent:#ff0000;--ds-accent-hover:#ff0000;--ds-accent-soft:rgba(255, 0, 0, 0.16);--ds-on-accent:#0a1324}",
     )
     expect(css).not.toContain('playhead')
-    expect(css).toContain(":root[data-theme='light']{--vc-bg:#fff}")
-    expect(css).toContain(":root[data-theme='dark']{--vc-text:#e6edf3}")
+    expect(css).toContain(":root[data-theme='light']{--ds-surface-0:#fff}")
+    expect(css).toContain(":root[data-theme='dark']{--ds-text:#e6edf3}")
+  })
+
+  it('themeCss: Abspielkopf und Fläche landen auf den passenden Variablen', () => {
+    const css = themeCss({ playhead: '#00ff00', dark: { surface: '#101010' } })
+    expect(css).toContain(
+      ":root,:root[data-theme='light'],:root[data-theme='dark']{--vc-playhead:#00ff00}",
+    )
+    expect(css).toContain(":root[data-theme='dark']{--ds-surface-1:#101010}")
+  })
+
+  it('onColor: wählt die kontrastreichere Textfarbe für den Akzent', () => {
+    expect(onColor('#ffd24a')).toBe('#0a1324')
+    expect(onColor('#1d4ed8')).toBe('#ffffff')
+    expect(onColor('#fff')).toBe('#0a1324')
   })
 
   it('applySiteTheme: fügt genau ein <style id="site-theme"> ein', () => {
@@ -57,7 +72,7 @@ describe('Content-Schicht (Kodini Designer)', () => {
     applySiteTheme(document, { theme: { accent: '#abcdef' } })
     const els = document.querySelectorAll('#site-theme')
     expect(els.length).toBe(1)
-    expect(els[0].textContent).toContain('--vc-accent:#abcdef')
+    expect(els[0].textContent).toContain('--ds-accent:#abcdef')
   })
 })
 

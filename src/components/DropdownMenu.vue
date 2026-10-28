@@ -72,38 +72,38 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--vc-border);
-  border-radius: 9px;
-  background: var(--vc-surface);
-  color: var(--vc-text);
-  font-size: 14px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-size: var(--ds-text-md);
   cursor: pointer;
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--ds-duration) var(--ds-ease),
+    background var(--ds-duration) var(--ds-ease);
 }
 .menu-trigger:hover:not(:disabled) {
-  border-color: var(--vc-accent);
+  border-color: var(--ds-accent);
 }
 .menu-trigger:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 .menu-trigger:focus-visible {
-  outline: 2px solid var(--vc-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .menu-kicker {
   font-size: 11px;
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 .menu-label {
-  font-weight: 600;
+  font-weight: var(--ds-weight-semibold);
 }
 .menu-caret {
-  color: var(--vc-text-dim);
+  color: var(--ds-text-2);
   font-size: 11px;
 }
 
@@ -114,10 +114,10 @@ onBeforeUnmount(() => {
   min-width: 240px;
   max-width: 320px;
   padding: 6px;
-  border: 1px solid var(--vc-border);
-  border-radius: 10px;
-  background: var(--vc-surface);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-1);
+  box-shadow: var(--ds-shadow-overlay);
 }
 .align-left {
   left: 0;

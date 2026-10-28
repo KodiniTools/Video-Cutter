@@ -1,9 +1,10 @@
 // Content-Schicht für den Kodini Designer.
 //
 // src/content/site.json enthält die im Designer editierbaren Werte (Texte je
-// Sprache, Titel/Meta, Farben). Leerer String = Standard aus i18n.ts bzw.
-// style.css. Der Designer schreibt nur diese Datei; der Build (vite.config.ts,
-// i18n.ts, main.ts) liest sie – im Code selbst muss nichts angepasst werden.
+// Sprache, Titel/Meta, Farben). Leerer String = Standard aus i18n.ts bzw. den
+// Design-Tokens (src/design-system). Der Designer schreibt nur diese Datei; der
+// Build (vite.config.ts, i18n.ts, main.ts) liest sie – im Code selbst muss
+// nichts angepasst werden.
 import siteJson from './site.json'
 
 export interface SiteTheme {
@@ -64,25 +65,33 @@ export function mergeMessages<T>(base: T, overrides: unknown): T {
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
+// Designer-Farben überschreiben die Design-Tokens (src/design-system/tokens-v2.css).
+// Globale Werte (Akzent, Abspielkopf) müssen auch die Theme-Blöcke der Tokens
+// (:root[data-theme='…'], gleiche Spezifität, früher im Dokument) überstimmen.
+const ALL_THEMES = ":root,:root[data-theme='light'],:root[data-theme='dark']"
+const MODE_VARS = { bg: '--ds-surface-0', surface: '--ds-surface-1', text: '--ds-text' } as const
+
 /** CSS-Regeln für die im Designer gesetzten Farben ('' wenn nichts gesetzt). */
 export function themeCss(theme: SiteTheme | undefined): string {
   if (!theme) return ''
   const rules: string[] = []
   const root: string[] = []
   if (theme.accent && HEX.test(theme.accent)) {
-    root.push(`--vc-accent:${theme.accent}`)
-    root.push(`--vc-accent-soft:${hexToRgba(theme.accent, 0.16)}`)
-    root.push(`--vc-focus:${hexToRgba(theme.accent, 0.6)}`)
+    root.push(`--ds-accent:${theme.accent}`)
+    root.push(`--ds-accent-hover:${theme.accent}`)
+    root.push(`--ds-accent-soft:${hexToRgba(theme.accent, 0.16)}`)
+    root.push(`--ds-on-accent:${onColor(theme.accent)}`)
   }
   if (theme.playhead && HEX.test(theme.playhead)) root.push(`--vc-playhead:${theme.playhead}`)
-  if (root.length) rules.push(`:root{${root.join(';')}}`)
+  if (root.length) rules.push(`${ALL_THEMES}{${root.join(';')}}`)
   for (const mode of ['light', 'dark'] as const) {
     const side = theme[mode]
     if (!side) continue
     const vars: string[] = []
-    if (side.bg && HEX.test(side.bg)) vars.push(`--vc-bg:${side.bg}`)
-    if (side.surface && HEX.test(side.surface)) vars.push(`--vc-surface:${side.surface}`)
-    if (side.text && HEX.test(side.text)) vars.push(`--vc-text:${side.text}`)
+    for (const key of ['bg', 'surface', 'text'] as const) {
+      const value = side[key]
+      if (value && HEX.test(value)) vars.push(`${MODE_VARS[key]}:${value}`)
+    }
     if (vars.length) rules.push(`:root[data-theme='${mode}']{${vars.join(';')}}`)
   }
   const bg = bgImageCss(theme)
@@ -194,17 +203,37 @@ export function slotCss(styles: unknown): string {
   return [...faces, ...rules].join('\n')
 }
 
-function hexToRgba(hex: string, alpha: number): string {
+function hexRgb(hex: string): [number, number, number] {
   let h = hex.slice(1)
   if (h.length === 3)
     h = h
       .split('')
       .map((c) => c + c)
       .join('')
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexRgb(hex)
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+/**
+ * Textfarbe auf einer Akzentfläche: dunkles Navy der Tokens oder Weiß, je
+ * nachdem, was nach WCAG mehr Kontrast ergibt.
+ */
+export function onColor(hex: string): string {
+  const lum = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const rel = ([r, g, b]: [number, number, number]) =>
+    0.2126 * lum(r) + 0.7152 * lum(g) + 0.0722 * lum(b)
+  const bg = rel(hexRgb(hex))
+  const dark = rel(hexRgb('#0a1324'))
+  const vsDark = (bg + 0.05) / (dark + 0.05)
+  const vsWhite = 1.05 / (bg + 0.05)
+  return vsDark >= vsWhite ? '#0a1324' : '#ffffff'
 }
 
 /** Hängt Designer-Farben und Slot-Design als <style id="site-theme"> in den Kopf ein. */
