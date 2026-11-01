@@ -1,5 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import { applyLocaleHead } from '@/utils/localeSeo'
+
+export const SITE_URL = 'https://kodinitools.com/video-cutter/'
+
+/** Titel und Beschreibung je Sprache (Deutsch steht zusätzlich statisch in index.html). */
+export const PAGE_META = {
+  de: {
+    title: 'Video schneiden online – kostenlos und verlustfrei | KodiniTools',
+    description:
+      'Videos online kürzen: Start und Ende setzen, verlustfrei schneiden oder framegenau neu kodieren, Bildausschnitt wählen. Kostenlos, ohne Registrierung.',
+  },
+  en: {
+    title: 'Cut Videos Online – Free and Lossless | KodiniTools',
+    description:
+      'Trim videos online: set start and end, cut losslessly or re-encode frame-accurately, choose a crop area. Free, no sign-up.',
+  },
+} as const
 import { i18n, type AppLocale } from '@/i18n'
 
 // Theme- und Sprach-Einstellungen, übernommen aus dem Collage Maker
@@ -94,7 +111,9 @@ const ssiNavTranslations: Record<string, Record<string, string>> = {
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<Theme>(parseTheme(readStorage('theme')))
-  const locale = ref<Locale>(parseLocale(readStorage('locale')) ?? 'de')
+  // ?lang=de|en (hreflang-Ziel) hat Vorrang vor der gespeicherten Sprache
+  const urlLocale = parseLocale(new URLSearchParams(globalThis.location?.search ?? '').get('lang'))
+  const locale = ref<Locale>(urlLocale ?? parseLocale(readStorage('locale')) ?? 'de')
 
   // MutationObserver state (declared early because theme watcher runs immediately)
   let themeObserver: MutationObserver | null = null
@@ -127,7 +146,8 @@ export const useSettingsStore = defineStore('settings', () => {
     locale,
     (newLocale) => {
       writeStorage('locale', newLocale)
-      document.documentElement.setAttribute('lang', newLocale)
+      // <html lang>, Titel, Canonical (EN = ?lang=en) und hreflang
+      applyLocaleHead(SITE_URL, newLocale, PAGE_META[newLocale])
       i18n.global.locale.value = newLocale
       syncNavLangButtons(newLocale)
       translateSsiNav(newLocale)

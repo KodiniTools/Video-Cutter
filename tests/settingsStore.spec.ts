@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { useSettingsStore, parseTheme, parseLocale } from '@/stores/settings'
+import { useSettingsStore, parseTheme, parseLocale, PAGE_META, SITE_URL } from '@/stores/settings'
 import { i18n } from '@/i18n'
 
 describe('Settings-Store (Theme/Sprache, synchron mit der SSI-Navigation)', () => {
@@ -35,6 +35,25 @@ describe('Settings-Store (Theme/Sprache, synchron mit der SSI-Navigation)', () =
     expect(store.locale).toBe('de')
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(document.documentElement.getAttribute('lang')).toBe('de')
+  })
+
+  it('?lang=en hat Vorrang und setzt Titel, Canonical und hreflang', () => {
+    localStorage.setItem('locale', 'de')
+    window.history.replaceState(null, '', '/video-cutter/?lang=en')
+    try {
+      store = useSettingsStore()
+      expect(store.locale).toBe('en')
+      expect(localStorage.getItem('locale')).toBe('en')
+      expect(i18n.global.locale.value).toBe('en')
+      expect(document.documentElement.lang).toBe('en')
+      expect(document.title).toBe(PAGE_META.en.title)
+      expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+        `${SITE_URL}?lang=en`,
+      )
+      expect(document.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(3)
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
   })
 
   it('übernimmt gespeicherte Einstellungen und schaltet vue-i18n um', () => {
