@@ -5,8 +5,12 @@
  * übereinstimmen.
  */
 
+import { ensureFontFace, getCustomFont } from './customFonts'
+
 export const TEXT_FONTS = ['roboto', 'montserrat', 'bebas', 'lora', 'pacifico'] as const
-export type TextFont = (typeof TEXT_FONTS)[number]
+export type BuiltinFont = (typeof TEXT_FONTS)[number]
+/** Mitgelieferte Schrift oder eigene Schrift (`f:<Dateiname>`, siehe customFonts). */
+export type TextFont = BuiltinFont | `f:${string}`
 
 export const TEXT_STYLES = ['outline', 'box', 'shadow', 'none'] as const
 export type TextStyle = (typeof TEXT_STYLES)[number]
@@ -21,15 +25,35 @@ export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
  * `shift` = vertikaler Versatz (in em), um den libass den Textblock gegenüber
  * CSS tiefer (+) bzw. höher (−) setzt – per Vergleichsrender ermittelt.
  */
-export const FONT_OPTIONS: Record<
-  TextFont,
-  { label: string; css: string; lineRatio: number; shift: number }
-> = {
+export interface FontPreview {
+  label: string
+  css: string
+  lineRatio: number
+  shift: number
+}
+
+export const FONT_OPTIONS: Record<BuiltinFont, FontPreview> = {
   roboto: { label: 'Roboto', css: 'VC Roboto', lineRatio: 1.2002, shift: 0.01 },
   montserrat: { label: 'Montserrat', css: 'VC Montserrat', lineRatio: 1.562, shift: -0.03 },
   bebas: { label: 'Bebas Neue', css: 'VC Bebas Neue', lineRatio: 1.3, shift: 0 },
   lora: { label: 'Lora', css: 'VC Lora', lineRatio: 1.5, shift: 0.09 },
   pacifico: { label: 'Pacifico', css: 'VC Pacifico', lineRatio: 1.935, shift: 0.08 },
+}
+
+export function isBuiltinFont(v: string): v is BuiltinFont {
+  return (TEXT_FONTS as readonly string[]).includes(v)
+}
+
+/**
+ * Vorschau-Daten einer Schrift. Eigene Schriften werden dabei für die Vorschau
+ * registriert; unbekannte (noch nicht geladen) fallen auf Roboto zurück.
+ */
+export function fontPreview(font: TextFont): FontPreview {
+  if (isBuiltinFont(font)) return FONT_OPTIONS[font]
+  const c = getCustomFont(font)
+  if (!c) return FONT_OPTIONS.roboto
+  ensureFontFace(c)
+  return { label: `${c.group} ${c.label}`, css: c.css, lineRatio: c.lineRatio, shift: c.shift }
 }
 
 /** Datenformat für den Server (POST /api/text). */

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { containedVideoBox } from '@/lib/cropGeometry'
 import {
-  FONT_OPTIONS,
+  fontPreview,
   overlayFrame,
   type OverlayFrame,
   type TextOverlay,
@@ -88,6 +88,7 @@ interface Rendered {
   frame: OverlayFrame
   style: Record<string, string>
   textStyle: Record<string, string>
+  lineStyle: Record<string, string>
   lines: { ch: string; hidden: boolean }[][]
 }
 
@@ -100,10 +101,9 @@ function lookCss(o: TextOverlayData, px: number): Record<string, string> {
         webkitTextStroke: `${Math.max(1, px * 0.08) * 2}px ${o.accent}`,
         paintOrder: 'stroke fill',
       }
-    case 'box': {
-      const pad = Math.max(2, px * 0.2)
-      return { background: o.accent, padding: `${pad}px` }
-    }
+    case 'box':
+      // Box wird je Zeile gezeichnet (wie libass), siehe lineCss.
+      return {}
     case 'shadow': {
       const s = Math.max(1, px * 0.06)
       return { textShadow: `${s}px ${s}px 0 ${o.accent}bf` }
@@ -114,6 +114,18 @@ function lookCss(o: TextOverlayData, px: number): Record<string, string> {
       const never: never = o.style
       throw new Error(`Unbekannter Stil: ${String(never)}`)
     }
+  }
+}
+
+/** Box-Stil: libass zeichnet je Zeile ein eigenes Rechteck (Glyphen + Rand). */
+function lineCss(o: TextOverlayData, px: number): Record<string, string> {
+  if (o.style !== 'box') return {}
+  const pad = Math.max(2, px * 0.2)
+  return {
+    background: o.accent,
+    padding: `${pad}px`,
+    boxDecorationBreak: 'clone',
+    webkitBoxDecorationBreak: 'clone',
   }
 }
 
@@ -132,7 +144,7 @@ const rendered = computed<Rendered[]>(() => {
         : animated
     if (!frame.visible && !isSel) return []
     const px = o.size * h
-    const font = FONT_OPTIONS[o.font]
+    const font = fontPreview(o.font)
     let k = 0
     const lines = o.text.split('\n').map((line) =>
       Array.from(line).map((ch) => {
@@ -158,6 +170,7 @@ const rendered = computed<Rendered[]>(() => {
           color: o.color,
           ...lookCss(o, px),
         },
+        lineStyle: lineCss(o, px),
         lines,
       },
     ]
@@ -214,11 +227,10 @@ function onPointerUp(): void {
     >
       <span class="text-body" :style="r.textStyle"
         ><template v-for="(line, li) in r.lines" :key="li"
-          ><br v-if="li > 0" /><span
-            v-for="(c, ci) in line"
-            :key="ci"
-            :class="{ hidden: c.hidden }"
-            >{{ c.ch }}</span
+          ><br v-if="li > 0" /><span class="text-line" :style="r.lineStyle"
+            ><span v-for="(c, ci) in line" :key="ci" :class="{ hidden: c.hidden }">{{
+              c.ch
+            }}</span></span
           ></template
         ></span
       >

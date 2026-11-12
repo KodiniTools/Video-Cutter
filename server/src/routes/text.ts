@@ -6,6 +6,7 @@ import { config } from '../config'
 import { PROGRESS, reencodeCodecs } from '../lib/args'
 import { isMediaId, mediaStore } from '../lib/media'
 import { buildAss, buildTextFilter, parseTextOverlays } from '../lib/textOverlay'
+import { customFontView, customFontsEnv, listCustomFonts } from '../lib/customFonts'
 import { safeBaseName, safeExt, ValidationError } from '../lib/validate'
 import { jobManager } from '../lib/jobs'
 
@@ -37,6 +38,11 @@ export function buildTextArgs(
 }
 
 export const textRouter = Router()
+
+/** GET /api/fonts -> { fonts: CustomFontView[] } – eigene Schriften des Servers. */
+textRouter.get('/fonts', (_req: Request, res: Response) => {
+  res.json({ fonts: listCustomFonts().map(customFontView) })
+})
 
 /**
  * POST /api/text  (JSON: { mediaId, texts: TextOverlay[] })
@@ -87,6 +93,7 @@ textRouter.post(
         job,
         buildTextArgs(item.path, assPath, config.fontsDir, outputPath),
         duration,
+        customFontsEnv(),
       )
       res.status(202).json({ jobId: id, text: true, storeResult: true })
     } catch (err) {

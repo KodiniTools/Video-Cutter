@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
+import { groupFonts, useCustomFonts } from '@/lib/customFonts'
 import {
   FONT_OPTIONS,
   MAX_TEXT_LENGTH,
@@ -42,6 +43,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const texts = useTextOverlayStore()
 const { overlays, selected, selectedId, canAdd } = storeToRefs(texts)
+
+// Eigene Schriften vom Server (einmal pro Sitzung).
+const { fonts: customFonts, loadCustomFonts } = useCustomFonts()
+const fontGroups = computed(() => groupFonts(customFonts.value))
+onMounted(() => void loadCustomFonts())
 
 const allValid = computed(() => overlays.value.every((o) => isValidOverlay(o, props.duration)))
 
@@ -245,38 +251,44 @@ function preview(text: string): string {
         <p class="hint">{{ t('text.dragHint') }}</p>
       </div>
 
-      <div class="grid-2">
-        <label class="field-col">
-          <span class="field-label">{{ t('text.font') }}</span>
-          <select
-            class="input"
-            :value="selected.font"
-            :disabled="busy"
-            @change="
-              patch({ font: ($event.target as HTMLSelectElement).value as typeof selected.font })
-            "
-          >
+      <label class="field-col">
+        <span class="field-label">{{ t('text.font') }}</span>
+        <select
+          class="input"
+          :value="selected.font"
+          :disabled="busy"
+          @change="
+            patch({ font: ($event.target as HTMLSelectElement).value as typeof selected.font })
+          "
+        >
+          <optgroup :label="t('text.fontsBuiltin')">
             <option v-for="f in TEXT_FONTS" :key="f" :value="f">{{ FONT_OPTIONS[f].label }}</option>
-          </select>
-        </label>
-        <label class="field-col">
-          <span class="field-label">{{ t('text.animation') }}</span>
-          <select
-            class="input"
-            :value="selected.animation"
-            :disabled="busy"
-            @change="
-              patch({
-                animation: ($event.target as HTMLSelectElement).value as typeof selected.animation,
-              })
-            "
-          >
-            <option v-for="a in TEXT_ANIMATIONS" :key="a" :value="a">
-              {{ t(`text.animations.${a}`) }}
+          </optgroup>
+          <optgroup v-for="g in fontGroups" :key="g.group" :label="g.group">
+            <option v-for="f in g.fonts" :key="f.key" :value="f.key">
+              {{ g.group }} {{ f.label }}
             </option>
-          </select>
-        </label>
-      </div>
+          </optgroup>
+        </select>
+      </label>
+
+      <label class="field-col">
+        <span class="field-label">{{ t('text.animation') }}</span>
+        <select
+          class="input"
+          :value="selected.animation"
+          :disabled="busy"
+          @change="
+            patch({
+              animation: ($event.target as HTMLSelectElement).value as typeof selected.animation,
+            })
+          "
+        >
+          <option v-for="a in TEXT_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.animations.${a}`) }}
+          </option>
+        </select>
+      </label>
 
       <div class="field-col">
         <div class="field-row">

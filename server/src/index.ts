@@ -11,9 +11,12 @@ import { textRouter } from './routes/text'
 import { mediaStore } from './lib/media'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
+import { initCustomFonts } from './lib/customFonts'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
+  const fonts = await initCustomFonts(config.customFontsDir, config.tmpDir)
+  console.log(`Eigene Schriften: ${fonts.length} aus ${config.customFontsDir}`)
 
   const app = express()
   app.disable('x-powered-by')

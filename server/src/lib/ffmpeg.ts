@@ -14,8 +14,10 @@ export function runFfmpeg(
   args: string[],
   durationSec: number,
   onProgress: (percent: number) => void,
+  /** Optionale Umgebung (z. B. FONTCONFIG_FILE für eigene Schriften). */
+  env?: NodeJS.ProcessEnv,
 ): RunHandle {
-  const proc = spawn(config.ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+  const proc = spawn(config.ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'], env })
 
   let stderrTail = ''
   let timedOut = false

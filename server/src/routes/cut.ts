@@ -80,6 +80,7 @@ export const SERVER_FEATURES = [
   'seamTransitions',
   'media',
   'text',
+  'customFonts',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
