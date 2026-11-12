@@ -7,6 +7,7 @@ import { MulterError } from 'multer'
 import { config } from './config'
 import { cutRouter, SERVER_FEATURES } from './routes/cut'
 import { mediaRouter } from './routes/media'
+import { textRouter } from './routes/text'
 import { mediaStore } from './lib/media'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
@@ -51,6 +52,7 @@ async function bootstrap(): Promise<void> {
 
   app.use('/api', cutRouter)
   app.use('/api', mediaRouter)
+  app.use('/api', textRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))
@@ -59,6 +61,15 @@ async function bootstrap(): Promise<void> {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ValidationError) {
       res.status(err.statusCode).json({ error: err.message })
+      return
+    }
+    // express.json(): kaputtes oder zu großes JSON (POST /api/text).
+    const bodyErr = (err as { type?: unknown } | null)?.type
+    if (bodyErr === 'entity.parse.failed' || bodyErr === 'entity.too.large') {
+      const tooLarge = bodyErr === 'entity.too.large'
+      res
+        .status(tooLarge ? 413 : 400)
+        .json({ error: tooLarge ? 'Anfrage zu groß.' : 'Ungültige Anfrage (JSON).' })
       return
     }
     if (err instanceof MulterError) {

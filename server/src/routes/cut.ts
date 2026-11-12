@@ -79,6 +79,7 @@ export const SERVER_FEATURES = [
   'music',
   'seamTransitions',
   'media',
+  'text',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

@@ -3,6 +3,7 @@ import type { TrimMode } from '@/lib/ffmpegCommand'
 import type { CutOperation, CropRect } from '@/stores/videoEditor'
 import { API_BASE } from '@/lib/apiBase'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
+import type { TextOverlayData } from '@/lib/textOverlay'
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
 export const CUT_CANCELLED = 'CUT_CANCELLED'
@@ -27,6 +28,9 @@ export const FORMAT_UNSUPPORTED = 'FORMAT_UNSUPPORTED'
 
 /** Fehler-Kennung: Hintergrundmusik verlangt, aber vom Backend nicht bestätigt. */
 export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
+
+/** Fehler-Kennung: Text einbrennen verlangt, aber das Backend kennt es nicht (veraltet). */
+export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
 
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
@@ -564,6 +568,78 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
   })
 }
 
+/**
+ * Startet POST /api/text und liefert die Job-ID. Ein altes Backend (Route
+ * unbekannt -> 404, oder fehlende Bestätigung `text`) ergibt TEXT_UNSUPPORTED.
+ * Exportiert für Tests.
+ */
+export async function startTextJob(
+  mediaId: string,
+  texts: TextOverlayData[],
+  signal?: AbortSignal,
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mediaId, texts }),
+    signal,
+  })
+  const raw = await res.text()
+  let data: { jobId?: unknown; text?: unknown; error?: unknown } = {}
+  try {
+    data = JSON.parse(raw) as typeof data
+  } catch {
+    /* keine JSON-Antwort (z. B. HTML-Fehlerseite) */
+  }
+  if (!res.ok) {
+    const msg = typeof data.error === 'string' ? data.error : ''
+    if (res.status === 404 && (!msg || msg === 'Nicht gefunden.')) throw new Error(TEXT_UNSUPPORTED)
+    throw new Error(msg || `Serverfehler (${res.status}).`)
+  }
+  if (typeof data.jobId !== 'string' || !data.jobId) {
+    throw new Error('Ungültige Serverantwort (keine jobId).')
+  }
+  if (data.text !== true) {
+    await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
+    throw new Error(TEXT_UNSUPPORTED)
+  }
+  return data.jobId
+}
+
+/**
+ * Brennt Texte in ein Bibliotheks-Video ein. Das Ergebnis wird auf dem Server
+ * als neues Video gespeichert und (wie beim Schneiden) zurückgegeben.
+ */
+async function burnText(mediaId: string, texts: TextOverlayData[]): Promise<MediaCutResult> {
+  return withProcessing(async () => {
+    // Kein Upload: direkt in die Verarbeitungsphase.
+    phase.value = 'process'
+    const controller = new AbortController()
+    let cancelled = false
+    rejectActive = () => {
+      cancelled = true
+      controller.abort()
+    }
+    let jobId: string
+    try {
+      jobId = await startTextJob(mediaId, texts, controller.signal)
+    } catch (e) {
+      if (cancelled) throw new Error(CUT_CANCELLED)
+      throw e
+    } finally {
+      rejectActive = null
+    }
+    currentJobId = jobId
+    // Abbruch zwischen Start und SSE-Verbindung: Job sofort beenden.
+    if (cancelled) await abortJob(jobId, CUT_CANCELLED)
+    const resultId = await waitForJob(jobId)
+    currentJobId = null
+    if (!resultId) throw new Error(MEDIA_UNSUPPORTED)
+    const [media, blob] = await Promise.all([fetchMediaInfo(resultId), fetchMediaFile(resultId)])
+    return { media, blob }
+  })
+}
+
 export function useServerCut() {
   return {
     isProcessing,
@@ -574,6 +650,7 @@ export function useServerCut() {
     bytesPerSec,
     cut,
     cutMedia,
+    burnText,
     cancel,
   }
 }
