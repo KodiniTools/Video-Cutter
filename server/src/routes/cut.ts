@@ -13,7 +13,14 @@ import {
   type AppendClip,
 } from '../lib/args'
 import { probeMedia } from '../lib/probe'
-import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../lib/validate'
+import {
+  parseAppendMeta,
+  parseCutParams,
+  resolveAppendRange,
+  safeExt,
+  safeBaseName,
+  ValidationError,
+} from '../lib/validate'
 import { jobManager } from '../lib/jobs'
 
 const upload = multer({
@@ -50,14 +57,15 @@ export const cutRouter = Router()
  * ob der laufende Server neue Felder wie `crop` überhaupt kennt – ein altes
  * Backend würde sie sonst stillschweigend ignorieren und ungeschnitten liefern.
  */
-export const SERVER_FEATURES = ['crop', 'append'] as const
+export const SERVER_FEATURES = ['crop', 'append', 'appendTrim'] as const
 
 /**
- * POST /api/cut  (multipart: video, append[], segments|start+duration, mode,
+ * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
  *                 operation, total, crop, transitionPreset, transitionDuration)
  * Legt einen Job an und startet die Verarbeitung.
- * Antwort: { jobId, crop, append } – `crop` bestätigt den Bildausschnitt,
- * `append` die Anzahl der angehängten (zusammengefügten) Videos.
+ * Antwort: { jobId, crop, append, appendTrim } – `crop` bestätigt den
+ * Bildausschnitt, `append` die Anzahl der angehängten Videos, `appendTrim`
+ * die Übernahme von Kürzung/Position (`appendMeta`) je angehängtem Video.
  */
 cutRouter.post(
   '/cut',
@@ -76,6 +84,7 @@ cutRouter.post(
     // Ab hier existieren Dateien auf der Platte -> bei Fehlern löschen.
     try {
       const params = parseCutParams(req.body ?? {}, config.maxDurationSec)
+      const appendMeta = parseAppendMeta(req.body ?? {}, appendFiles.length)
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -113,12 +122,19 @@ cutRouter.post(
               `Dauer des angehängten Videos „${safeBaseName(appendFiles[i].originalname)}" unbekannt.`,
             )
           }
-          if (info.duration > config.maxDurationSec) {
+          const range = resolveAppendRange(appendMeta[i], info.duration)
+          if (range.duration > config.maxDurationSec) {
             throw new ValidationError(
               `Angehängtes Video überschreitet das Limit von ${config.maxDurationSec}s.`,
             )
           }
-          return { path: appendFiles[i].path, duration: info.duration, hasAudio: info.hasAudio }
+          return {
+            path: appendFiles[i].path,
+            start: range.start,
+            duration: range.duration,
+            hasAudio: info.hasAudio,
+            position: appendMeta[i].position,
+          }
         })
         const size = mergeTargetSize(mainInfo.width, mainInfo.height, params.crop)
         outExt = isWebm ? 'webm' : 'mp4'
@@ -134,6 +150,7 @@ cutRouter.post(
           transition: params.transition,
           crop: params.crop,
         })
+        // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = outputDurationFor(
           [...keep, ...appends.map((a) => ({ start: 0, duration: a.duration }))],
           params.transition,
@@ -180,6 +197,7 @@ cutRouter.post(
         jobId: id,
         crop: params.crop !== undefined,
         append: appendFiles.length,
+        appendTrim: appendFiles.length > 0,
       })
     } catch (err) {
       await removeFiles(allPaths)

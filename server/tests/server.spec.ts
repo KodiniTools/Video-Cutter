@@ -8,7 +8,14 @@ import {
   mergeTargetSize,
 } from '../src/lib/args'
 import { parseProbeOutput } from '../src/lib/probe'
-import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../src/lib/validate'
+import {
+  parseAppendMeta,
+  parseCutParams,
+  resolveAppendRange,
+  safeExt,
+  safeBaseName,
+  ValidationError,
+} from '../src/lib/validate'
 
 describe('formatFfmpegTime', () => {
   it('formatiert korrekt', () => {
@@ -543,6 +550,8 @@ describe('buildMergeArgs (Videos anhängen)', () => {
       '00:00:03.000',
       '-i',
       '/tmp/in.mp4',
+      '-t',
+      '00:00:04.000',
       '-i',
       '/tmp/b.mp4',
     ])
@@ -599,5 +608,91 @@ describe('buildMergeArgs (Videos anhängen)', () => {
       appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
     })
     expect(args).toContain('libvpx-vp9')
+  })
+})
+
+describe('Angehängte Videos: Kürzung und Position', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 2, duration: 3 }],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+  }
+
+  it('gekürztes Video wird per -ss/-t eingelesen', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/b.mp4', start: 1.5, duration: 2, hasAudio: true }],
+    })
+    const i = args.indexOf('/tmp/b.mp4')
+    expect(args.slice(i - 5, i + 1)).toEqual([
+      '-ss',
+      '00:00:01.500',
+      '-t',
+      '00:00:02.000',
+      '-i',
+      '/tmp/b.mp4',
+    ])
+  })
+
+  it('Reihenfolge: davor -> Ausschnitte -> danach (Listenreihenfolge je Gruppe)', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [
+        { path: '/tmp/after1.mp4', duration: 4, hasAudio: true, position: 'after' },
+        { path: '/tmp/intro.mp4', duration: 2, hasAudio: true, position: 'before' },
+        { path: '/tmp/after2.mp4', duration: 5, hasAudio: true },
+      ],
+    })
+    const inputs = args.filter((_, k) => args[k - 1] === '-i')
+    expect(inputs).toEqual(['/tmp/intro.mp4', '/tmp/in.mp4', '/tmp/after1.mp4', '/tmp/after2.mp4'])
+    // Crop/Ton-Zuordnung folgt den Input-Indizes: Hauptvideo ist jetzt Input 1.
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter).toContain('concat=n=4:v=1:a=1')
+  })
+
+  it('Crop trifft auch bei einem Intro nur das Hauptvideo', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/intro.mp4', duration: 2, hasAudio: true, position: 'before' }],
+      crop: { x: 0, y: 0, width: 0.5, height: 0.5 },
+    })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter).toMatch(/\[1:v\]crop=/)
+    expect(filter).not.toMatch(/\[0:v\]crop=/)
+  })
+
+  it('parseAppendMeta: Standardwerte ohne Feld, liest JSON, prüft Anzahl/Werte', () => {
+    expect(parseAppendMeta({}, 2)).toEqual([
+      { start: 0, position: 'after' },
+      { start: 0, position: 'after' },
+    ])
+    expect(
+      parseAppendMeta(
+        { appendMeta: JSON.stringify([{ start: 1, duration: 2, position: 'before' }]) },
+        1,
+      ),
+    ).toEqual([{ start: 1, duration: 2, position: 'before' }])
+    expect(() => parseAppendMeta({ appendMeta: '[]' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: 'x' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: '[{"start":-1}]' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: '[{"duration":0}]' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: '[{"position":"mitte"}]' }, 1)).toThrow(
+      ValidationError,
+    )
+  })
+
+  it('resolveAppendRange begrenzt auf die echte Dauer', () => {
+    expect(resolveAppendRange({ start: 0, position: 'after' }, 10)).toEqual({
+      start: 0,
+      duration: 10,
+    })
+    expect(resolveAppendRange({ start: 4, duration: 100, position: 'after' }, 10)).toEqual({
+      start: 4,
+      duration: 6,
+    })
+    expect(() => resolveAppendRange({ start: 10, position: 'after' }, 10)).toThrow(ValidationError)
   })
 })

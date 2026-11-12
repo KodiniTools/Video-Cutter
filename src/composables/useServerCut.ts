@@ -30,6 +30,8 @@ export interface JobStartResponse {
   crop?: boolean
   /** Anzahl der vom Server übernommenen angehängten Videos. */
   append?: number
+  /** Hat der Server Kürzung/Position der angehängten Videos übernommen? */
+  appendTrim?: boolean
 }
 
 /**
@@ -37,9 +39,10 @@ export interface JobStartResponse {
  * Exportiert, damit die Auswertung ohne XHR testbar ist.
  */
 export function parseJobStart(text: string): JobStartResponse {
-  let data: { jobId?: unknown; crop?: unknown; append?: unknown }
+  type Raw = { jobId?: unknown; crop?: unknown; append?: unknown; appendTrim?: unknown }
+  let data: Raw
   try {
-    data = JSON.parse(text) as { jobId?: unknown; crop?: unknown; append?: unknown }
+    data = JSON.parse(text) as Raw
   } catch {
     throw new Error('Ungültige Serverantwort.')
   }
@@ -47,7 +50,12 @@ export function parseJobStart(text: string): JobStartResponse {
     throw new Error('Ungültige Serverantwort (keine jobId).')
   }
   const append = typeof data.append === 'number' && data.append > 0 ? data.append : 0
-  return { jobId: data.jobId, crop: data.crop === true, append }
+  return {
+    jobId: data.jobId,
+    crop: data.crop === true,
+    append,
+    appendTrim: data.appendTrim === true,
+  }
 }
 
 interface JobEvent {
@@ -210,6 +218,22 @@ export interface CutTransition {
   duration: number
 }
 
+/** Ein angehängtes Video mit optionaler Kürzung und Position. */
+export interface AppendInput {
+  file: File
+  /** Startpunkt im angehängten Video (Sekunden), Standard 0. */
+  start?: number
+  /** Verwendete Länge (Sekunden); fehlt = bis zum Ende. */
+  duration?: number
+  /** 'before' = vor den Ausschnitten, 'after' (Standard) = dahinter. */
+  position?: 'before' | 'after'
+}
+
+/** Weicht ein angehängtes Video von „vollständig, danach" ab? */
+function needsAppendTrim(a: AppendInput): boolean {
+  return (a.start ?? 0) > 0 || a.duration !== undefined || a.position === 'before'
+}
+
 /**
  * Schneidet ein Video serverseitig.
  * @param segments   Ein oder mehrere Ausschnitte ({ start, duration }).
@@ -217,7 +241,7 @@ export interface CutTransition {
  * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
  * @param transition Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte.
  * @param crop       Optionaler Bildausschnitt (Anteile 0–1); erzwingt Re-Encode.
- * @param appends    Weitere Videos, die vollständig hinter die Ausschnitte
+ * @param appends    Weitere Videos (optional gekürzt), die vor oder hinter die Ausschnitte
  *                   gehängt werden (Reihenfolge = Liste); erzwingt Re-Encode.
  */
 async function cut(
@@ -228,7 +252,7 @@ async function cut(
   total = 0,
   transition?: CutTransition,
   crop?: CropRect,
-  appends: File[] = [],
+  appends: AppendInput[] = [],
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -249,7 +273,19 @@ async function cut(
       form.append('transitionDuration', String(transition.duration))
     }
     if (crop) form.append('crop', JSON.stringify(crop))
-    for (const f of appends) form.append('append', f)
+    if (appends.length) {
+      form.append(
+        'appendMeta',
+        JSON.stringify(
+          appends.map((a) => ({
+            start: a.start ?? 0,
+            ...(a.duration !== undefined ? { duration: a.duration } : {}),
+            position: a.position ?? 'after',
+          })),
+        ),
+      )
+      for (const a of appends) form.append('append', a.file)
+    }
 
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
     let lastTime = 0
@@ -282,7 +318,12 @@ async function cut(
     }
 
     // Angehängte Videos nicht (vollständig) übernommen -> veralteter Server.
-    if (appends.length && started.append !== appends.length) {
+    // … oder Kürzung/Position verlangt, aber nicht bestätigt (würde sonst
+    // stillschweigend vollständig und hinten angehängt).
+    if (
+      appends.length &&
+      (started.append !== appends.length || (appends.some(needsAppendTrim) && !started.appendTrim))
+    ) {
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
       throw new Error(APPEND_UNSUPPORTED)
