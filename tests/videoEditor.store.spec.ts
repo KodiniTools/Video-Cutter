@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useVideoEditorStore } from '@/stores/videoEditor'
+import { useVideoEditorStore, MAX_APPEND_CLIPS } from '@/stores/videoEditor'
 
 // jsdom kennt createObjectURL nicht -> stubben.
 beforeEach(() => {
@@ -388,5 +388,65 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('videoEditor store – Videos anhängen', () => {
+  const clip = (name: string) => new File([new Uint8Array([0])], name, { type: 'video/mp4' })
+
+  it('fügt an, sortiert um und entfernt', () => {
+    const store = loadVideo(30)
+    const added = store.addAppendClips([clip('a.mp4'), clip('b.mp4'), clip('c.mp4')])
+    expect(added).toHaveLength(3)
+    expect(store.hasAppends).toBe(true)
+
+    store.moveAppendClip(added[2].id, -1)
+    expect(store.appendClips.map((c) => c.file.name)).toEqual(['a.mp4', 'c.mp4', 'b.mp4'])
+    // Ränder: nicht über den Anfang/das Ende hinaus.
+    store.moveAppendClip(added[0].id, -1)
+    expect(store.appendClips[0].file.name).toBe('a.mp4')
+
+    store.setAppendDuration(added[1].id, 12.5)
+    expect(store.appendClips.find((c) => c.id === added[1].id)?.duration).toBe(12.5)
+    store.setAppendDuration(added[1].id, Number.NaN)
+    expect(store.appendClips.find((c) => c.id === added[1].id)?.duration).toBe(0)
+
+    store.removeAppendClip(added[0].id)
+    expect(store.appendClips.map((c) => c.file.name)).toEqual(['c.mp4', 'b.mp4'])
+  })
+
+  it('begrenzt auf MAX_APPEND_CLIPS', () => {
+    const store = loadVideo(30)
+    const added = store.addAppendClips(
+      Array.from({ length: MAX_APPEND_CLIPS + 2 }, (_, i) => clip(`${i}.mp4`)),
+    )
+    expect(added).toHaveLength(MAX_APPEND_CLIPS)
+    expect(store.canAppend).toBe(false)
+    expect(store.addAppendClips([clip('x.mp4')])).toHaveLength(0)
+  })
+
+  it('neues Video, Schnitt-Ergebnis und Reset leeren die Liste', () => {
+    const store = loadVideo(30)
+    store.addAppendClips([clip('a.mp4')])
+    store.applyCutResult(new Blob(['x'], { type: 'video/mp4' }), 'clip_cut.mp4')
+    expect(store.appendClips).toHaveLength(0)
+
+    store.addAppendClips([clip('a.mp4')])
+    store.setFile(clip('neu.mp4'))
+    expect(store.appendClips).toHaveLength(0)
+
+    store.addAppendClips([clip('a.mp4')])
+    store.reset()
+    expect(store.appendClips).toHaveLength(0)
+  })
+
+  it('angehängte Videos sind nicht Teil von Undo/Redo', () => {
+    const store = loadVideo(30)
+    store.setStart(5)
+    store.commitHistory()
+    store.addAppendClips([clip('a.mp4')])
+    store.undo()
+    expect(store.startTime).toBe(0)
+    expect(store.appendClips).toHaveLength(1)
   })
 })

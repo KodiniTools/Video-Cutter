@@ -2,12 +2,18 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useServerCut, CUT_CANCELLED, CROP_UNSUPPORTED } from '@/composables/useServerCut'
+import { useVideoEditorStore, MAX_APPEND_CLIPS } from '@/stores/videoEditor'
+import {
+  useServerCut,
+  CUT_CANCELLED,
+  CROP_UNSUPPORTED,
+  APPEND_UNSUPPORTED,
+} from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { getExtension } from '@/lib/ffmpegCommand'
 import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
+import { readVideoDuration } from '@/lib/videoMeta'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
@@ -27,6 +33,9 @@ const {
   crop,
   hasCrop,
   cropPixelSize,
+  appendClips,
+  hasAppends,
+  canAppend,
   hasVideo,
   canExport,
   canAddSegment,
@@ -72,9 +81,11 @@ function pickMode(m: 'copy' | 'reencode', close: () => void): void {
   store.setMode(m)
   close()
 }
-// Beim Entfernen ODER bei aktivem Zuschnitt wird immer neu kodiert -> Modus
-// ist dann fest & deaktiviert (Zuschneiden erfordert Decode+Encode).
-const modeDisabled = computed(() => operation.value === 'remove' || hasCrop.value)
+// Beim Entfernen, bei aktivem Zuschnitt ODER angehängten Videos wird immer neu
+// kodiert -> Modus ist dann fest & deaktiviert (Decode+Encode nötig).
+const modeDisabled = computed(
+  () => operation.value === 'remove' || hasCrop.value || hasAppends.value,
+)
 const modeLabel = computed(() =>
   modeDisabled.value
     ? t('mode.accurate')
@@ -129,6 +140,29 @@ const uploadDetail = computed(() => {
   }
   return parts.join(' · ')
 })
+
+// --- Videos anhängen (Zusammenfügen) -----------------------------------------
+/** Gesamtlänge der Ausschnitte des Hauptvideos (für die Reihenfolge-Anzeige). */
+const segmentsTotal = computed(() =>
+  operation.value === 'keep'
+    ? effectiveSegments.value.reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0)
+    : 0,
+)
+
+function onAppendInput(e: Event): void {
+  const target = e.target as HTMLInputElement
+  const files = Array.from(target.files ?? [])
+  target.value = '' // erneutes Auswählen derselben Datei erlauben
+  if (!files.length) return
+  const videos = files.filter((f) => f.type.startsWith('video/'))
+  if (videos.length < files.length) store.setError(t('errors.notVideo'))
+  const added = store.addAppendClips(videos)
+  if (added.length < videos.length) store.setError(t('append.limit', { max: MAX_APPEND_CLIPS }))
+  // Dauer nur für die Anzeige nachladen (Backend ermittelt sie selbst).
+  for (const clip of added) {
+    void readVideoDuration(clip.file).then((d) => store.setAppendDuration(clip.id, d))
+  }
+}
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const isDragOver = ref(false)
@@ -337,7 +371,12 @@ async function onExport(): Promise<void> {
     //    WebM, sonst .mp4.
     const inputExt = getExtension(fileName.value)
     const isWebm = inputExt === 'webm'
-    const lossless = operation.value === 'keep' && mode.value === 'copy' && cutSegments.length === 1
+    const lossless =
+      !hasAppends.value &&
+      !hasCrop.value &&
+      operation.value === 'keep' &&
+      mode.value === 'copy' &&
+      cutSegments.length === 1
     const ext = lossless ? inputExt : isWebm ? 'webm' : 'mp4'
 
     const blob = await serverCut(
@@ -348,6 +387,7 @@ async function onExport(): Promise<void> {
       duration.value,
       { preset: animation.value, duration: animDuration.value },
       crop.value ?? undefined,
+      appendClips.value.map((c) => c.file),
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -355,7 +395,13 @@ async function onExport(): Promise<void> {
     // Nutzer-Abbruch nicht als Fehler anzeigen.
     const msg = e instanceof Error ? e.message : String(e)
     if (msg === CUT_CANCELLED) return
-    store.setError(msg === CROP_UNSUPPORTED ? t('errors.cropUnsupported') : msg)
+    store.setError(
+      msg === CROP_UNSUPPORTED
+        ? t('errors.cropUnsupported')
+        : msg === APPEND_UNSUPPORTED
+          ? t('errors.appendUnsupported')
+          : msg,
+    )
   }
 }
 
@@ -749,6 +795,76 @@ async function downloadResult(): Promise<void> {
             <p v-if="!segments.length" class="segments-empty">{{ t('segments.empty') }}</p>
 
             <p class="segments-hint">{{ t('segments.hint') }}</p>
+          </section>
+
+          <!-- Weitere Videos hochladen und hinter die Ausschnitte hängen -->
+          <section class="card segments append">
+            <div class="card-head">
+              <h3 class="panel-title">{{ t('append.title') }}</h3>
+              <span v-if="appendClips.length" class="count">{{ appendClips.length }}</span>
+            </div>
+
+            <label class="btn block add" :class="{ disabled: !canAppend || busy }">
+              <input
+                type="file"
+                accept="video/*"
+                multiple
+                class="sr-only"
+                :disabled="!canAppend || busy"
+                @change="onAppendInput"
+              />
+              {{ t('append.add') }}
+            </label>
+
+            <ol v-if="appendClips.length" class="segments-list">
+              <li class="segment-row main">
+                <span class="segment-index">1</span>
+                <span class="segment-time">
+                  {{ t('append.main') }}
+                  <small v-if="segmentsTotal > 0">({{ formatTimeMs(segmentsTotal) }})</small>
+                </span>
+              </li>
+              <li v-for="(clip, i) in appendClips" :key="clip.id" class="segment-row">
+                <span class="segment-index">{{ i + 2 }}</span>
+                <span class="segment-time append-info" :title="clip.file.name">
+                  <span class="append-name">{{ clip.file.name }}</span>
+                  <small v-if="clip.duration > 0">{{ formatTimeMs(clip.duration) }}</small>
+                </span>
+                <button
+                  class="btn tiny remove"
+                  type="button"
+                  :disabled="i === 0 || busy"
+                  :aria-label="t('append.up')"
+                  :title="t('append.up')"
+                  @click="store.moveAppendClip(clip.id, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  class="btn tiny remove"
+                  type="button"
+                  :disabled="i === appendClips.length - 1 || busy"
+                  :aria-label="t('append.down')"
+                  :title="t('append.down')"
+                  @click="store.moveAppendClip(clip.id, 1)"
+                >
+                  ↓
+                </button>
+                <button
+                  class="btn tiny remove"
+                  type="button"
+                  :disabled="busy"
+                  :aria-label="t('append.remove')"
+                  :title="t('append.remove')"
+                  @click="store.removeAppendClip(clip.id)"
+                >
+                  ✕
+                </button>
+              </li>
+            </ol>
+            <p v-else class="segments-empty">{{ t('append.empty') }}</p>
+
+            <p class="segments-hint">{{ t('append.hint') }}</p>
           </section>
         </div>
 
@@ -1529,6 +1645,26 @@ async function downloadResult(): Promise<void> {
 .btn.tiny.remove {
   padding: 4px 8px;
   line-height: 1;
+}
+.btn.block.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+label.btn.block {
+  display: block;
+}
+.segment-row.main {
+  border-style: dashed;
+}
+.append-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.append-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .segments-empty {
   margin: 0;

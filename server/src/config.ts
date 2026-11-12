@@ -31,8 +31,13 @@ export const config = {
 
   /** FFmpeg-Binary (Pfad oder Name im PATH). */
   ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
+  /** FFprobe-Binary (Analyse beim Zusammenfügen mehrerer Videos). */
+  ffprobePath: process.env.FFPROBE_PATH ?? 'ffprobe',
   /** Harte Zeitgrenze pro Job. */
   ffmpegTimeoutMs: num('FFMPEG_TIMEOUT_SEC', 20 * 60) * 1000,
+
+  /** Höchstzahl angehängter Videos pro Job. */
+  maxAppendFiles: num('MAX_APPEND_FILES', 5),
 
   /** Gleichzeitige Encodes (schützt die VPS-CPU/RAM). */
   maxConcurrent: num('MAX_CONCURRENT', 2),

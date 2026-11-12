@@ -49,6 +49,18 @@ Der Video Cutter nutzt dasselbe Design-System wie der
 - **Schnell (verlustfrei):** `-c copy`, extrem schnell, schneidet an Keyframes.
 - **Genau (neu kodieren):** H.264/AAC, frame-genau, langsamer, immer `.mp4`.
 
+## Videos anhängen (Zusammenfügen)
+
+In der Karte **„Videos anhängen"** lassen sich bis zu 5 weitere Videos
+hochladen. Sie werden vollständig und in der angezeigten Reihenfolge (↑/↓)
+hinter die Ausschnitte des Hauptvideos gesetzt und serverseitig zu einer Datei
+zusammengefügt. Dabei wird immer neu kodiert: Alle Clips werden auf die
+(ggf. zugeschnittene) Auflösung des Hauptvideos skaliert (Letterbox statt
+Verzerrung), auf 30 fps und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten
+Stille. Die gewählte Animation gilt auch zwischen den angehängten Videos.
+Backend: zusätzliche Multipart-Dateien `append`, Analyse per `ffprobe`
+(`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet `"features":["crop","append"]`.
+
 ## Deployment auf den VPS
 
 Ein Skript erledigt Git-Sync, Build und das Ausliefern der statischen SPA nach

@@ -1,13 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { parseJobStart, useServerCut, CROP_UNSUPPORTED } from '@/composables/useServerCut'
+import {
+  parseJobStart,
+  useServerCut,
+  CROP_UNSUPPORTED,
+  APPEND_UNSUPPORTED,
+} from '@/composables/useServerCut'
 
 describe('parseJobStart', () => {
   it('liest jobId und Crop-Bestätigung', () => {
-    expect(parseJobStart('{"jobId":"abc","crop":true}')).toEqual({ jobId: 'abc', crop: true })
+    expect(parseJobStart('{"jobId":"abc","crop":true}')).toEqual({
+      jobId: 'abc',
+      crop: true,
+      append: 0,
+    })
   })
 
   it('altes Backend ohne crop-Feld -> crop false', () => {
-    expect(parseJobStart('{"jobId":"abc"}')).toEqual({ jobId: 'abc', crop: false })
+    expect(parseJobStart('{"jobId":"abc"}')).toEqual({
+      jobId: 'abc',
+      crop: false,
+      append: 0,
+    })
+  })
+
+  it('liest die Anzahl übernommener angehängter Videos', () => {
+    expect(parseJobStart('{"jobId":"abc","append":2}').append).toBe(2)
+    expect(parseJobStart('{"jobId":"abc","append":"2"}').append).toBe(0)
   })
 
   it('wirft bei fehlender jobId oder ungültigem JSON', () => {
@@ -95,5 +113,20 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
     const blob = await cut(file, segments, 'copy', 'keep', 10)
     expect(blob.size).toBe(3)
     expect(fetchMock).not.toHaveBeenCalledWith('/api/cut/job-2', { method: 'DELETE' })
+  })
+
+  it('schickt angehängte Videos als "append" und bricht bei altem Backend ab', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-3","crop":false}') // ohne append
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const extra = new File([new Uint8Array([1])], 'b.mp4', { type: 'video/mp4' })
+    const { cut, isProcessing } = useServerCut()
+
+    await expect(
+      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [extra, extra]),
+    ).rejects.toThrow(APPEND_UNSUPPORTED)
+
+    expect(instances[0].sentForm?.getAll('append')).toHaveLength(2)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-3', { method: 'DELETE' })
+    expect(isProcessing.value).toBe(false)
   })
 })

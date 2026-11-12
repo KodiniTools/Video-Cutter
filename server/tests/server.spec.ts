@@ -4,7 +4,10 @@ import {
   buildCropFilter,
   formatFfmpegTime,
   outputDurationFor,
+  buildMergeArgs,
+  mergeTargetSize,
 } from '../src/lib/args'
+import { parseProbeOutput } from '../src/lib/probe'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../src/lib/validate'
 
 describe('formatFfmpegTime', () => {
@@ -469,5 +472,132 @@ describe('Namens-Helfer', () => {
     expect(safeBaseName('../../etc/passwd.mp4')).toBe('etcpasswd')
     expect(safeBaseName('Mein Clip.mov')).toBe('Mein Clip')
     expect(safeBaseName('.mp4')).toBe('video')
+  })
+})
+
+describe('parseProbeOutput', () => {
+  it('liest Maße, Tonspur und Dauer', () => {
+    const json = JSON.stringify({
+      streams: [{ codec_type: 'video', width: 1920, height: 1080 }, { codec_type: 'audio' }],
+      format: { duration: '12.5' },
+    })
+    expect(parseProbeOutput(json)).toEqual({
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      duration: 12.5,
+    })
+  })
+
+  it('tauscht Breite/Höhe bei 90°-Rotation (Hochkant-Handyvideo)', () => {
+    const json = JSON.stringify({
+      streams: [
+        { codec_type: 'video', width: 1920, height: 1080, side_data_list: [{ rotation: -90 }] },
+      ],
+      format: { duration: '3' },
+    })
+    expect(parseProbeOutput(json)).toMatchObject({ width: 1080, height: 1920, hasAudio: false })
+  })
+
+  it('unbekannte Werte -> 0, ungültiges JSON wirft', () => {
+    expect(parseProbeOutput('{}')).toEqual({ width: 0, height: 0, hasAudio: false, duration: 0 })
+    expect(() => parseProbeOutput('kein json')).toThrow()
+  })
+})
+
+describe('mergeTargetSize', () => {
+  it('nutzt die Hauptauflösung (gerade Pixel), mit Crop verkleinert', () => {
+    expect(mergeTargetSize(1920, 1080)).toEqual({ width: 1920, height: 1080 })
+    expect(mergeTargetSize(1921, 1081)).toEqual({ width: 1920, height: 1080 })
+    expect(mergeTargetSize(1920, 1080, { x: 0, y: 0, width: 0.5, height: 0.5 })).toEqual({
+      width: 960,
+      height: 540,
+    })
+  })
+
+  it('Fallback 1280×720 ohne bekannte Maße', () => {
+    expect(mergeTargetSize(0, 0)).toEqual({ width: 1280, height: 720 })
+  })
+})
+
+describe('buildMergeArgs (Videos anhängen)', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 2, duration: 3 }],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+  }
+
+  it('Ausschnitt + angehängtes Video -> concat mit Normierung auf Zielauflösung', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
+    })
+    // Hauptvideo als -ss/-t-Input, angehängtes Video vollständig.
+    expect(args.slice(args.indexOf('-ss'), args.indexOf('-filter_complex'))).toEqual([
+      '-ss',
+      '00:00:02.000',
+      '-t',
+      '00:00:03.000',
+      '-i',
+      '/tmp/in.mp4',
+      '-i',
+      '/tmp/b.mp4',
+    ])
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter).toContain('scale=1280:720:force_original_aspect_ratio=decrease')
+    expect(filter).toContain('pad=1280:720:(ow-iw)/2:(oh-ih)/2')
+    expect(filter).toContain('[1:a]aresample=48000')
+    expect(filter).toContain('concat=n=2:v=1:a=1[outv][outa]')
+    expect(args).toContain('libx264')
+    expect(args.at(-1)).toBe('/tmp/out.mp4')
+  })
+
+  it('fehlende Tonspur wird durch Stille in Clip-Länge ersetzt', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: false }],
+    })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter).toContain('anullsrc=r=48000:cl=stereo:d=4.000,')
+    expect(filter).not.toContain('[1:a]')
+  })
+
+  it('Crop gilt nur für das Hauptvideo, nicht für angehängte Videos', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
+      crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 },
+    })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter.match(/crop=/g)).toHaveLength(1)
+    expect(filter).toMatch(/\[0:v\]crop=/)
+  })
+
+  it('Übergang slide -> xfade-Kette über alle Clips', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [
+        { path: '/tmp/b.mp4', duration: 4, hasAudio: true },
+        { path: '/tmp/c.mp4', duration: 5, hasAudio: true },
+      ],
+      transition: { preset: 'slide', duration: 2 },
+    })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    // d = 1 s (Hälfte der Gesamtdauer); Offsets: 3-1=2, 7-2=5.
+    expect(filter).toContain('xfade=transition=slideleft:duration=1.000:offset=2.000[vx1]')
+    expect(filter).toContain('xfade=transition=slideleft:duration=1.000:offset=5.000[outv]')
+    expect(filter).not.toContain('concat=')
+  })
+
+  it('WebM-Ziel nutzt VP9/Opus', () => {
+    const args = buildMergeArgs({
+      ...base,
+      outputPath: '/tmp/out.webm',
+      appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
+    })
+    expect(args).toContain('libvpx-vp9')
   })
 })

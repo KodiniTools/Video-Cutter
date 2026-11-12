@@ -4,7 +4,15 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
-import { buildServerArgs, computeKeepRanges, outputDurationFor } from '../lib/args'
+import {
+  buildMergeArgs,
+  buildServerArgs,
+  computeKeepRanges,
+  mergeTargetSize,
+  outputDurationFor,
+  type AppendClip,
+} from '../lib/args'
+import { probeMedia } from '../lib/probe'
 import { parseCutParams, safeExt, safeBaseName, ValidationError } from '../lib/validate'
 import { jobManager } from '../lib/jobs'
 
@@ -13,17 +21,27 @@ const upload = multer({
     destination: config.tmpDir,
     filename: (_req, file, cb) => cb(null, `${randomUUID()}-in.${safeExt(file.originalname)}`),
   }),
-  limits: { fileSize: config.maxFileSizeBytes, files: 1 },
+  limits: { fileSize: config.maxFileSizeBytes, files: 1 + config.maxAppendFiles },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('video/')) cb(null, true)
     else cb(new ValidationError('Nur Videodateien werden akzeptiert.'))
   },
 })
 
+/** Hauptvideo (`video`) + optional angehängte Videos (`append`, in Reihenfolge). */
+const uploadFields = upload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'append', maxCount: config.maxAppendFiles },
+])
+
 const asyncHandler =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction) =>
     fn(req, res, next).catch(next)
+
+async function removeFiles(paths: string[]): Promise<void> {
+  await Promise.all(paths.map((p) => rm(p, { force: true }).catch(() => {})))
+}
 
 export const cutRouter = Router()
 
@@ -32,32 +50,43 @@ export const cutRouter = Router()
  * ob der laufende Server neue Felder wie `crop` überhaupt kennt – ein altes
  * Backend würde sie sonst stillschweigend ignorieren und ungeschnitten liefern.
  */
-export const SERVER_FEATURES = ['crop'] as const
+export const SERVER_FEATURES = ['crop', 'append'] as const
 
 /**
- * POST /api/cut  (multipart: video, segments|start+duration, mode, operation, total, crop)
+ * POST /api/cut  (multipart: video, append[], segments|start+duration, mode,
+ *                 operation, total, crop, transitionPreset, transitionDuration)
  * Legt einen Job an und startet die Verarbeitung.
- * Antwort: { jobId, crop } – `crop` bestätigt, ob ein Bildausschnitt übernommen wurde.
+ * Antwort: { jobId, crop, append } – `crop` bestätigt den Bildausschnitt,
+ * `append` die Anzahl der angehängten (zusammengefügten) Videos.
  */
 cutRouter.post(
   '/cut',
-  upload.single('video'),
+  uploadFields,
   asyncHandler(async (req, res) => {
-    if (!req.file) throw new ValidationError('Keine Videodatei empfangen.')
+    const files = (req.files ?? {}) as Record<string, Express.Multer.File[] | undefined>
+    const main = files.video?.[0]
+    const appendFiles = files.append ?? []
+    const allPaths = [...(main ? [main.path] : []), ...appendFiles.map((f) => f.path)]
 
-    // Ab hier existiert eine Datei auf der Platte -> bei Fehlern löschen.
+    if (!main) {
+      await removeFiles(allPaths)
+      throw new ValidationError('Keine Videodatei empfangen.')
+    }
+
+    // Ab hier existieren Dateien auf der Platte -> bei Fehlern löschen.
     try {
       const params = parseCutParams(req.body ?? {}, config.maxDurationSec)
 
       if (!jobManager.hasCapacity()) {
-        await rm(req.file.path, { force: true }).catch(() => {})
+        await removeFiles(allPaths)
         res.setHeader('Retry-After', '30')
         res.status(429).json({ error: 'Server ausgelastet. Bitte gleich erneut versuchen.' })
         return
       }
 
       const id = randomUUID()
-      const inExt = safeExt(req.file.originalname)
+      const inExt = safeExt(main.originalname)
+      const isWebm = inExt === 'webm'
 
       // Tatsächlich zu behaltende Bereiche (nach Zusammenführen/Komplement).
       const keepTotal =
@@ -66,46 +95,94 @@ cutRouter.post(
           : (params.total as number)
       const keep = computeKeepRanges(params.segments, params.operation, keepTotal)
 
-      // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
-      // 'keep' + copy + OHNE Zuschnitt möglich – dann bleibt der Original-
-      // Container erhalten. Sonst (remove, mehrere Bereiche, reencode oder
-      // Zuschnitt) wird neu kodiert: WebM-Input -> WebM (VP9/Opus), sonst
-      // mp4 (H.264/AAC).
-      const isWebm = inExt === 'webm'
-      const lossless =
-        !params.crop && params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
-      const outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
-      const outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
-      const outputName = `${safeBaseName(req.file.originalname)}_cut.${outExt}`
+      let args: string[]
+      let outExt: string
+      let outputPath: string
+      let outputDuration: number
+
+      if (appendFiles.length > 0) {
+        // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
+        // die Clips auf ein gemeinsames Format normiert werden können.
+        const [mainInfo, ...appendInfos] = await Promise.all([
+          probeMedia(main.path),
+          ...appendFiles.map((f) => probeMedia(f.path)),
+        ])
+        const appends: AppendClip[] = appendInfos.map((info, i) => {
+          if (!(info.duration > 0)) {
+            throw new ValidationError(
+              `Dauer des angehängten Videos „${safeBaseName(appendFiles[i].originalname)}" unbekannt.`,
+            )
+          }
+          if (info.duration > config.maxDurationSec) {
+            throw new ValidationError(
+              `Angehängtes Video überschreitet das Limit von ${config.maxDurationSec}s.`,
+            )
+          }
+          return { path: appendFiles[i].path, duration: info.duration, hasAudio: info.hasAudio }
+        })
+        const size = mergeTargetSize(mainInfo.width, mainInfo.height, params.crop)
+        outExt = isWebm ? 'webm' : 'mp4'
+        outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
+        args = buildMergeArgs({
+          inputPath: main.path,
+          outputPath,
+          keep,
+          mainHasAudio: mainInfo.hasAudio,
+          appends,
+          width: size.width,
+          height: size.height,
+          transition: params.transition,
+          crop: params.crop,
+        })
+        outputDuration = outputDurationFor(
+          [...keep, ...appends.map((a) => ({ start: 0, duration: a.duration }))],
+          params.transition,
+        )
+      } else {
+        // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
+        // 'keep' + copy + OHNE Zuschnitt möglich – dann bleibt der Original-
+        // Container erhalten. Sonst (remove, mehrere Bereiche, reencode oder
+        // Zuschnitt) wird neu kodiert: WebM-Input -> WebM (VP9/Opus), sonst
+        // mp4 (H.264/AAC).
+        const lossless =
+          !params.crop && params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
+        outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
+        outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
+        args = buildServerArgs({
+          inputPath: main.path,
+          outputPath,
+          mode: params.mode,
+          operation: params.operation,
+          total: params.total,
+          segments: params.segments,
+          transition: params.transition,
+          crop: params.crop,
+        })
+        // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
+        // behaltenen Bereiche (abzüglich Übergangs-Überlappungen).
+        outputDuration = outputDurationFor(keep, params.transition)
+      }
+
+      const outputName = `${safeBaseName(main.originalname)}_cut.${outExt}`
 
       const job = jobManager.create({
         id,
-        inputPath: req.file.path,
+        inputPath: main.path,
+        extraInputPaths: appendFiles.map((f) => f.path),
         outputPath,
         outputName,
       })
 
-      const args = buildServerArgs({
-        inputPath: req.file.path,
-        outputPath,
-        mode: params.mode,
-        operation: params.operation,
-        total: params.total,
-        segments: params.segments,
-        transition: params.transition,
-        crop: params.crop,
-      })
-
-      // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
-      // behaltenen Bereiche (abzüglich Übergangs-Überlappungen).
-      const outputDuration = outputDurationFor(keep, params.transition)
-
       // Nicht awaiten: läuft im Hintergrund, Client verfolgt via SSE.
       void jobManager.run(job, args, outputDuration)
 
-      res.status(202).json({ jobId: id, crop: params.crop !== undefined })
+      res.status(202).json({
+        jobId: id,
+        crop: params.crop !== undefined,
+        append: appendFiles.length,
+      })
     } catch (err) {
-      await rm(req.file.path, { force: true }).catch(() => {})
+      await removeFiles(allPaths)
       throw err
     }
   }),
