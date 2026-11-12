@@ -49,6 +49,8 @@ export interface JobStartResponse {
   outputFormat?: boolean
   /** Hat der Server die Hintergrundmusik übernommen? */
   music?: boolean
+  /** Hat der Server die Übergänge je Nahtstelle übernommen? */
+  seamTransitions?: boolean
 }
 
 /**
@@ -65,6 +67,7 @@ export function parseJobStart(text: string): JobStartResponse {
     normalizeAudio?: unknown
     outputFormat?: unknown
     music?: unknown
+    seamTransitions?: unknown
   }
   let data: Raw
   try {
@@ -85,6 +88,7 @@ export function parseJobStart(text: string): JobStartResponse {
     normalizeAudio: data.normalizeAudio === true,
     outputFormat: data.outputFormat === true,
     music: data.music === true,
+    seamTransitions: data.seamTransitions === true,
   }
 }
 
@@ -293,6 +297,8 @@ function needsAppendTrim(a: AppendInput): boolean {
  * @param normalizeAudio Lautstärke aller Clips angleichen (nur mit angehängten Videos).
  * @param output     Seitenverhältnis + Füllmodus; 'auto' = wie das Hauptvideo.
  * @param music      Optionale Hintergrundmusik über das gesamte Ergebnis.
+ * @param seams      Übergang je Nahtstelle in Gesamtreihenfolge (`null` = global);
+ *                   nur mit angehängten Videos.
  */
 async function cut(
   file: File,
@@ -306,6 +312,7 @@ async function cut(
   normalizeAudio = false,
   output?: CutOutputFormat,
   music?: MusicInput,
+  seams?: (string | null)[],
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -324,6 +331,14 @@ async function cut(
     if (transition && transition.preset !== 'none') {
       form.append('transitionPreset', transition.preset)
       form.append('transitionDuration', String(transition.duration))
+    }
+    const wantsSeams = appends.length > 0 && seams !== undefined && seams.some((p) => p !== null)
+    if (wantsSeams) {
+      form.append('seamTransitions', JSON.stringify(seams))
+      // Dauer auch dann mitschicken, wenn global „keine" Animation gewählt ist.
+      if (!form.has('transitionDuration') && transition) {
+        form.append('transitionDuration', String(transition.duration))
+      }
     }
     if (crop) form.append('crop', JSON.stringify(crop))
     if (music) {
@@ -394,7 +409,8 @@ async function cut(
         // Einfügestelle zwischen Ausschnitten bzw. Lautstärke-Angleichung nicht bestätigt.
         (appends.some((a) => a.slot !== undefined && a.position !== 'before') &&
           !started.appendSlots) ||
-        (normalizeAudio && !started.normalizeAudio))
+        (normalizeAudio && !started.normalizeAudio) ||
+        (wantsSeams && !started.seamTransitions))
     ) {
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})

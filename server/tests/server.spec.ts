@@ -10,6 +10,8 @@ import {
   LOUDNORM_FILTER,
   outputTargetSize,
   musicMixFilter,
+  resolveSeams,
+  mergeOutputDuration,
 } from '../src/lib/args'
 import { parseProbeOutput } from '../src/lib/probe'
 import {
@@ -18,6 +20,7 @@ import {
   parseNormalizeAudio,
   parseOutputFormat,
   parseMusicParams,
+  parseSeamTransitions,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -974,5 +977,92 @@ describe('Hintergrundmusik', () => {
     ).toEqual({ volume: 0.5, originalVolume: 0, fade: false, loop: false })
     expect(() => parseMusicParams({ musicVolume: '2' })).toThrow(ValidationError)
     expect(() => parseMusicParams({ musicOriginalVolume: 'x' })).toThrow(ValidationError)
+  })
+})
+
+describe('Übergang je Nahtstelle', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 0, duration: 4 }],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+    appends: [
+      { path: '/tmp/b.mp4', duration: 4, hasAudio: true },
+      { path: '/tmp/c.mp4', duration: 4, hasAudio: true },
+      { path: '/tmp/d.mp4', duration: 4, hasAudio: true },
+    ],
+  }
+  const filterOf = (args: string[]) => args[args.indexOf('-filter_complex') + 1]
+  const ranges = [4, 4, 4, 4].map((duration) => ({ start: 0, duration }))
+
+  it('resolveSeams: null = global, gemeinsame Dauer d, alles „none" -> d = 0', () => {
+    expect(resolveSeams(ranges, [null, 'slide', 'none'], { preset: 'fade', duration: 2 })).toEqual({
+      presets: ['fade', 'slide', 'none'],
+      d: 1,
+    })
+    expect(resolveSeams(ranges, [null, null, null], undefined)).toEqual({
+      presets: ['none', 'none', 'none'],
+      d: 0,
+    })
+  })
+
+  it('gemischte Kette: Dip, xfade, harter Schnitt mit korrekten Offsets', () => {
+    const f = filterOf(
+      buildMergeArgs({
+        ...base,
+        transition: { preset: 'none', duration: 2 },
+        seams: ['fade', 'slide', 'none'],
+      }),
+    )
+    // Nahtstelle 1 (Dip): Clip 0 blendet aus, Clip 1 blendet ein.
+    expect(f).toMatch(/\[v0\];/)
+    expect(f).toContain('fade=t=out:st=3.000:d=1.000')
+    expect(f).toContain('[v0][a0][v1][a1]concat=n=2:v=1:a=1[vs1c][as1];[vs1c]settb=1/30[vs1]')
+    // Nahtstelle 2 (xfade): bisherige Länge 8 s -> Offset 7 s.
+    expect(f).toContain('[vs1][v2]xfade=transition=slideleft:duration=1.000:offset=7.000[vs2]')
+    expect(f).toContain('[as1][a2]acrossfade=d=1.000:c1=tri:c2=tri[as2]')
+    // Nahtstelle 3 (harter Schnitt) als letzter Schritt.
+    expect(f).toContain('[vs2][as2][v3][a3]concat=n=2:v=1:a=1[outvc][outa];[outvc]settb=1/30[outv]')
+    // Clip 2 bekommt keine Dip-Blenden.
+    expect(f).not.toMatch(/\[2:v\][^;]*fade=t=/)
+    expect(
+      mergeOutputDuration(ranges, { preset: 'none', duration: 2 }, ['fade', 'slide', 'none']),
+    ).toBe(15)
+  })
+
+  it('ohne seams bleibt der globale Pfad unverändert', () => {
+    const f = filterOf(buildMergeArgs({ ...base, transition: { preset: 'slide', duration: 2 } }))
+    expect(f).toContain('xfade=transition=slideleft:duration=1.000:offset=3.000[vx1]')
+    expect(f).not.toContain('[vs1]')
+  })
+
+  it('falsche Anzahl wirft', () => {
+    expect(() => buildMergeArgs({ ...base, seams: ['fade'] })).toThrow()
+  })
+
+  it('Musik nutzt die Dauer mit Übergängen je Nahtstelle', () => {
+    const f = filterOf(
+      buildMergeArgs({
+        ...base,
+        transition: { preset: 'none', duration: 2 },
+        seams: ['slide', 'slide', 'none'],
+        music: { path: '/tmp/m.mp3', volume: 0.3, originalVolume: 1, fade: false, loop: false },
+      }),
+    )
+    expect(f).toContain('atrim=0:14.000')
+    expect(f).toContain('concat=n=2:v=1:a=1[outvc][amain]')
+  })
+
+  it('parseSeamTransitions', () => {
+    expect(parseSeamTransitions({})).toBeUndefined()
+    expect(
+      parseSeamTransitions({ seamTransitions: '[null,"slide","none"]', transitionDuration: '4' }),
+    ).toEqual({ seams: [null, 'slide', 'none'], duration: 4 })
+    expect(parseSeamTransitions({ seamTransitions: '[]' })).toEqual({ seams: [], duration: 1 })
+    expect(() => parseSeamTransitions({ seamTransitions: '["wobble"]' })).toThrow(ValidationError)
+    expect(() => parseSeamTransitions({ seamTransitions: '{}' })).toThrow(ValidationError)
+    expect(() => parseSeamTransitions({ seamTransitions: 'x' })).toThrow(ValidationError)
   })
 })

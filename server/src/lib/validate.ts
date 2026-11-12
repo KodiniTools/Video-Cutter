@@ -251,6 +251,38 @@ export function parseMusicParams(body: Record<string, unknown>): MusicParams {
   }
 }
 
+/**
+ * Liest Übergänge je Nahtstelle (`seamTransitions`: JSON-Array aus Preset oder
+ * `null` = globaler Übergang). Liefert zusätzlich die Übergangsdauer
+ * (`transitionDuration`, 1–10 s) – auch wenn global „keiner" gewählt ist.
+ * `undefined`, wenn das Feld fehlt.
+ */
+export function parseSeamTransitions(
+  body: Record<string, unknown>,
+): { seams: (TransitionPreset | null)[]; duration: number } | undefined {
+  let raw: unknown = body.seamTransitions
+  if (raw === undefined || raw === null || raw === '') return undefined
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      throw new ValidationError('Ungültige Übergänge je Nahtstelle.')
+    }
+  }
+  if (!Array.isArray(raw)) throw new ValidationError('Ungültige Übergänge je Nahtstelle.')
+  const seams = raw.map((p) => {
+    if (p === null) return null
+    if (typeof p !== 'string' || !TRANSITION_PRESETS.includes(p as TransitionPreset)) {
+      throw new ValidationError('Unbekannter Übergang an einer Nahtstelle.')
+    }
+    return p as TransitionPreset
+  })
+  let duration = Number(body.transitionDuration)
+  if (!Number.isFinite(duration)) duration = 1
+  duration = Math.min(MAX_TRANSITION_SEC, Math.max(1, duration))
+  return { seams, duration }
+}
+
 /** Liest den Schalter „Lautstärke angleichen" (`normalizeAudio`: '1'/'true'). */
 export function parseNormalizeAudio(body: Record<string, unknown>): boolean {
   const v = body.normalizeAudio
