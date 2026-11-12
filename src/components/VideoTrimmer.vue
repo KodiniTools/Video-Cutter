@@ -645,7 +645,7 @@ async function downloadResult(): Promise<void> {
       </div>
 
       <div class="editor-grid">
-        <!-- LINKS: Auswahl & Ausschnitte -->
+        <!-- LINKS: Meine Videos -->
         <div class="panel panel-left">
           <!-- Meine Videos: auf dem Server gespeichert; markiertes Video = Editor -->
           <section class="card segments library">
@@ -685,7 +685,261 @@ async function downloadResult(): Promise<void> {
             </p>
             <p class="segments-hint">{{ t('library.hint') }}</p>
           </section>
+        </div>
 
+        <!-- MITTE: Canvas (Werkzeugleiste + Video + Timeline + Ergebnis) -->
+        <div class="canvas">
+          <!-- Werkzeugleiste: Aktion & Modus als Menüs, Export separat -->
+          <div class="canvas-toolbar">
+            <div class="toolbar-menus">
+              <DropdownMenu :label="operationLabel" :title="t('operation.legend')">
+                <template #default="{ close }">
+                  <button
+                    class="menu-option"
+                    :class="{ active: operation === 'keep' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="operation === 'keep'"
+                    @click="pickOperation('keep', close)"
+                  >
+                    <span class="menu-check">{{ operation === 'keep' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('operation.keep') }}</b>
+                      <small>{{ t('operation.keepHint') }}</small>
+                    </span>
+                  </button>
+                  <button
+                    class="menu-option"
+                    :class="{ active: operation === 'remove' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="operation === 'remove'"
+                    @click="pickOperation('remove', close)"
+                  >
+                    <span class="menu-check">{{ operation === 'remove' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('operation.remove') }}</b>
+                      <small>{{ t('operation.removeHint') }}</small>
+                    </span>
+                  </button>
+                </template>
+              </DropdownMenu>
+
+              <DropdownMenu :label="modeLabel" :title="t('mode.legend')" :disabled="modeDisabled">
+                <template #default="{ close }">
+                  <button
+                    class="menu-option"
+                    :class="{ active: mode === 'copy' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="mode === 'copy'"
+                    @click="pickMode('copy', close)"
+                  >
+                    <span class="menu-check">{{ mode === 'copy' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('mode.fast') }}</b>
+                      <small>{{ t('mode.fastHint') }}</small>
+                    </span>
+                  </button>
+                  <button
+                    class="menu-option"
+                    :class="{ active: mode === 'reencode' }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="mode === 'reencode'"
+                    @click="pickMode('reencode', close)"
+                  >
+                    <span class="menu-check">{{ mode === 'reencode' ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t('mode.accurate') }}</b>
+                      <small>{{ t('mode.accurateHint') }}</small>
+                    </span>
+                  </button>
+                </template>
+              </DropdownMenu>
+
+              <DropdownMenu :label="formatLabel" :title="t('format.legend')">
+                <template #default="{ close }">
+                  <button
+                    v-for="opt in ASPECT_OPTIONS"
+                    :key="opt.value"
+                    class="menu-option"
+                    :class="{ active: outputAspect === opt.value }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="outputAspect === opt.value"
+                    @click="pickAspect(opt.value, close)"
+                  >
+                    <span class="menu-check">{{ outputAspect === opt.value ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t(opt.label) }}</b>
+                      <small>{{ t(opt.hint) }}</small>
+                    </span>
+                  </button>
+                  <template v-if="hasOutputFormat">
+                    <div class="menu-heading">{{ t('format.fill') }}</div>
+                    <button
+                      v-for="opt in FILL_OPTIONS"
+                      :key="opt.value"
+                      class="menu-option"
+                      :class="{ active: outputFill === opt.value }"
+                      type="button"
+                      role="menuitemradio"
+                      :aria-checked="outputFill === opt.value"
+                      @click="pickFill(opt.value, close)"
+                    >
+                      <span class="menu-check">{{ outputFill === opt.value ? '✓' : '' }}</span>
+                      <span class="menu-text">
+                        <b>{{ t(opt.label) }}</b>
+                        <small>{{ t(opt.hint) }}</small>
+                      </span>
+                    </button>
+                  </template>
+                </template>
+              </DropdownMenu>
+
+              <button
+                class="btn crop-toggle"
+                type="button"
+                :class="{ active: hasCrop }"
+                :aria-pressed="hasCrop"
+                @click="onToggleCrop"
+              >
+                {{ hasCrop ? t('crop.on') : t('crop.toggle') }}
+              </button>
+            </div>
+
+            <div class="action-buttons">
+              <button
+                class="btn primary export"
+                type="button"
+                :disabled="!canCut || busy"
+                :title="t('actions.cutHint')"
+                @click="onExport"
+              >
+                <template v-if="activeJob === 'cut'">{{ statusLabel }} {{ progress }}%</template>
+                <template v-else>{{ t('actions.cut') }}</template>
+              </button>
+              <button
+                class="btn primary merge"
+                type="button"
+                :disabled="!canMerge || busy"
+                :title="t('actions.mergeHint')"
+                @click="onMerge"
+              >
+                <template v-if="activeJob === 'merge'">{{ statusLabel }} {{ progress }}%</template>
+                <template v-else>
+                  {{ t('actions.merge') }}
+                  <span v-if="mergeItems.length > 1">({{ mergeItems.length }})</span>
+                </template>
+              </button>
+              <button
+                class="btn primary"
+                type="button"
+                :disabled="!selected || busy"
+                @click="downloadResult"
+              >
+                {{ t('actions.download') }}
+              </button>
+            </div>
+          </div>
+
+          <p v-if="operation === 'remove'" class="reencode-note">{{ t('operation.removeNote') }}</p>
+
+          <div v-if="hasCrop" class="crop-bar">
+            <span class="crop-size"
+              >{{ t('crop.selection') }}: <b>{{ cropSizeLabel }}</b></span
+            >
+            <span class="crop-hint">{{ t('crop.hint') }}</span>
+            <button class="btn tiny ghost" type="button" @click="store.clearCrop()">
+              {{ t('crop.reset') }}
+            </button>
+          </div>
+
+          <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
+            <div class="bar" :style="{ width: `${progress}%` }"></div>
+          </div>
+          <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
+          <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
+            {{ t('actions.cancel') }}
+          </button>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+
+          <div class="video-wrap">
+            <video
+              ref="videoEl"
+              class="player"
+              :src="objectUrl"
+              controls
+              preload="metadata"
+              @loadedmetadata="onLoadedMetadata"
+              @durationchange="onDurationChange"
+              @timeupdate="onTimeUpdate"
+            ></video>
+            <CropOverlay
+              v-if="crop"
+              :model-value="crop"
+              :disabled="busy"
+              :target="videoEl"
+              @update:model-value="onCropUpdate"
+            />
+          </div>
+
+          <!-- Live-Werte: Gesamtdauer · Auswahl · Cursor · Restdauer -->
+          <div class="live-row">
+            <div class="live-cell">
+              <span class="live-label">{{ t('live.total') }}</span>
+              <span class="live-value strong">{{ msLabel(duration) }}</span>
+            </div>
+            <div class="live-cell center">
+              <span class="live-label">{{ t('live.selection') }}</span>
+              <span class="live-value">{{ msLabel(selectionDuration) }}</span>
+            </div>
+            <div class="live-cell center">
+              <span class="live-label">{{ t('live.cursor') }}</span>
+              <span class="live-value">{{ msLabel(currentTime) }}</span>
+            </div>
+            <div class="live-cell right">
+              <span class="live-label">{{ t('live.remaining') }}</span>
+              <span class="live-value strong">{{ msLabel(remainingTime) }}</span>
+            </div>
+          </div>
+
+          <!-- Cursor: aktuelle Wiedergabeposition als Anfang/Ende übernehmen -->
+          <div class="cursor-row">
+            <span class="cursor-at">
+              {{ t('player.cursorAt') }} <b>{{ formatTimeMs(currentTime) }}</b>
+            </span>
+            <button class="btn tiny" type="button" @click="setStartHere">
+              {{ t('player.setStart') }}
+            </button>
+            <button class="btn tiny" type="button" @click="setEndHere">
+              {{ t('player.setEnd') }}
+            </button>
+          </div>
+
+          <Timeline
+            :duration="duration"
+            :start="startTime"
+            :end="endTime"
+            :current="currentTime"
+            @update:start="store.setStart"
+            @update:end="store.setEnd"
+            @seek="seekTo"
+          />
+
+          <!-- Ergebnis-Status: das Ergebnis läuft im selben Player oben,
+               kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
+          <p v-if="showResult && !busy" class="result-status">
+            {{ t('result.ready') }} {{ selected?.name }}
+          </p>
+          <p v-if="showResult && appleMobile && !busy" class="result-hint">
+            {{ t('result.iosHint') }}
+          </p>
+        </div>
+
+        <!-- RECHTS: Auswahl, Ausschnitte & Hintergrundmusik -->
+        <div class="panel panel-right">
           <!-- Auswahl: numerisch eingeben; Slider reagiert automatisch -->
           <section class="card">
             <h3 class="panel-title">{{ t('labels.selection') }}</h3>
@@ -1052,257 +1306,6 @@ async function downloadResult(): Promise<void> {
             <p class="segments-hint">{{ t('music.hint') }}</p>
           </section>
         </div>
-
-        <!-- MITTE: Canvas (Werkzeugleiste + Video + Timeline + Ergebnis) -->
-        <div class="canvas">
-          <!-- Werkzeugleiste: Aktion & Modus als Menüs, Export separat -->
-          <div class="canvas-toolbar">
-            <div class="toolbar-menus">
-              <DropdownMenu :label="operationLabel" :title="t('operation.legend')">
-                <template #default="{ close }">
-                  <button
-                    class="menu-option"
-                    :class="{ active: operation === 'keep' }"
-                    type="button"
-                    role="menuitemradio"
-                    :aria-checked="operation === 'keep'"
-                    @click="pickOperation('keep', close)"
-                  >
-                    <span class="menu-check">{{ operation === 'keep' ? '✓' : '' }}</span>
-                    <span class="menu-text">
-                      <b>{{ t('operation.keep') }}</b>
-                      <small>{{ t('operation.keepHint') }}</small>
-                    </span>
-                  </button>
-                  <button
-                    class="menu-option"
-                    :class="{ active: operation === 'remove' }"
-                    type="button"
-                    role="menuitemradio"
-                    :aria-checked="operation === 'remove'"
-                    @click="pickOperation('remove', close)"
-                  >
-                    <span class="menu-check">{{ operation === 'remove' ? '✓' : '' }}</span>
-                    <span class="menu-text">
-                      <b>{{ t('operation.remove') }}</b>
-                      <small>{{ t('operation.removeHint') }}</small>
-                    </span>
-                  </button>
-                </template>
-              </DropdownMenu>
-
-              <DropdownMenu :label="modeLabel" :title="t('mode.legend')" :disabled="modeDisabled">
-                <template #default="{ close }">
-                  <button
-                    class="menu-option"
-                    :class="{ active: mode === 'copy' }"
-                    type="button"
-                    role="menuitemradio"
-                    :aria-checked="mode === 'copy'"
-                    @click="pickMode('copy', close)"
-                  >
-                    <span class="menu-check">{{ mode === 'copy' ? '✓' : '' }}</span>
-                    <span class="menu-text">
-                      <b>{{ t('mode.fast') }}</b>
-                      <small>{{ t('mode.fastHint') }}</small>
-                    </span>
-                  </button>
-                  <button
-                    class="menu-option"
-                    :class="{ active: mode === 'reencode' }"
-                    type="button"
-                    role="menuitemradio"
-                    :aria-checked="mode === 'reencode'"
-                    @click="pickMode('reencode', close)"
-                  >
-                    <span class="menu-check">{{ mode === 'reencode' ? '✓' : '' }}</span>
-                    <span class="menu-text">
-                      <b>{{ t('mode.accurate') }}</b>
-                      <small>{{ t('mode.accurateHint') }}</small>
-                    </span>
-                  </button>
-                </template>
-              </DropdownMenu>
-
-              <DropdownMenu :label="formatLabel" :title="t('format.legend')">
-                <template #default="{ close }">
-                  <button
-                    v-for="opt in ASPECT_OPTIONS"
-                    :key="opt.value"
-                    class="menu-option"
-                    :class="{ active: outputAspect === opt.value }"
-                    type="button"
-                    role="menuitemradio"
-                    :aria-checked="outputAspect === opt.value"
-                    @click="pickAspect(opt.value, close)"
-                  >
-                    <span class="menu-check">{{ outputAspect === opt.value ? '✓' : '' }}</span>
-                    <span class="menu-text">
-                      <b>{{ t(opt.label) }}</b>
-                      <small>{{ t(opt.hint) }}</small>
-                    </span>
-                  </button>
-                  <template v-if="hasOutputFormat">
-                    <div class="menu-heading">{{ t('format.fill') }}</div>
-                    <button
-                      v-for="opt in FILL_OPTIONS"
-                      :key="opt.value"
-                      class="menu-option"
-                      :class="{ active: outputFill === opt.value }"
-                      type="button"
-                      role="menuitemradio"
-                      :aria-checked="outputFill === opt.value"
-                      @click="pickFill(opt.value, close)"
-                    >
-                      <span class="menu-check">{{ outputFill === opt.value ? '✓' : '' }}</span>
-                      <span class="menu-text">
-                        <b>{{ t(opt.label) }}</b>
-                        <small>{{ t(opt.hint) }}</small>
-                      </span>
-                    </button>
-                  </template>
-                </template>
-              </DropdownMenu>
-
-              <button
-                class="btn crop-toggle"
-                type="button"
-                :class="{ active: hasCrop }"
-                :aria-pressed="hasCrop"
-                @click="onToggleCrop"
-              >
-                {{ hasCrop ? t('crop.on') : t('crop.toggle') }}
-              </button>
-            </div>
-
-            <div class="action-buttons">
-              <button
-                class="btn primary export"
-                type="button"
-                :disabled="!canCut || busy"
-                :title="t('actions.cutHint')"
-                @click="onExport"
-              >
-                <template v-if="activeJob === 'cut'">{{ statusLabel }} {{ progress }}%</template>
-                <template v-else>{{ t('actions.cut') }}</template>
-              </button>
-              <button
-                class="btn primary merge"
-                type="button"
-                :disabled="!canMerge || busy"
-                :title="t('actions.mergeHint')"
-                @click="onMerge"
-              >
-                <template v-if="activeJob === 'merge'">{{ statusLabel }} {{ progress }}%</template>
-                <template v-else>
-                  {{ t('actions.merge') }}
-                  <span v-if="mergeItems.length > 1">({{ mergeItems.length }})</span>
-                </template>
-              </button>
-              <button
-                class="btn primary"
-                type="button"
-                :disabled="!selected || busy"
-                @click="downloadResult"
-              >
-                {{ t('actions.download') }}
-              </button>
-            </div>
-          </div>
-
-          <p v-if="operation === 'remove'" class="reencode-note">{{ t('operation.removeNote') }}</p>
-
-          <div v-if="hasCrop" class="crop-bar">
-            <span class="crop-size"
-              >{{ t('crop.selection') }}: <b>{{ cropSizeLabel }}</b></span
-            >
-            <span class="crop-hint">{{ t('crop.hint') }}</span>
-            <button class="btn tiny ghost" type="button" @click="store.clearCrop()">
-              {{ t('crop.reset') }}
-            </button>
-          </div>
-
-          <div v-if="busy" class="progress" role="progressbar" :aria-valuenow="progress">
-            <div class="bar" :style="{ width: `${progress}%` }"></div>
-          </div>
-          <p v-if="uploadDetail" class="upload-detail">{{ uploadDetail }}</p>
-          <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
-            {{ t('actions.cancel') }}
-          </button>
-          <p v-if="error" class="error" role="alert">{{ error }}</p>
-
-          <div class="video-wrap">
-            <video
-              ref="videoEl"
-              class="player"
-              :src="objectUrl"
-              controls
-              preload="metadata"
-              @loadedmetadata="onLoadedMetadata"
-              @durationchange="onDurationChange"
-              @timeupdate="onTimeUpdate"
-            ></video>
-            <CropOverlay
-              v-if="crop"
-              :model-value="crop"
-              :disabled="busy"
-              :target="videoEl"
-              @update:model-value="onCropUpdate"
-            />
-          </div>
-
-          <!-- Live-Werte: Gesamtdauer · Auswahl · Cursor · Restdauer -->
-          <div class="live-row">
-            <div class="live-cell">
-              <span class="live-label">{{ t('live.total') }}</span>
-              <span class="live-value strong">{{ msLabel(duration) }}</span>
-            </div>
-            <div class="live-cell center">
-              <span class="live-label">{{ t('live.selection') }}</span>
-              <span class="live-value">{{ msLabel(selectionDuration) }}</span>
-            </div>
-            <div class="live-cell center">
-              <span class="live-label">{{ t('live.cursor') }}</span>
-              <span class="live-value">{{ msLabel(currentTime) }}</span>
-            </div>
-            <div class="live-cell right">
-              <span class="live-label">{{ t('live.remaining') }}</span>
-              <span class="live-value strong">{{ msLabel(remainingTime) }}</span>
-            </div>
-          </div>
-
-          <!-- Cursor: aktuelle Wiedergabeposition als Anfang/Ende übernehmen -->
-          <div class="cursor-row">
-            <span class="cursor-at">
-              {{ t('player.cursorAt') }} <b>{{ formatTimeMs(currentTime) }}</b>
-            </span>
-            <button class="btn tiny" type="button" @click="setStartHere">
-              {{ t('player.setStart') }}
-            </button>
-            <button class="btn tiny" type="button" @click="setEndHere">
-              {{ t('player.setEnd') }}
-            </button>
-          </div>
-
-          <Timeline
-            :duration="duration"
-            :start="startTime"
-            :end="endTime"
-            :current="currentTime"
-            @update:start="store.setStart"
-            @update:end="store.setEnd"
-            @seek="seekTo"
-          />
-
-          <!-- Ergebnis-Status: das Ergebnis läuft im selben Player oben,
-               kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
-          <p v-if="showResult && !busy" class="result-status">
-            {{ t('result.ready') }} {{ selected?.name }}
-          </p>
-          <p v-if="showResult && appleMobile && !busy" class="result-hint">
-            {{ t('result.iosHint') }}
-          </p>
-        </div>
       </div>
     </div>
   </section>
@@ -1377,20 +1380,23 @@ async function downloadResult(): Promise<void> {
   gap: 14px;
 }
 
-/* 2-Spalten-Layout: links Auswahl/Ausschnitte, Mitte/rechts der Canvas mit
-   Werkzeugleiste. Optionen (Aktion/Modus) sowie Export sitzen als Menüs bzw.
-   Button oben am Canvas -> mehr Platz fürs Video. Schmal: gestapelt, Canvas
-   zuerst. */
+/* 3-Spalten-Layout: links „Meine Videos", Mitte der Canvas mit Werkzeugleiste,
+   rechts Auswahl/Ausschnitte/Musik. Mittelbreit: rechte Sidebar unter den
+   Canvas. Schmal: gestapelt, Canvas zuerst. */
 .editor-grid {
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
   grid-template-areas:
     'canvas'
-    'left';
+    'left'
+    'right';
 }
 .panel-left {
   grid-area: left;
+}
+.panel-right {
+  grid-area: right;
 }
 .canvas {
   grid-area: canvas;
@@ -1405,8 +1411,16 @@ async function downloadResult(): Promise<void> {
 @media (min-width: 900px) {
   .editor-grid {
     grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-    grid-template-areas: 'left canvas';
+    grid-template-areas:
+      'left canvas'
+      'left right';
     align-items: start;
+  }
+}
+@media (min-width: 1100px) {
+  .editor-grid {
+    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(220px, 270px);
+    grid-template-areas: 'left canvas right';
   }
 }
 
