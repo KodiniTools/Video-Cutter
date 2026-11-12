@@ -9,6 +9,7 @@ import {
   CROP_UNSUPPORTED,
   APPEND_UNSUPPORTED,
   FORMAT_UNSUPPORTED,
+  MUSIC_UNSUPPORTED,
 } from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { getExtension } from '@/lib/ffmpegCommand'
@@ -41,6 +42,8 @@ const {
   normalizeAudio,
   outputAspect,
   outputFill,
+  music,
+  hasMusic,
   hasVideo,
   canExport,
   canAddSegment,
@@ -114,7 +117,12 @@ function pickFill(f: (typeof FILL_OPTIONS)[number]['value'], close: () => void):
 // Beim Entfernen, bei aktivem Zuschnitt ODER angehängten Videos wird immer neu
 // kodiert -> Modus ist dann fest & deaktiviert (Decode+Encode nötig).
 const modeDisabled = computed(
-  () => operation.value === 'remove' || hasCrop.value || hasAppends.value || hasOutputFormat.value,
+  () =>
+    operation.value === 'remove' ||
+    hasCrop.value ||
+    hasAppends.value ||
+    hasOutputFormat.value ||
+    hasMusic.value,
 )
 const modeLabel = computed(() =>
   modeDisabled.value
@@ -172,6 +180,19 @@ const uploadDetail = computed(() => {
 })
 
 // --- Videos anhängen (Zusammenfügen) -----------------------------------------
+/** Musikdatei wählen (Audio oder Video mit Tonspur). */
+function onMusicInput(e: Event): void {
+  const target = e.target as HTMLInputElement
+  const f = target.files?.[0]
+  target.value = '' // erneutes Auswählen derselben Datei erlauben
+  if (!f) return
+  if (!f.type.startsWith('audio/') && !f.type.startsWith('video/')) {
+    store.setError(t('music.notAudio'))
+    return
+  }
+  store.setMusicFile(f)
+}
+
 function onAppendInput(e: Event): void {
   const target = e.target as HTMLInputElement
   const files = Array.from(target.files ?? [])
@@ -397,6 +418,7 @@ async function onExport(): Promise<void> {
     const lossless =
       !hasAppends.value &&
       !hasOutputFormat.value &&
+      !hasMusic.value &&
       !hasCrop.value &&
       operation.value === 'keep' &&
       mode.value === 'copy' &&
@@ -422,6 +444,7 @@ async function onExport(): Promise<void> {
       })),
       normalizeAudio.value,
       { aspect: outputAspect.value, fill: outputFill.value },
+      music.value ?? undefined,
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -436,7 +459,9 @@ async function onExport(): Promise<void> {
           ? t('errors.appendUnsupported')
           : msg === FORMAT_UNSUPPORTED
             ? t('errors.formatUnsupported')
-            : msg,
+            : msg === MUSIC_UNSUPPORTED
+              ? t('errors.musicUnsupported')
+              : msg,
     )
   }
 }
@@ -869,6 +894,108 @@ async function downloadResult(): Promise<void> {
             </label>
 
             <p class="segments-hint">{{ t('append.hint') }}</p>
+          </section>
+
+          <!-- Hintergrundmusik über das gesamte Ergebnis -->
+          <section class="card segments music">
+            <div class="card-head">
+              <h3 class="panel-title">{{ t('music.title') }}</h3>
+            </div>
+
+            <label class="btn block add" :class="{ disabled: busy }">
+              <input
+                type="file"
+                accept="audio/*,video/*"
+                class="sr-only"
+                :disabled="busy"
+                @change="onMusicInput"
+              />
+              {{ music ? t('music.replace') : t('music.add') }}
+            </label>
+
+            <template v-if="music">
+              <div class="segment-row">
+                <span class="segment-time music-name" :title="music.file.name">
+                  ♪ {{ music.file.name }}
+                </span>
+                <button
+                  class="btn tiny remove"
+                  type="button"
+                  :disabled="busy"
+                  :aria-label="t('music.remove')"
+                  :title="t('music.remove')"
+                  @click="store.clearMusic()"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div class="field-col">
+                <div class="field-row">
+                  <label for="music-volume" class="field-label">{{ t('music.volume') }}</label>
+                  <span class="field-value">{{ Math.round(music.volume * 100) }} %</span>
+                </div>
+                <input
+                  id="music-volume"
+                  class="range"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  :value="Math.round(music.volume * 100)"
+                  :disabled="busy"
+                  @input="
+                    store.updateMusic({
+                      volume: Number(($event.target as HTMLInputElement).value) / 100,
+                    })
+                  "
+                />
+              </div>
+
+              <div class="field-col">
+                <div class="field-row">
+                  <label for="music-original" class="field-label">{{ t('music.original') }}</label>
+                  <span class="field-value">{{ Math.round(music.originalVolume * 100) }} %</span>
+                </div>
+                <input
+                  id="music-original"
+                  class="range"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  :value="Math.round(music.originalVolume * 100)"
+                  :disabled="busy"
+                  @input="
+                    store.updateMusic({
+                      originalVolume: Number(($event.target as HTMLInputElement).value) / 100,
+                    })
+                  "
+                />
+              </div>
+
+              <label class="check-row">
+                <input
+                  type="checkbox"
+                  :checked="music.fade"
+                  :disabled="busy"
+                  @change="store.updateMusic({ fade: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>{{ t('music.fade') }}</span>
+              </label>
+              <label class="check-row">
+                <input
+                  type="checkbox"
+                  :checked="music.loop"
+                  :disabled="busy"
+                  @change="store.updateMusic({ loop: ($event.target as HTMLInputElement).checked })"
+                />
+                <span>{{ t('music.loop') }}</span>
+              </label>
+            </template>
+            <p v-else class="segments-empty">{{ t('music.empty') }}</p>
+
+            <p class="segments-hint">{{ t('music.hint') }}</p>
           </section>
         </div>
 
@@ -1719,6 +1846,12 @@ label.btn.block {
 .check-row input {
   margin-top: 3px;
   accent-color: var(--ds-accent);
+}
+.music-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .check-row small {
   display: block;

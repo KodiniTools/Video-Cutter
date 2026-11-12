@@ -538,6 +538,59 @@ export interface MergeArgsInput {
   normalizeAudio?: boolean
   /** Wie Clips mit anderem Seitenverhältnis das Zielbild füllen. Standard 'pad'. */
   fill?: OutputFill
+  /** Optionale Hintergrundmusik über das gesamte Ergebnis. */
+  music?: MusicTrack
+}
+
+/** Hintergrundmusik, die unter das fertige Ergebnis gemischt wird. */
+export interface MusicTrack {
+  path: string
+  /** Lautstärke der Musik (0–1). */
+  volume: number
+  /** Lautstärke des Originaltons (0–1). */
+  originalVolume: number
+  /** Musik am Anfang ein- und am Ende ausblenden. */
+  fade: boolean
+  /** Musik wiederholen, falls sie kürzer als das Video ist. */
+  loop: boolean
+}
+
+/** Länge der Musik-Ein-/Ausblendung (Sekunden), höchstens ein Viertel der Gesamtlänge. */
+const MUSIC_FADE_SEC = 2
+
+/**
+ * Filter-Abschnitt, der die Musik (Input `inputIndex`) unter `[mainLabel]`
+ * mischt und als `[outa]` ausgibt. `total` = Länge des Ergebnisses.
+ * amix teilt jeden Eingang durch die Anzahl der Eingänge; `volume=2` gleicht
+ * das aus (funktioniert auch mit älteren FFmpeg-Versionen ohne `normalize`).
+ */
+export function musicMixFilter(
+  music: MusicTrack,
+  inputIndex: number,
+  mainLabel: string,
+  total: number,
+): string {
+  const vol = Math.min(1, Math.max(0, music.volume))
+  const orig = Math.min(1, Math.max(0, music.originalVolume))
+  const T = Math.max(0.001, total)
+  const mfx = [
+    AUDIO_NORM,
+    `volume=${vol.toFixed(3)}`,
+    `atrim=0:${T.toFixed(3)}`,
+    'asetpts=PTS-STARTPTS',
+  ]
+  if (music.fade) {
+    const f = Math.min(MUSIC_FADE_SEC, T / 4)
+    if (f >= 0.1) {
+      mfx.push(`afade=t=in:st=0:d=${f.toFixed(3)}`)
+      mfx.push(`afade=t=out:st=${Math.max(0, T - f).toFixed(3)}:d=${f.toFixed(3)}`)
+    }
+  }
+  return (
+    `[${inputIndex}:a]${mfx.join(',')}[mus];` +
+    `[${mainLabel}]volume=${orig.toFixed(3)}[aorig];` +
+    `[aorig][mus]amix=inputs=2:duration=first:dropout_transition=0,volume=2[outa]`
+  )
 }
 
 /** Ausgabe-Seitenverhältnis: 'auto' = wie das (ggf. zugeschnittene) Hauptvideo. */
@@ -676,6 +729,7 @@ export function buildMergeArgs({
   crop,
   normalizeAudio = false,
   fill = 'pad',
+  music,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -744,6 +798,8 @@ export function buildMergeArgs({
     filter += `${aSrc}${afx.join(',')}[a${i}];`
   })
 
+  // Mit Musik endet die Clip-Kette in [amain]; die Mischung liefert dann [outa].
+  const aFinal = music ? 'amain' : 'outa'
   if (xf && xf.preset !== 'fade' && clips.length > 1) {
     let vPrev = 'v0'
     let aPrev = 'a0'
@@ -752,7 +808,7 @@ export function buildMergeArgs({
       const offset = acc - t * xf.d
       const last = t === clips.length - 1
       const vOut = last ? 'outv' : `vx${t}`
-      const aOut = last ? 'outa' : `ax${t}`
+      const aOut = last ? aFinal : `ax${t}`
       filter += `[${vPrev}][v${t}]xfade=transition=${xf.type}:duration=${xf.d.toFixed(3)}:offset=${offset.toFixed(3)}[${vOut}];`
       filter += `[${aPrev}][a${t}]acrossfade=d=${xf.d.toFixed(3)}:c1=tri:c2=tri[${aOut}];`
       vPrev = vOut
@@ -763,12 +819,19 @@ export function buildMergeArgs({
   } else {
     filter +=
       clips.map((_, i) => `[v${i}][a${i}]`).join('') +
-      `concat=n=${clips.length}:v=1:a=1[outv][outa]`
+      `concat=n=${clips.length}:v=1:a=1[outv][${aFinal}]`
+  }
+
+  const musicInput: string[] = []
+  if (music) {
+    filter += `;${musicMixFilter(music, clips.length, aFinal, outputDurationFor(ranges, transition))}`
+    musicInput.push(...(music.loop ? ['-stream_loop', '-1'] : []), '-i', music.path)
   }
 
   return [
     ...PROGRESS,
     ...clips.flatMap((c) => c.inputArgs),
+    ...musicInput,
     '-filter_complex',
     filter,
     '-map',

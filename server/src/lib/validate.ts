@@ -216,6 +216,41 @@ export function parseOutputFormat(body: Record<string, unknown>): {
   return { aspect: aspect as OutputAspect, fill: fill as OutputFill }
 }
 
+/** Einstellungen der Hintergrundmusik (ohne Datei). */
+export interface MusicParams {
+  volume: number
+  originalVolume: number
+  fade: boolean
+  loop: boolean
+}
+
+function parseFraction(v: unknown, fallback: number, label: string): number {
+  if (v === undefined || v === null || v === '') return fallback
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new ValidationError(`Ungültige ${label} (erlaubt: 0–1).`)
+  }
+  return n
+}
+
+function parseFlag(v: unknown, fallback: boolean): boolean {
+  if (v === undefined || v === null || v === '') return fallback
+  return v === true || v === '1' || v === 'true'
+}
+
+/**
+ * Liest die Musik-Einstellungen: `musicVolume` (0–1, Standard 0,3),
+ * `musicOriginalVolume` (0–1, Standard 1), `musicFade`/`musicLoop` (Standard an).
+ */
+export function parseMusicParams(body: Record<string, unknown>): MusicParams {
+  return {
+    volume: parseFraction(body.musicVolume, 0.3, 'Musik-Lautstärke'),
+    originalVolume: parseFraction(body.musicOriginalVolume, 1, 'Originalton-Lautstärke'),
+    fade: parseFlag(body.musicFade, true),
+    loop: parseFlag(body.musicLoop, true),
+  }
+}
+
 /** Liest den Schalter „Lautstärke angleichen" (`normalizeAudio`: '1'/'true'). */
 export function parseNormalizeAudio(body: Record<string, unknown>): boolean {
   const v = body.normalizeAudio

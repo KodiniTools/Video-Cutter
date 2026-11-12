@@ -5,6 +5,7 @@ import {
   CROP_UNSUPPORTED,
   APPEND_UNSUPPORTED,
   FORMAT_UNSUPPORTED,
+  MUSIC_UNSUPPORTED,
 } from '@/composables/useServerCut'
 
 describe('parseJobStart', () => {
@@ -17,6 +18,7 @@ describe('parseJobStart', () => {
       appendSlots: false,
       normalizeAudio: false,
       outputFormat: false,
+      music: false,
     })
   })
 
@@ -29,6 +31,7 @@ describe('parseJobStart', () => {
       appendSlots: false,
       normalizeAudio: false,
       outputFormat: false,
+      music: false,
     })
   })
 
@@ -197,6 +200,7 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
       appendSlots: false,
       normalizeAudio: false,
       outputFormat: false,
+      music: false,
     })
   })
 
@@ -239,5 +243,29 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
       fill: 'pad',
     })
     expect(instances[0].sentForm?.has('outputAspect')).toBe(false)
+  })
+
+  it('sendet Musik + Einstellungen und bricht ab, wenn der Server sie nicht bestätigt', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-8","outputFormat":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const song = new File([new Uint8Array([1])], 'song.mp3', { type: 'audio/mpeg' })
+    const { cut } = useServerCut()
+
+    await expect(
+      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [], false, undefined, {
+        file: song,
+        volume: 0.25,
+        originalVolume: 0.8,
+        fade: false,
+        loop: true,
+      }),
+    ).rejects.toThrow(MUSIC_UNSUPPORTED)
+    const form = instances[0].sentForm
+    expect(form?.get('music')).toBeInstanceOf(File)
+    expect(form?.get('musicVolume')).toBe('0.25')
+    expect(form?.get('musicOriginalVolume')).toBe('0.8')
+    expect(form?.get('musicFade')).toBe('0')
+    expect(form?.get('musicLoop')).toBe('1')
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-8', { method: 'DELETE' })
   })
 })

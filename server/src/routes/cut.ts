@@ -12,6 +12,7 @@ import {
   outputDurationFor,
   outputTargetSize,
   type AppendClip,
+  type MusicTrack,
 } from '../lib/args'
 import { probeMedia } from '../lib/probe'
 import {
@@ -19,6 +20,7 @@ import {
   parseCutParams,
   parseNormalizeAudio,
   parseOutputFormat,
+  parseMusicParams,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -31,17 +33,20 @@ const upload = multer({
     destination: config.tmpDir,
     filename: (_req, file, cb) => cb(null, `${randomUUID()}-in.${safeExt(file.originalname)}`),
   }),
-  limits: { fileSize: config.maxFileSizeBytes, files: 1 + config.maxAppendFiles },
+  limits: { fileSize: config.maxFileSizeBytes, files: 2 + config.maxAppendFiles },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('video/')) cb(null, true)
-    else cb(new ValidationError('Nur Videodateien werden akzeptiert.'))
+    // Hintergrundmusik darf auch eine reine Audiodatei sein.
+    else if (file.fieldname === 'music' && file.mimetype.startsWith('audio/')) cb(null, true)
+    else cb(new ValidationError('Nur Video- (bzw. für Musik Audio-)Dateien werden akzeptiert.'))
   },
 })
 
-/** Hauptvideo (`video`) + optional angehängte Videos (`append`, in Reihenfolge). */
+/** Hauptvideo (`video`) + optional angehängte Videos (`append`) + Hintergrundmusik (`music`). */
 const uploadFields = upload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'append', maxCount: config.maxAppendFiles },
+  { name: 'music', maxCount: 1 },
 ])
 
 const asyncHandler =
@@ -67,19 +72,22 @@ export const SERVER_FEATURES = [
   'appendSlots',
   'normalizeAudio',
   'outputFormat',
+  'music',
 ] as const
 
 /**
  * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
  *                 operation, total, crop, transitionPreset, transitionDuration,
- *                 normalizeAudio, outputAspect, outputFill)
+ *                 normalizeAudio, outputAspect, outputFill,
+ *                 music, musicVolume, musicOriginalVolume, musicFade, musicLoop)
  * Legt einen Job an und startet die Verarbeitung.
  * Antwort: { jobId, crop, append, appendTrim, appendSlots, normalizeAudio } –
  * `crop` bestätigt den Bildausschnitt, `append` die Anzahl der angehängten
  * Videos, `appendTrim` die Übernahme von Kürzung/Position (`appendMeta`),
  * `appendSlots` freie Einfügestellen zwischen den Ausschnitten und
  * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen),
- * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus.
+ * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus, `music` die
+ * Hintergrundmusik.
  */
 cutRouter.post(
   '/cut',
@@ -88,7 +96,12 @@ cutRouter.post(
     const files = (req.files ?? {}) as Record<string, Express.Multer.File[] | undefined>
     const main = files.video?.[0]
     const appendFiles = files.append ?? []
-    const allPaths = [...(main ? [main.path] : []), ...appendFiles.map((f) => f.path)]
+    const musicFile = files.music?.[0]
+    const allPaths = [
+      ...(main ? [main.path] : []),
+      ...appendFiles.map((f) => f.path),
+      ...(musicFile ? [musicFile.path] : []),
+    ]
 
     if (!main) {
       await removeFiles(allPaths)
@@ -103,7 +116,8 @@ cutRouter.post(
       const normalizeAudio = appendFiles.length > 0 && parseNormalizeAudio(req.body ?? {})
       const output = parseOutputFormat(req.body ?? {})
       // Zusammenfügen ODER anderes Seitenverhältnis -> Normierungs-Pipeline.
-      const useMerge = appendFiles.length > 0 || output.aspect !== 'auto'
+      const musicParams = musicFile ? parseMusicParams(req.body ?? {}) : null
+      const useMerge = appendFiles.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -131,10 +145,18 @@ cutRouter.post(
       if (useMerge) {
         // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
         // die Clips auf ein gemeinsames Format normiert werden können.
-        const [mainInfo, ...appendInfos] = await Promise.all([
+        const [mainInfo, musicInfo, ...appendInfos] = await Promise.all([
           probeMedia(main.path),
+          musicFile ? probeMedia(musicFile.path) : Promise.resolve(null),
           ...appendFiles.map((f) => probeMedia(f.path)),
         ])
+        let music: MusicTrack | undefined
+        if (musicFile && musicParams) {
+          if (!musicInfo?.hasAudio) {
+            throw new ValidationError('Die Musikdatei enthält keine Tonspur.')
+          }
+          music = { path: musicFile.path, ...musicParams }
+        }
         const appends: AppendClip[] = appendInfos.map((info, i) => {
           if (!(info.duration > 0)) {
             throw new ValidationError(
@@ -174,6 +196,7 @@ cutRouter.post(
           crop: params.crop,
           normalizeAudio,
           fill: output.fill,
+          music,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = outputDurationFor(
@@ -210,7 +233,10 @@ cutRouter.post(
       const job = jobManager.create({
         id,
         inputPath: main.path,
-        extraInputPaths: appendFiles.map((f) => f.path),
+        extraInputPaths: [
+          ...appendFiles.map((f) => f.path),
+          ...(musicFile ? [musicFile.path] : []),
+        ],
         outputPath,
         outputName,
       })
@@ -226,6 +252,7 @@ cutRouter.post(
         appendSlots: appendFiles.length > 0,
         normalizeAudio,
         outputFormat: true,
+        music: musicFile !== undefined,
       })
     } catch (err) {
       await removeFiles(allPaths)

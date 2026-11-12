@@ -30,6 +30,9 @@ export const APPEND_UNSUPPORTED = 'APPEND_UNSUPPORTED'
  */
 export const FORMAT_UNSUPPORTED = 'FORMAT_UNSUPPORTED'
 
+/** Fehler-Kennung: Hintergrundmusik verlangt, aber vom Backend nicht bestätigt. */
+export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
+
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
   jobId: string
@@ -44,6 +47,8 @@ export interface JobStartResponse {
   normalizeAudio?: boolean
   /** Kennt der Server Seitenverhältnis/Füllmodus (`outputAspect`/`outputFill`)? */
   outputFormat?: boolean
+  /** Hat der Server die Hintergrundmusik übernommen? */
+  music?: boolean
 }
 
 /**
@@ -59,6 +64,7 @@ export function parseJobStart(text: string): JobStartResponse {
     appendSlots?: unknown
     normalizeAudio?: unknown
     outputFormat?: unknown
+    music?: unknown
   }
   let data: Raw
   try {
@@ -78,6 +84,7 @@ export function parseJobStart(text: string): JobStartResponse {
     appendSlots: data.appendSlots === true,
     normalizeAudio: data.normalizeAudio === true,
     outputFormat: data.outputFormat === true,
+    music: data.music === true,
   }
 }
 
@@ -260,6 +267,15 @@ export interface CutOutputFormat {
   fill: 'pad' | 'blur' | 'crop'
 }
 
+/** Hintergrundmusik für den Server. */
+export interface MusicInput {
+  file: File
+  volume: number
+  originalVolume: number
+  fade: boolean
+  loop: boolean
+}
+
 /** Weicht ein angehängtes Video von „vollständig, danach" ab? */
 function needsAppendTrim(a: AppendInput): boolean {
   return (a.start ?? 0) > 0 || a.duration !== undefined || a.position === 'before'
@@ -276,6 +292,7 @@ function needsAppendTrim(a: AppendInput): boolean {
  *                   Ausschnitte gesetzt werden (Reihenfolge = Liste); erzwingt Re-Encode.
  * @param normalizeAudio Lautstärke aller Clips angleichen (nur mit angehängten Videos).
  * @param output     Seitenverhältnis + Füllmodus; 'auto' = wie das Hauptvideo.
+ * @param music      Optionale Hintergrundmusik über das gesamte Ergebnis.
  */
 async function cut(
   file: File,
@@ -288,6 +305,7 @@ async function cut(
   appends: AppendInput[] = [],
   normalizeAudio = false,
   output?: CutOutputFormat,
+  music?: MusicInput,
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -308,6 +326,13 @@ async function cut(
       form.append('transitionDuration', String(transition.duration))
     }
     if (crop) form.append('crop', JSON.stringify(crop))
+    if (music) {
+      form.append('musicVolume', String(music.volume))
+      form.append('musicOriginalVolume', String(music.originalVolume))
+      form.append('musicFade', music.fade ? '1' : '0')
+      form.append('musicLoop', music.loop ? '1' : '0')
+      form.append('music', music.file)
+    }
     const wantsFormat = output !== undefined && output.aspect !== 'auto'
     if (wantsFormat) {
       form.append('outputAspect', output.aspect)
@@ -381,6 +406,13 @@ async function cut(
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
       throw new Error(FORMAT_UNSUPPORTED)
+    }
+
+    // Musik verlangt, aber nicht bestätigt -> veralteter Server.
+    if (music && !started.music) {
+      currentJobId = null
+      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      throw new Error(MUSIC_UNSUPPORTED)
     }
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).

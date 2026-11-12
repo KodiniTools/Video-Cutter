@@ -102,6 +102,20 @@ const messages = {
       redo: 'Wiederherstellen',
       removeVideo: 'Video löschen',
     },
+    music: {
+      title: 'Hintergrundmusik',
+      add: '+ Musik hochladen',
+      replace: 'Andere Musik wählen',
+      remove: 'Musik entfernen',
+      empty:
+        'Keine Musik. Optional: eine Audiodatei (MP3, WAV, M4A …) unter das ganze Video legen.',
+      volume: 'Musik',
+      original: 'Originalton',
+      fade: 'Ein- und ausblenden',
+      loop: 'Wiederholen, wenn die Musik kürzer ist',
+      hint: 'Die Musik läuft über das gesamte Ergebnis (inkl. angehängter Videos) und endet mit dem Video. Erzwingt Neu-Kodieren.',
+      notAudio: 'Bitte eine Audiodatei auswählen.',
+    },
     format: {
       legend: 'Ausgabeformat',
       auto: 'Original',
@@ -145,6 +159,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keine Videos zusammenfügen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder die angehängten Videos entfernen.',
       formatUnsupported:
         'Das Server-Backend ist veraltet und kennt das gewählte Ausgabeformat noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder das Format auf „Original“ stellen.',
+      musicUnsupported:
+        'Das Server-Backend ist veraltet und kann noch keine Hintergrundmusik hinzufügen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder die Musik entfernen.',
     },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
@@ -247,6 +263,19 @@ const messages = {
       redo: 'Redo',
       removeVideo: 'Delete video',
     },
+    music: {
+      title: 'Background music',
+      add: '+ Upload music',
+      replace: 'Choose other music',
+      remove: 'Remove music',
+      empty: 'No music. Optional: lay an audio file (MP3, WAV, M4A …) under the whole video.',
+      volume: 'Music',
+      original: 'Original sound',
+      fade: 'Fade in and out',
+      loop: 'Repeat if the music is shorter',
+      hint: 'The music plays over the whole result (including appended videos) and ends with the video. Forces re-encoding.',
+      notAudio: 'Please choose an audio file.',
+    },
     format: {
       legend: 'Output format',
       auto: 'Original',
@@ -290,6 +319,8 @@ const messages = {
         'The server backend is outdated and cannot join videos yet. Please update the backend (deploy/deploy.sh without SKIP_API) or remove the appended videos.',
       formatUnsupported:
         'The server backend is outdated and does not know the selected output format yet. Please update the backend (deploy/deploy.sh without SKIP_API) or set the format to “Original”.',
+      musicUnsupported:
+        'The server backend is outdated and cannot add background music yet. Please update the backend (deploy/deploy.sh without SKIP_API) or remove the music.',
     },
     footer: 'Server-side processing with FFmpeg.',
   },
