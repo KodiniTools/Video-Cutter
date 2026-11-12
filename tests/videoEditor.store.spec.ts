@@ -599,4 +599,12 @@ describe('videoEditor store – Videos anhängen', () => {
     store.clearAppendClips()
     expect(store.normalizeAudio).toBe(true)
   })
+
+  it('Ausgabeformat: Standard Original/Balken, Setter', () => {
+    const store = loadVideo(30)
+    expect([store.outputAspect, store.outputFill]).toEqual(['auto', 'pad'])
+    store.setOutputAspect('9:16')
+    store.setOutputFill('blur')
+    expect([store.outputAspect, store.outputFill]).toEqual(['9:16', 'blur'])
+  })
 })

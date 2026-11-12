@@ -10,6 +10,7 @@ import {
   computeKeepRanges,
   mergeTargetSize,
   outputDurationFor,
+  outputTargetSize,
   type AppendClip,
 } from '../lib/args'
 import { probeMedia } from '../lib/probe'
@@ -17,6 +18,7 @@ import {
   parseAppendMeta,
   parseCutParams,
   parseNormalizeAudio,
+  parseOutputFormat,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -64,18 +66,20 @@ export const SERVER_FEATURES = [
   'appendTrim',
   'appendSlots',
   'normalizeAudio',
+  'outputFormat',
 ] as const
 
 /**
  * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
  *                 operation, total, crop, transitionPreset, transitionDuration,
- *                 normalizeAudio)
+ *                 normalizeAudio, outputAspect, outputFill)
  * Legt einen Job an und startet die Verarbeitung.
  * Antwort: { jobId, crop, append, appendTrim, appendSlots, normalizeAudio } –
  * `crop` bestätigt den Bildausschnitt, `append` die Anzahl der angehängten
  * Videos, `appendTrim` die Übernahme von Kürzung/Position (`appendMeta`),
  * `appendSlots` freie Einfügestellen zwischen den Ausschnitten und
- * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen).
+ * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen),
+ * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus.
  */
 cutRouter.post(
   '/cut',
@@ -97,6 +101,9 @@ cutRouter.post(
       const appendMeta = parseAppendMeta(req.body ?? {}, appendFiles.length)
       // Lautstärke-Angleichung wirkt nur beim Zusammenfügen mit angehängten Videos.
       const normalizeAudio = appendFiles.length > 0 && parseNormalizeAudio(req.body ?? {})
+      const output = parseOutputFormat(req.body ?? {})
+      // Zusammenfügen ODER anderes Seitenverhältnis -> Normierungs-Pipeline.
+      const useMerge = appendFiles.length > 0 || output.aspect !== 'auto'
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -121,7 +128,7 @@ cutRouter.post(
       let outputPath: string
       let outputDuration: number
 
-      if (appendFiles.length > 0) {
+      if (useMerge) {
         // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
         // die Clips auf ein gemeinsames Format normiert werden können.
         const [mainInfo, ...appendInfos] = await Promise.all([
@@ -149,7 +156,10 @@ cutRouter.post(
             slot: appendMeta[i].slot,
           }
         })
-        const size = mergeTargetSize(mainInfo.width, mainInfo.height, params.crop)
+        const size = outputTargetSize(
+          mergeTargetSize(mainInfo.width, mainInfo.height, params.crop),
+          output.aspect,
+        )
         outExt = isWebm ? 'webm' : 'mp4'
         outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
         args = buildMergeArgs({
@@ -163,6 +173,7 @@ cutRouter.post(
           transition: params.transition,
           crop: params.crop,
           normalizeAudio,
+          fill: output.fill,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = outputDurationFor(
@@ -214,6 +225,7 @@ cutRouter.post(
         appendTrim: appendFiles.length > 0,
         appendSlots: appendFiles.length > 0,
         normalizeAudio,
+        outputFormat: true,
       })
     } catch (err) {
       await removeFiles(allPaths)

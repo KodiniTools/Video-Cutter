@@ -8,6 +8,7 @@ import {
   CUT_CANCELLED,
   CROP_UNSUPPORTED,
   APPEND_UNSUPPORTED,
+  FORMAT_UNSUPPORTED,
 } from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { getExtension } from '@/lib/ffmpegCommand'
@@ -38,6 +39,8 @@ const {
   hasAppends,
   canAppend,
   normalizeAudio,
+  outputAspect,
+  outputFill,
   hasVideo,
   canExport,
   canAddSegment,
@@ -83,10 +86,35 @@ function pickMode(m: 'copy' | 'reencode', close: () => void): void {
   store.setMode(m)
   close()
 }
+
+// --- Ausgabeformat ------------------------------------------------------------
+const ASPECT_OPTIONS = [
+  { value: 'auto', label: 'format.auto', hint: 'format.autoHint' },
+  { value: '16:9', label: 'format.landscape', hint: 'format.landscapeHint' },
+  { value: '9:16', label: 'format.portrait', hint: 'format.portraitHint' },
+  { value: '1:1', label: 'format.square', hint: 'format.squareHint' },
+] as const
+const FILL_OPTIONS = [
+  { value: 'pad', label: 'format.pad', hint: 'format.padHint' },
+  { value: 'blur', label: 'format.blur', hint: 'format.blurHint' },
+  { value: 'crop', label: 'format.crop', hint: 'format.cropHint' },
+] as const
+/** Anderes Seitenverhältnis gewählt? (erzwingt Re-Encode.) */
+const hasOutputFormat = computed(() => outputAspect.value !== 'auto')
+const formatLabel = computed(() => (hasOutputFormat.value ? outputAspect.value : t('format.auto')))
+function pickAspect(a: (typeof ASPECT_OPTIONS)[number]['value'], close: () => void): void {
+  store.setOutputAspect(a)
+  // Bei „Original" gibt es keine Füllung zu wählen -> Menü schließen.
+  if (a === 'auto') close()
+}
+function pickFill(f: (typeof FILL_OPTIONS)[number]['value'], close: () => void): void {
+  store.setOutputFill(f)
+  close()
+}
 // Beim Entfernen, bei aktivem Zuschnitt ODER angehängten Videos wird immer neu
 // kodiert -> Modus ist dann fest & deaktiviert (Decode+Encode nötig).
 const modeDisabled = computed(
-  () => operation.value === 'remove' || hasCrop.value || hasAppends.value,
+  () => operation.value === 'remove' || hasCrop.value || hasAppends.value || hasOutputFormat.value,
 )
 const modeLabel = computed(() =>
   modeDisabled.value
@@ -368,6 +396,7 @@ async function onExport(): Promise<void> {
     const isWebm = inputExt === 'webm'
     const lossless =
       !hasAppends.value &&
+      !hasOutputFormat.value &&
       !hasCrop.value &&
       operation.value === 'keep' &&
       mode.value === 'copy' &&
@@ -392,6 +421,7 @@ async function onExport(): Promise<void> {
         slot: c.position === 'after' && c.slot !== null ? c.slot : undefined,
       })),
       normalizeAudio.value,
+      { aspect: outputAspect.value, fill: outputFill.value },
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -404,7 +434,9 @@ async function onExport(): Promise<void> {
         ? t('errors.cropUnsupported')
         : msg === APPEND_UNSUPPORTED
           ? t('errors.appendUnsupported')
-          : msg,
+          : msg === FORMAT_UNSUPPORTED
+            ? t('errors.formatUnsupported')
+            : msg,
     )
   }
 }
@@ -911,6 +943,46 @@ async function downloadResult(): Promise<void> {
                 </template>
               </DropdownMenu>
 
+              <DropdownMenu :label="formatLabel" :title="t('format.legend')">
+                <template #default="{ close }">
+                  <button
+                    v-for="opt in ASPECT_OPTIONS"
+                    :key="opt.value"
+                    class="menu-option"
+                    :class="{ active: outputAspect === opt.value }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="outputAspect === opt.value"
+                    @click="pickAspect(opt.value, close)"
+                  >
+                    <span class="menu-check">{{ outputAspect === opt.value ? '✓' : '' }}</span>
+                    <span class="menu-text">
+                      <b>{{ t(opt.label) }}</b>
+                      <small>{{ t(opt.hint) }}</small>
+                    </span>
+                  </button>
+                  <template v-if="hasOutputFormat">
+                    <div class="menu-heading">{{ t('format.fill') }}</div>
+                    <button
+                      v-for="opt in FILL_OPTIONS"
+                      :key="opt.value"
+                      class="menu-option"
+                      :class="{ active: outputFill === opt.value }"
+                      type="button"
+                      role="menuitemradio"
+                      :aria-checked="outputFill === opt.value"
+                      @click="pickFill(opt.value, close)"
+                    >
+                      <span class="menu-check">{{ outputFill === opt.value ? '✓' : '' }}</span>
+                      <span class="menu-text">
+                        <b>{{ t(opt.label) }}</b>
+                        <small>{{ t(opt.hint) }}</small>
+                      </span>
+                    </button>
+                  </template>
+                </template>
+              </DropdownMenu>
+
               <button
                 class="btn crop-toggle"
                 type="button"
@@ -1162,6 +1234,15 @@ async function downloadResult(): Promise<void> {
 }
 
 /* Optionen im Menü (Aktion/Modus) */
+.menu-heading {
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--ds-border);
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-text-2);
+}
 .menu-option {
   display: flex;
   align-items: flex-start;

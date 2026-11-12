@@ -536,6 +536,94 @@ export interface MergeArgsInput {
   crop?: CropRect
   /** Lautstärke aller Clips per EBU-R128 (`loudnorm`) auf ein Niveau angleichen. */
   normalizeAudio?: boolean
+  /** Wie Clips mit anderem Seitenverhältnis das Zielbild füllen. Standard 'pad'. */
+  fill?: OutputFill
+}
+
+/** Ausgabe-Seitenverhältnis: 'auto' = wie das (ggf. zugeschnittene) Hauptvideo. */
+export type OutputAspect = 'auto' | '16:9' | '9:16' | '1:1'
+/**
+ * Füllmodus bei abweichendem Seitenverhältnis:
+ * - 'pad'  = schwarze Balken (Letterbox/Pillarbox),
+ * - 'blur' = unscharf vergrößertes Bild als Hintergrund,
+ * - 'crop' = auf volle Fläche vergrößern und Überstand abschneiden.
+ */
+export type OutputFill = 'pad' | 'blur' | 'crop'
+
+export const OUTPUT_ASPECTS: OutputAspect[] = ['auto', '16:9', '9:16', '1:1']
+export const OUTPUT_FILLS: OutputFill[] = ['pad', 'blur', 'crop']
+
+const ASPECT_RATIOS: Record<Exclude<OutputAspect, 'auto'>, [number, number]> = {
+  '16:9': [16, 9],
+  '9:16': [9, 16],
+  '1:1': [1, 1],
+}
+
+/**
+ * Zielauflösung für ein gewähltes Seitenverhältnis. Die kurze Kante des
+ * Hauptvideos bleibt erhalten (1920×1080 -> 9:16 = 1080×1920, 1:1 = 1080×1080),
+ * damit nichts unnötig hoch- oder herunterskaliert wird.
+ */
+export function outputTargetSize(
+  base: { width: number; height: number },
+  aspect: OutputAspect,
+): { width: number; height: number } {
+  if (aspect === 'auto') return { width: evenPx(base.width), height: evenPx(base.height) }
+  const [aw, ah] = ASPECT_RATIOS[aspect]
+  const short = Math.min(base.width, base.height)
+  return aw >= ah
+    ? { width: evenPx((short * aw) / ah), height: evenPx(short) }
+    : { width: evenPx(short), height: evenPx((short * ah) / aw) }
+}
+
+/**
+ * Filterkette, die einen Clip auf W×H bringt. Liefert einen Filtergraph-
+ * Abschnitt von `[in]` bis `[out]`; `post` wird am Ende angehängt.
+ */
+function fitFilter(
+  inLabel: string,
+  outLabel: string,
+  W: number,
+  H: number,
+  fill: OutputFill,
+  pre: string[],
+  post: string[],
+): string {
+  const head = pre.length ? `${pre.join(',')},` : ''
+  const tail = post.join(',')
+  switch (fill) {
+    case 'pad':
+      return (
+        `[${inLabel}]${head}scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,${tail}[${outLabel}]`
+      )
+    case 'crop':
+      return (
+        `[${inLabel}]${head}scale=${W}:${H}:force_original_aspect_ratio=increase,` +
+        `crop=${W}:${H},${tail}[${outLabel}]`
+      )
+    case 'blur': {
+      // Hintergrund klein rechnen, weichzeichnen, wieder hochskalieren – deutlich
+      // schneller als ein großer Blur auf voller Auflösung.
+      const bw = evenPx(W / 8)
+      const bh = evenPx(H / 8)
+      const b = `${outLabel}b`
+      const f = `${outLabel}f`
+      const bb = `${outLabel}bb`
+      const ff = `${outLabel}ff`
+      return (
+        `[${inLabel}]${head}split=2[${b}][${f}];` +
+        `[${b}]scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},` +
+        `gblur=sigma=6,scale=${W}:${H},setsar=1[${bb}];` +
+        `[${f}]scale=${W}:${H}:force_original_aspect_ratio=decrease,setsar=1[${ff}];` +
+        `[${bb}][${ff}]overlay=(W-w)/2:(H-h)/2,${tail}[${outLabel}]`
+      )
+    }
+    default: {
+      const never: never = fill
+      throw new Error(`Unbekannter Füllmodus: ${String(never)}`)
+    }
+  }
 }
 
 /**
@@ -587,6 +675,7 @@ export function buildMergeArgs({
   transition,
   crop,
   normalizeAudio = false,
+  fill = 'pad',
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -627,15 +716,8 @@ export function buildMergeArgs({
 
   let filter = ''
   clips.forEach((c, i) => {
-    const vfx = [
-      ...(c.crop ? [buildCropFilter(c.crop)] : []),
-      `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
-      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
-      'setsar=1',
-      `fps=${MERGE_FPS}`,
-      'format=yuv420p',
-      'setpts=PTS-STARTPTS',
-    ]
+    const pre = c.crop ? [buildCropFilter(c.crop)] : []
+    const vfx = ['setsar=1', `fps=${MERGE_FPS}`, 'format=yuv420p', 'setpts=PTS-STARTPTS']
     // Stille (anullsrc) braucht keine Lautheits-Angleichung.
     const afx = [
       ...(normalizeAudio && c.hasAudio ? [LOUDNORM_FILTER] : []),
@@ -654,7 +736,7 @@ export function buildMergeArgs({
         afx.push(`afade=t=out:st=${outStart}:d=${fd}`)
       }
     }
-    filter += `[${i}:v]${vfx.join(',')}[v${i}];`
+    filter += `${fitFilter(`${i}:v`, `v${i}`, W, H, fill, pre, vfx)};`
     // Ohne Tonspur: Stille in exakt der Clip-Länge erzeugen.
     const aSrc = c.hasAudio
       ? `[${i}:a]`

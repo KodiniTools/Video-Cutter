@@ -24,6 +24,12 @@ export const CROP_UNSUPPORTED = 'CROP_UNSUPPORTED'
  */
 export const APPEND_UNSUPPORTED = 'APPEND_UNSUPPORTED'
 
+/**
+ * Fehler-Kennung: Ein anderes Seitenverhältnis wurde angefordert, aber das
+ * Backend hat es nicht bestätigt (veralteter Server).
+ */
+export const FORMAT_UNSUPPORTED = 'FORMAT_UNSUPPORTED'
+
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
   jobId: string
@@ -36,6 +42,8 @@ export interface JobStartResponse {
   appendSlots?: boolean
   /** Hat der Server die Lautstärke-Angleichung übernommen? */
   normalizeAudio?: boolean
+  /** Kennt der Server Seitenverhältnis/Füllmodus (`outputAspect`/`outputFill`)? */
+  outputFormat?: boolean
 }
 
 /**
@@ -50,6 +58,7 @@ export function parseJobStart(text: string): JobStartResponse {
     appendTrim?: unknown
     appendSlots?: unknown
     normalizeAudio?: unknown
+    outputFormat?: unknown
   }
   let data: Raw
   try {
@@ -68,6 +77,7 @@ export function parseJobStart(text: string): JobStartResponse {
     appendTrim: data.appendTrim === true,
     appendSlots: data.appendSlots === true,
     normalizeAudio: data.normalizeAudio === true,
+    outputFormat: data.outputFormat === true,
   }
 }
 
@@ -244,6 +254,12 @@ export interface AppendInput {
   slot?: number
 }
 
+/** Gewünschtes Ausgabeformat. */
+export interface CutOutputFormat {
+  aspect: 'auto' | '16:9' | '9:16' | '1:1'
+  fill: 'pad' | 'blur' | 'crop'
+}
+
 /** Weicht ein angehängtes Video von „vollständig, danach" ab? */
 function needsAppendTrim(a: AppendInput): boolean {
   return (a.start ?? 0) > 0 || a.duration !== undefined || a.position === 'before'
@@ -259,6 +275,7 @@ function needsAppendTrim(a: AppendInput): boolean {
  * @param appends    Weitere Videos (optional gekürzt), die vor, zwischen oder hinter die
  *                   Ausschnitte gesetzt werden (Reihenfolge = Liste); erzwingt Re-Encode.
  * @param normalizeAudio Lautstärke aller Clips angleichen (nur mit angehängten Videos).
+ * @param output     Seitenverhältnis + Füllmodus; 'auto' = wie das Hauptvideo.
  */
 async function cut(
   file: File,
@@ -270,6 +287,7 @@ async function cut(
   crop?: CropRect,
   appends: AppendInput[] = [],
   normalizeAudio = false,
+  output?: CutOutputFormat,
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -290,6 +308,11 @@ async function cut(
       form.append('transitionDuration', String(transition.duration))
     }
     if (crop) form.append('crop', JSON.stringify(crop))
+    const wantsFormat = output !== undefined && output.aspect !== 'auto'
+    if (wantsFormat) {
+      form.append('outputAspect', output.aspect)
+      form.append('outputFill', output.fill)
+    }
     if (appends.length) {
       form.append(
         'appendMeta',
@@ -351,6 +374,13 @@ async function cut(
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
       throw new Error(APPEND_UNSUPPORTED)
+    }
+
+    // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
+    if (wantsFormat && !started.outputFormat) {
+      currentJobId = null
+      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      throw new Error(FORMAT_UNSUPPORTED)
     }
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).

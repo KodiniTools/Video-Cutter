@@ -78,6 +78,11 @@ export function isAppendTrimmed(c: AppendClip): boolean {
   return c.start > 0 || c.end !== null
 }
 
+/** Ausgabe-Seitenverhältnis: 'auto' = wie das (ggf. zugeschnittene) Hauptvideo. */
+export type OutputAspect = 'auto' | '16:9' | '9:16' | '1:1'
+/** Füllmodus bei abweichendem Seitenverhältnis: Balken, unscharfer Hintergrund, zuschneiden. */
+export type OutputFill = 'pad' | 'blur' | 'crop'
+
 /** Höchstzahl angehängter Videos (muss zu MAX_APPEND_FILES im Backend passen). */
 export const MAX_APPEND_CLIPS = 5
 
@@ -132,6 +137,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   let nextAppendId = 1
   /** Lautstärke aller Clips beim Zusammenfügen angleichen (Einstellung, kein Undo). */
   const normalizeAudio = ref(false)
+  /** Ausgabeformat (Einstellung, kein Undo). */
+  const outputAspect = ref<OutputAspect>('auto')
+  const outputFill = ref<OutputFill>('pad')
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -588,6 +596,14 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     normalizeAudio.value = on
   }
 
+  function setOutputAspect(a: OutputAspect): void {
+    outputAspect.value = a
+  }
+
+  function setOutputFill(f: OutputFill): void {
+    outputFill.value = f
+  }
+
   function clearAppendClips(): void {
     appendClips.value = []
   }
@@ -667,6 +683,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     crop,
     appendClips,
     normalizeAudio,
+    outputAspect,
+    outputFill,
     resultName,
     resultBlob,
     hasResult,
@@ -711,6 +729,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     moveAppendClip,
     moveMergeItem,
     setNormalizeAudio,
+    setOutputAspect,
+    setOutputFill,
     clearAppendClips,
     setCrop,
     enableCrop,
