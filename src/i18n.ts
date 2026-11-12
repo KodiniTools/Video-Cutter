@@ -30,6 +30,18 @@ const messages = {
       empty: 'Noch keine Ausschnitte. Ohne Liste wird die aktuelle Auswahl verwendet.',
       hint: 'Video abspielen und mit ⏱ Start bzw. Ende auf die Wiedergabeposition setzen, dann hinzufügen.',
     },
+    append: {
+      title: 'Videos anhängen',
+      add: '+ Video hochladen',
+      remove: 'Video entfernen',
+      up: 'Nach oben',
+      down: 'Nach unten',
+      empty:
+        'Kein weiteres Video. Optional: Videos hochladen, die hinter die Ausschnitte gesetzt werden.',
+      hint: 'Angehängte Videos werden vollständig und in dieser Reihenfolge hinter die Ausschnitte gesetzt und mit ihnen zu einem Video zusammengefügt (neu kodiert, Auflösung des Hauptvideos). Die gewählte Animation gilt auch für diese Übergänge.',
+      limit: 'Maximal {max} Videos.',
+      main: 'Ausschnitte',
+    },
     anim: {
       menu: 'Animation',
       title: 'Animation der Ausschnitte',
@@ -94,6 +106,8 @@ const messages = {
       notVideo: 'Bitte eine Videodatei auswählen.',
       cropUnsupported:
         'Das Server-Backend ist veraltet und unterstützt den Bildausschnitt noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder den Bildausschnitt deaktivieren.',
+      appendUnsupported:
+        'Das Server-Backend ist veraltet und kann noch keine Videos zusammenfügen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder die angehängten Videos entfernen.',
     },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
@@ -124,6 +138,17 @@ const messages = {
       remove: 'Remove segment',
       empty: 'No segments yet. Without a list the current selection is used.',
       hint: 'Play the video and use ⏱ to set start or end to the playback position, then add.',
+    },
+    append: {
+      title: 'Append videos',
+      add: '+ Upload video',
+      remove: 'Remove video',
+      up: 'Move up',
+      down: 'Move down',
+      empty: 'No additional video. Optional: upload videos to place after the segments.',
+      hint: 'Appended videos are placed in full and in this order after the segments and joined with them into one video (re-encoded, resolution of the main video). The selected animation also applies to these transitions.',
+      limit: 'At most {max} videos.',
+      main: 'Segments',
     },
     anim: {
       menu: 'Animation',
@@ -189,6 +214,8 @@ const messages = {
       notVideo: 'Please choose a video file.',
       cropUnsupported:
         'The server backend is outdated and does not support cropping yet. Please update the backend (deploy/deploy.sh without SKIP_API) or disable the crop.',
+      appendUnsupported:
+        'The server backend is outdated and cannot join videos yet. Please update the backend (deploy/deploy.sh without SKIP_API) or remove the appended videos.',
     },
     footer: 'Server-side processing with FFmpeg.',
   },

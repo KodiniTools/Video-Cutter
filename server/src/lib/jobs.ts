@@ -17,6 +17,8 @@ interface Job {
   progress: number
   error: string | null
   inputPath: string
+  /** Weitere Eingabedateien (angehängte Videos) – werden mit aufgeräumt. */
+  extraInputPaths: string[]
   outputPath: string
   outputName: string
   handle: RunHandle | null
@@ -26,6 +28,12 @@ interface Job {
 
 function snapshot(job: Job): JobSnapshot {
   return { id: job.id, state: job.state, progress: job.progress, error: job.error }
+}
+
+async function removeInputs(job: Job): Promise<void> {
+  for (const p of [job.inputPath, ...job.extraInputPaths]) {
+    await rm(p, { force: true }).catch(() => {})
+  }
 }
 
 class JobManager {
@@ -48,13 +56,20 @@ class JobManager {
     return this.active
   }
 
-  create(params: { id: string; inputPath: string; outputPath: string; outputName: string }): Job {
+  create(params: {
+    id: string
+    inputPath: string
+    extraInputPaths?: string[]
+    outputPath: string
+    outputName: string
+  }): Job {
     const job: Job = {
       id: params.id,
       state: 'processing',
       progress: 0,
       error: null,
       inputPath: params.inputPath,
+      extraInputPaths: params.extraInputPaths ?? [],
       outputPath: params.outputPath,
       outputName: params.outputName,
       handle: null,
@@ -111,8 +126,8 @@ class JobManager {
     } finally {
       this.active--
       job.handle = null
-      // Eingabedatei wird nach dem Lauf nicht mehr gebraucht.
-      await rm(job.inputPath, { force: true }).catch(() => {})
+      // Eingabedateien werden nach dem Lauf nicht mehr gebraucht.
+      await removeInputs(job)
       this.emit(job)
     }
   }
@@ -131,7 +146,7 @@ class JobManager {
     const job = this.jobs.get(id)
     if (!job) return
     this.jobs.delete(id)
-    await rm(job.inputPath, { force: true }).catch(() => {})
+    await removeInputs(job)
     await rm(job.outputPath, { force: true }).catch(() => {})
   }
 

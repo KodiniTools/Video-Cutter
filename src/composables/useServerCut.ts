@@ -18,10 +18,18 @@ export const CUT_CANCELLED = 'CUT_CANCELLED'
  */
 export const CROP_UNSUPPORTED = 'CROP_UNSUPPORTED'
 
-/** Antwort von POST /api/cut. `crop` fehlt bei alten Backends. */
+/**
+ * Fehler-Kennung: Videos sollten angehängt werden, aber das Backend hat das
+ * Zusammenfügen nicht bestätigt (veralteter Server).
+ */
+export const APPEND_UNSUPPORTED = 'APPEND_UNSUPPORTED'
+
+/** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
   jobId: string
   crop?: boolean
+  /** Anzahl der vom Server übernommenen angehängten Videos. */
+  append?: number
 }
 
 /**
@@ -29,16 +37,17 @@ export interface JobStartResponse {
  * Exportiert, damit die Auswertung ohne XHR testbar ist.
  */
 export function parseJobStart(text: string): JobStartResponse {
-  let data: { jobId?: unknown; crop?: unknown }
+  let data: { jobId?: unknown; crop?: unknown; append?: unknown }
   try {
-    data = JSON.parse(text) as { jobId?: unknown; crop?: unknown }
+    data = JSON.parse(text) as { jobId?: unknown; crop?: unknown; append?: unknown }
   } catch {
     throw new Error('Ungültige Serverantwort.')
   }
   if (typeof data.jobId !== 'string' || !data.jobId) {
     throw new Error('Ungültige Serverantwort (keine jobId).')
   }
-  return { jobId: data.jobId, crop: data.crop === true }
+  const append = typeof data.append === 'number' && data.append > 0 ? data.append : 0
+  return { jobId: data.jobId, crop: data.crop === true, append }
 }
 
 interface JobEvent {
@@ -208,6 +217,8 @@ export interface CutTransition {
  * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
  * @param transition Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte.
  * @param crop       Optionaler Bildausschnitt (Anteile 0–1); erzwingt Re-Encode.
+ * @param appends    Weitere Videos, die vollständig hinter die Ausschnitte
+ *                   gehängt werden (Reihenfolge = Liste); erzwingt Re-Encode.
  */
 async function cut(
   file: File,
@@ -217,6 +228,7 @@ async function cut(
   total = 0,
   transition?: CutTransition,
   crop?: CropRect,
+  appends: File[] = [],
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -237,6 +249,7 @@ async function cut(
       form.append('transitionDuration', String(transition.duration))
     }
     if (crop) form.append('crop', JSON.stringify(crop))
+    for (const f of appends) form.append('append', f)
 
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
     let lastTime = 0
@@ -266,6 +279,13 @@ async function cut(
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
       throw new Error(CROP_UNSUPPORTED)
+    }
+
+    // Angehängte Videos nicht (vollständig) übernommen -> veralteter Server.
+    if (appends.length && started.append !== appends.length) {
+      currentJobId = null
+      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      throw new Error(APPEND_UNSUPPORTED)
     }
 
     // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).

@@ -463,3 +463,172 @@ export function outputDurationFor(keep: Segment[], transition?: Transition): num
   if (!xf || xf.preset === 'fade') return sum
   return Math.max(0, sum - (keep.length - 1) * xf.d)
 }
+
+// ---------------------------------------------------------------------------
+// Zusammenfügen mit weiteren (hochgeladenen) Videos
+// ---------------------------------------------------------------------------
+
+/** Ein angehängtes Video (wird vollständig hinter die Ausschnitte gesetzt). */
+export interface AppendClip {
+  path: string
+  /** Dauer in Sekunden (per ffprobe ermittelt, > 0). */
+  duration: number
+  /** Hat das Video eine Tonspur? Sonst wird Stille eingesetzt. */
+  hasAudio: boolean
+}
+
+export interface MergeArgsInput {
+  inputPath: string
+  outputPath: string
+  /** Zu behaltende Bereiche des Hauptvideos (bereits über computeKeepRanges ermittelt). */
+  keep: Segment[]
+  /** Hat das Hauptvideo eine Tonspur? */
+  mainHasAudio: boolean
+  /** Angehängte Videos in Reihenfolge. */
+  appends: AppendClip[]
+  /** Zielauflösung (gerade Pixelzahlen); alle Clips werden darauf skaliert/gepolstert. */
+  width: number
+  height: number
+  transition?: Transition
+  /** Bildausschnitt – gilt nur für das Hauptvideo (Anteile beziehen sich darauf). */
+  crop?: CropRect
+}
+
+/** Gemeinsame Bildrate aller Clips (concat/xfade verlangen identische Parameter). */
+const MERGE_FPS = 30
+/** Audio-Normierung: alle Clips auf 48 kHz Stereo (concat verlangt gleiches Format). */
+const AUDIO_NORM = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo'
+
+/** Rundet auf eine gerade Pixelzahl ≥ 2 (Encoder-Anforderung bei yuv420p). */
+export function evenPx(n: number): number {
+  return Math.max(2, Math.floor(n / 2) * 2)
+}
+
+/**
+ * Zielauflösung beim Zusammenfügen: die (ggf. zugeschnittene) Auflösung des
+ * Hauptvideos. Fallback 1280×720, falls ffprobe keine Maße lieferte.
+ */
+export function mergeTargetSize(
+  width: number,
+  height: number,
+  crop?: CropRect,
+): { width: number; height: number } {
+  if (!(width > 0) || !(height > 0)) return { width: 1280, height: 720 }
+  const w = crop ? width * Math.min(1, Math.max(MIN_CROP_RATIO, crop.width)) : width
+  const h = crop ? height * Math.min(1, Math.max(MIN_CROP_RATIO, crop.height)) : height
+  return { width: evenPx(w), height: evenPx(h) }
+}
+
+/**
+ * Fügt die behaltenen Bereiche des Hauptvideos und die angehängten Videos zu
+ * einer Datei zusammen. Jeder Clip wird auf gleiche Auflösung (Letterbox statt
+ * Verzerrung), Bildrate, Pixel- und Audioformat normiert; fehlende Tonspuren
+ * werden durch Stille ersetzt. Übergänge wie beim Mehrfach-Schnitt. Immer Re-Encode.
+ */
+export function buildMergeArgs({
+  inputPath,
+  outputPath,
+  keep,
+  mainHasAudio,
+  appends,
+  width,
+  height,
+  transition,
+  crop,
+}: MergeArgsInput): string[] {
+  const W = evenPx(width)
+  const H = evenPx(height)
+
+  const clips = [
+    ...keep.map((r) => ({
+      inputArgs: [
+        '-ss',
+        formatFfmpegTime(r.start),
+        '-t',
+        formatFfmpegTime(Math.max(0, r.duration)),
+        '-i',
+        inputPath,
+      ],
+      duration: r.duration,
+      hasAudio: mainHasAudio,
+      crop,
+    })),
+    ...appends.map((a) => ({
+      inputArgs: ['-i', a.path],
+      duration: a.duration,
+      hasAudio: a.hasAudio,
+      crop: undefined as CropRect | undefined,
+    })),
+  ]
+
+  const ranges: Segment[] = clips.map((c) => ({ start: 0, duration: c.duration }))
+  const xf = effectiveTransition(ranges, transition)
+  const dip = xf?.preset === 'fade' ? xf.d : 0
+
+  let filter = ''
+  clips.forEach((c, i) => {
+    const vfx = [
+      ...(c.crop ? [buildCropFilter(c.crop)] : []),
+      `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
+      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
+      'setsar=1',
+      `fps=${MERGE_FPS}`,
+      'format=yuv420p',
+      'setpts=PTS-STARTPTS',
+    ]
+    const afx = [AUDIO_NORM, 'asetpts=PTS-STARTPTS']
+    if (dip > 0) {
+      const fd = dip.toFixed(3)
+      const outStart = Math.max(0, c.duration - dip).toFixed(3)
+      if (i > 0) {
+        vfx.push(`fade=t=in:st=0:d=${fd}`)
+        afx.push(`afade=t=in:st=0:d=${fd}`)
+      }
+      if (i < clips.length - 1) {
+        vfx.push(`fade=t=out:st=${outStart}:d=${fd}`)
+        afx.push(`afade=t=out:st=${outStart}:d=${fd}`)
+      }
+    }
+    filter += `[${i}:v]${vfx.join(',')}[v${i}];`
+    // Ohne Tonspur: Stille in exakt der Clip-Länge erzeugen.
+    const aSrc = c.hasAudio
+      ? `[${i}:a]`
+      : `anullsrc=r=48000:cl=stereo:d=${Math.max(0.001, c.duration).toFixed(3)},`
+    filter += `${aSrc}${afx.join(',')}[a${i}];`
+  })
+
+  if (xf && xf.preset !== 'fade' && clips.length > 1) {
+    let vPrev = 'v0'
+    let aPrev = 'a0'
+    let acc = clips[0].duration
+    for (let t = 1; t < clips.length; t++) {
+      const offset = acc - t * xf.d
+      const last = t === clips.length - 1
+      const vOut = last ? 'outv' : `vx${t}`
+      const aOut = last ? 'outa' : `ax${t}`
+      filter += `[${vPrev}][v${t}]xfade=transition=${xf.type}:duration=${xf.d.toFixed(3)}:offset=${offset.toFixed(3)}[${vOut}];`
+      filter += `[${aPrev}][a${t}]acrossfade=d=${xf.d.toFixed(3)}:c1=tri:c2=tri[${aOut}];`
+      vPrev = vOut
+      aPrev = aOut
+      acc += clips[t].duration
+    }
+    filter = filter.replace(/;$/, '')
+  } else {
+    filter +=
+      clips.map((_, i) => `[v${i}][a${i}]`).join('') +
+      `concat=n=${clips.length}:v=1:a=1[outv][outa]`
+  }
+
+  return [
+    ...PROGRESS,
+    ...clips.flatMap((c) => c.inputArgs),
+    '-filter_complex',
+    filter,
+    '-map',
+    '[outv]',
+    '-map',
+    '[outa]',
+    ...reencodeCodecs(outputPath),
+    outputPath,
+  ]
+}

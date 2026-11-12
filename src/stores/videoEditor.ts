@@ -23,6 +23,21 @@ export interface CropRect {
   height: number
 }
 
+/**
+ * Ein weiteres Video, das beim Schneiden vollständig HINTER die Ausschnitte
+ * gehängt (zusammengefügt) wird.
+ */
+export interface AppendClip {
+  /** Stabile ID für Liste/Reihenfolge. */
+  id: number
+  file: File
+  /** Dauer in Sekunden; 0 = (noch) unbekannt. Nur für die Anzeige. */
+  duration: number
+}
+
+/** Höchstzahl angehängter Videos (muss zu MAX_APPEND_FILES im Backend passen). */
+export const MAX_APPEND_CLIPS = 5
+
 /** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands. */
 interface EditorSnapshot {
   startTime: number
@@ -66,6 +81,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const segments = ref<Segment[]>([])
   /** Räumlicher Bildausschnitt. `null` = kein Zuschneiden (volles Bild). */
   const crop = ref<CropRect | null>(null)
+  /**
+   * Angehängte Videos (in Reihenfolge). Bewusst NICHT Teil von Undo/Redo –
+   * es sind Dateien, keine Bearbeitungswerte.
+   */
+  const appendClips = ref<AppendClip[]>([])
+  let nextAppendId = 1
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -92,6 +113,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const hasResult = computed(() => resultBlob.value !== null)
   /** Zuschneiden aktiv? (erzwingt Re-Encode, da FFmpeg dafür Frames dekodieren muss.) */
   const hasCrop = computed(() => crop.value !== null)
+  /** Werden weitere Videos angehängt? (erzwingt Re-Encode.) */
+  const hasAppends = computed(() => appendClips.value.length > 0)
+  const canAppend = computed(() => appendClips.value.length < MAX_APPEND_CLIPS)
   /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
   const cropPixelSize = computed(() => {
     if (!crop.value || !videoWidth.value || !videoHeight.value) return null
@@ -253,6 +277,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     segments.value = []
     crop.value = null
+    appendClips.value = []
   }
 
   function setDuration(d: number): void {
@@ -356,6 +381,45 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     endTime.value = currentTime.value
   }
 
+  /**
+   * Hängt Videos an (max. MAX_APPEND_CLIPS insgesamt). Gibt die angelegten
+   * Einträge zurück, damit die UI deren Dauer nachladen kann.
+   */
+  function addAppendClips(files: File[]): AppendClip[] {
+    const free = MAX_APPEND_CLIPS - appendClips.value.length
+    const added = files.slice(0, Math.max(0, free)).map((file) => ({
+      id: nextAppendId++,
+      file,
+      duration: 0,
+    }))
+    if (added.length) appendClips.value = [...appendClips.value, ...added]
+    return added
+  }
+
+  function setAppendDuration(id: number, d: number): void {
+    const dur = Number.isFinite(d) && d > 0 ? d : 0
+    appendClips.value = appendClips.value.map((c) => (c.id === id ? { ...c, duration: dur } : c))
+  }
+
+  function removeAppendClip(id: number): void {
+    appendClips.value = appendClips.value.filter((c) => c.id !== id)
+  }
+
+  /** Verschiebt ein angehängtes Video um `delta` Plätze (−1 = nach oben). */
+  function moveAppendClip(id: number, delta: number): void {
+    const list = [...appendClips.value]
+    const from = list.findIndex((c) => c.id === id)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= list.length) return
+    const [item] = list.splice(from, 1)
+    list.splice(to, 0, item)
+    appendClips.value = list
+  }
+
+  function clearAppendClips(): void {
+    appendClips.value = []
+  }
+
   function removeSegment(index: number): void {
     segments.value = segments.value.filter((_, i) => i !== index)
   }
@@ -383,6 +447,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     segments.value = []
     crop.value = null
+    // Angehängte Videos sind jetzt Teil des Ergebnisses.
+    appendClips.value = []
     error.value = ''
     // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
@@ -408,6 +474,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     error.value = ''
     segments.value = []
     crop.value = null
+    appendClips.value = []
     resetHistory()
   }
 
@@ -426,6 +493,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     operation,
     segments,
     crop,
+    appendClips,
     resultName,
     resultBlob,
     hasResult,
@@ -440,6 +508,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canRedo,
     hasCrop,
     cropPixelSize,
+    hasAppends,
+    canAppend,
     // actions
     setFile,
     setDuration,
@@ -454,6 +524,11 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     addSegment,
     removeSegment,
     clearSegments,
+    addAppendClips,
+    setAppendDuration,
+    removeAppendClip,
+    moveAppendClip,
+    clearAppendClips,
     setCrop,
     enableCrop,
     clearCrop,
