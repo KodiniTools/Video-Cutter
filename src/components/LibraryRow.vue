@@ -218,26 +218,6 @@ function commitEnd(): void {
         </small>
       </button>
       <button
-        class="btn tiny"
-        type="button"
-        :disabled="!canUp || disabled"
-        :aria-label="t('append.up')"
-        :title="t('append.up')"
-        @click="emit('move', -1)"
-      >
-        ↑
-      </button>
-      <button
-        class="btn tiny"
-        type="button"
-        :disabled="!canDown || disabled"
-        :aria-label="t('append.down')"
-        :title="t('append.down')"
-        @click="emit('move', 1)"
-      >
-        ↓
-      </button>
-      <button
         class="btn tiny remove"
         type="button"
         :disabled="disabled"
@@ -309,15 +289,37 @@ function commitEnd(): void {
       </div>
     </div>
 
-    <label class="include">
-      <input
-        type="checkbox"
-        :checked="item.include"
-        :disabled="disabled"
-        @change="emit('include', ($event.target as HTMLInputElement).checked)"
-      />
-      <span>{{ t('library.include') }}</span>
-    </label>
+    <div class="row-foot">
+      <label class="include">
+        <input
+          type="checkbox"
+          :checked="item.include"
+          :disabled="disabled"
+          @change="emit('include', ($event.target as HTMLInputElement).checked)"
+        />
+        <span>{{ t('library.include') }}</span>
+      </label>
+      <button
+        class="btn tiny"
+        type="button"
+        :disabled="!canUp || disabled"
+        :aria-label="t('append.up')"
+        :title="t('append.up')"
+        @click="emit('move', -1)"
+      >
+        ↑
+      </button>
+      <button
+        class="btn tiny"
+        type="button"
+        :disabled="!canDown || disabled"
+        :aria-label="t('append.down')"
+        :title="t('append.down')"
+        @click="emit('move', 1)"
+      >
+        ↓
+      </button>
+    </div>
 
     <div v-if="item.include" class="range">
       <label class="range-field">
@@ -476,6 +478,9 @@ function commitEnd(): void {
   white-space: nowrap;
 }
 .info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ds-text-2);
   font-variant-numeric: tabular-nums;
 }
@@ -520,7 +525,14 @@ function commitEnd(): void {
 .retry {
   align-self: flex-start;
 }
+.row-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .include {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
