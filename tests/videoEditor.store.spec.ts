@@ -607,4 +607,29 @@ describe('videoEditor store – Videos anhängen', () => {
     store.setOutputFill('blur')
     expect([store.outputAspect, store.outputFill]).toEqual(['9:16', 'blur'])
   })
+
+  it('Hintergrundmusik: wählen, Einstellungen begrenzen, ersetzen, leeren', () => {
+    const store = loadVideo(30)
+    expect(store.hasMusic).toBe(false)
+    store.updateMusic({ volume: 0.5 }) // ohne Musik: keine Wirkung
+    expect(store.music).toBeNull()
+
+    store.setMusicFile(new File([new Uint8Array([1])], 'a.mp3', { type: 'audio/mpeg' }))
+    expect(store.music).toMatchObject({ volume: 0.3, originalVolume: 1, fade: true, loop: true })
+    store.updateMusic({ volume: 7, originalVolume: -1, fade: false })
+    expect(store.music).toMatchObject({ volume: 1, originalVolume: 0, fade: false })
+    store.updateMusic({ volume: Number.NaN })
+    expect(store.music?.volume).toBe(1)
+
+    // Neue Datei behält die Einstellungen.
+    store.setMusicFile(new File([new Uint8Array([1])], 'b.mp3', { type: 'audio/mpeg' }))
+    expect(store.music).toMatchObject({ volume: 1, originalVolume: 0, fade: false })
+    expect(store.music?.file.name).toBe('b.mp3')
+
+    store.applyCutResult(new Blob(['x'], { type: 'video/mp4' }), 'clip_cut.mp4')
+    expect(store.music).toBeNull()
+    store.setMusicFile(new File([new Uint8Array([1])], 'c.mp3', { type: 'audio/mpeg' }))
+    store.reset()
+    expect(store.music).toBeNull()
+  })
 })

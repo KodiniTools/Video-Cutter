@@ -68,7 +68,7 @@ Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
 Datei `{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
 Ausschnitt einfügen) und optional `normalizeAudio=1`. Analyse per `ffprobe`
 (`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet
-`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat"]`.
+`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat","music"]`.
 Ein älteres Backend ohne diese Features wird erkannt; der Job wird dann mit
 Hinweis abgebrochen statt falsch zusammengefügt.
 
@@ -84,6 +84,17 @@ Re-Encode.
 
 Backend: optionale Felder `outputAspect` (`auto|16:9|9:16|1:1`) und
 `outputFill` (`pad|blur|crop`), Feature `outputFormat`.
+
+## Hintergrundmusik
+
+In der Karte **„Hintergrundmusik"** lässt sich eine Audiodatei (oder ein Video
+mit Tonspur) unter das gesamte Ergebnis legen, inklusive angehängter Videos.
+Einstellbar sind die Lautstärke von **Musik** und **Originalton**,
+**Ein-/Ausblenden** (2 s) und **Wiederholen**, falls die Musik kürzer ist. Die
+Musik endet mit dem Video. Erzwingt Re-Encode.
+
+Backend: optionale Datei `music` (audio/* oder video/*) mit `musicVolume`,
+`musicOriginalVolume` (je 0–1), `musicFade`, `musicLoop`; Feature `music`.
 
 ## Deployment auf den VPS
 

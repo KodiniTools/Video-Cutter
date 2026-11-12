@@ -9,6 +9,7 @@ import {
   mergeSequence,
   LOUDNORM_FILTER,
   outputTargetSize,
+  musicMixFilter,
 } from '../src/lib/args'
 import { parseProbeOutput } from '../src/lib/probe'
 import {
@@ -16,6 +17,7 @@ import {
   parseCutParams,
   parseNormalizeAudio,
   parseOutputFormat,
+  parseMusicParams,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -892,5 +894,85 @@ describe('Ausgabeformat (Seitenverhältnis + Füllmodus)', () => {
     })
     expect(() => parseOutputFormat({ outputAspect: '4:3' })).toThrow(ValidationError)
     expect(() => parseOutputFormat({ outputFill: 'stretch' })).toThrow(ValidationError)
+  })
+})
+
+describe('Hintergrundmusik', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 2, duration: 3 }],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+    appends: [{ path: '/tmp/b.mp4', duration: 5, hasAudio: true }],
+  }
+  const music = { path: '/tmp/m.mp3', volume: 0.3, originalVolume: 1, fade: true, loop: true }
+  const filterOf = (args: string[]) => args[args.indexOf('-filter_complex') + 1]
+
+  it('Musik als letzter Input (mit Endlosschleife) und Mischung in [outa]', () => {
+    const args = buildMergeArgs({ ...base, music })
+    const i = args.indexOf('/tmp/m.mp3')
+    expect(args.slice(i - 3, i + 1)).toEqual(['-stream_loop', '-1', '-i', '/tmp/m.mp3'])
+    // Musik kommt nach allen Clip-Inputs, vor dem Filtergraph.
+    expect(i).toBeLessThan(args.indexOf('-filter_complex'))
+    const f = filterOf(args)
+    expect(f).toContain('concat=n=2:v=1:a=1[outv][amain]')
+    expect(f).toContain('[2:a]aresample=48000')
+    expect(f).toContain('volume=0.300,atrim=0:8.000')
+    expect(f).toContain('afade=t=in:st=0:d=2.000')
+    expect(f).toContain('afade=t=out:st=6.000:d=2.000')
+    expect(f).toContain('[amain]volume=1.000[aorig]')
+    expect(f).toMatch(
+      /\[aorig\]\[mus\]amix=inputs=2:duration=first:dropout_transition=0,volume=2\[outa\]$/,
+    )
+    expect(args.slice(args.indexOf('-map'), args.indexOf('-map') + 4)).toEqual([
+      '-map',
+      '[outv]',
+      '-map',
+      '[outa]',
+    ])
+  })
+
+  it('ohne Wiederholen/Fades; mit xfade endet die Kette ebenfalls in [amain]', () => {
+    const args = buildMergeArgs({
+      ...base,
+      music: { ...music, loop: false, fade: false },
+      transition: { preset: 'slide', duration: 2 },
+    })
+    expect(args).not.toContain('-stream_loop')
+    const f = filterOf(args)
+    expect(f).not.toContain('afade=')
+    expect(f).toContain('acrossfade=d=1.000:c1=tri:c2=tri[amain]')
+    // Gesamtlänge = 3 + 5 - 1 (Überlappung).
+    expect(f).toContain('atrim=0:7.000')
+  })
+
+  it('ohne Musik unverändert [outa] aus concat', () => {
+    const f = filterOf(buildMergeArgs(base))
+    expect(f).toContain('concat=n=2:v=1:a=1[outv][outa]')
+    expect(f).not.toContain('amix')
+  })
+
+  it('musicMixFilter begrenzt Lautstärken und Fade-Länge', () => {
+    const f = musicMixFilter({ ...music, volume: 5, originalVolume: -1 }, 3, 'x', 4)
+    expect(f).toContain('volume=1.000,atrim=0:4.000')
+    expect(f).toContain('[x]volume=0.000[aorig]')
+    expect(f).toContain('afade=t=in:st=0:d=1.000')
+    expect(f).toContain('afade=t=out:st=3.000:d=1.000')
+  })
+
+  it('parseMusicParams: Standardwerte, Werte, Fehler', () => {
+    expect(parseMusicParams({})).toEqual({ volume: 0.3, originalVolume: 1, fade: true, loop: true })
+    expect(
+      parseMusicParams({
+        musicVolume: '0.5',
+        musicOriginalVolume: '0',
+        musicFade: '0',
+        musicLoop: 'false',
+      }),
+    ).toEqual({ volume: 0.5, originalVolume: 0, fade: false, loop: false })
+    expect(() => parseMusicParams({ musicVolume: '2' })).toThrow(ValidationError)
+    expect(() => parseMusicParams({ musicOriginalVolume: 'x' })).toThrow(ValidationError)
   })
 })

@@ -83,6 +83,22 @@ export type OutputAspect = 'auto' | '16:9' | '9:16' | '1:1'
 /** Füllmodus bei abweichendem Seitenverhältnis: Balken, unscharfer Hintergrund, zuschneiden. */
 export type OutputFill = 'pad' | 'blur' | 'crop'
 
+/** Hintergrundmusik, die unter das gesamte Ergebnis gemischt wird. */
+export interface MusicSettings {
+  file: File
+  /** Musik-Lautstärke 0–1. */
+  volume: number
+  /** Lautstärke des Originaltons 0–1. */
+  originalVolume: number
+  /** Am Anfang ein-, am Ende ausblenden. */
+  fade: boolean
+  /** Wiederholen, falls die Musik kürzer als das Video ist. */
+  loop: boolean
+}
+
+/** Standardwerte für neu gewählte Musik. */
+export const DEFAULT_MUSIC_VOLUME = 0.3
+
 /** Höchstzahl angehängter Videos (muss zu MAX_APPEND_FILES im Backend passen). */
 export const MAX_APPEND_CLIPS = 5
 
@@ -140,6 +156,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   /** Ausgabeformat (Einstellung, kein Undo). */
   const outputAspect = ref<OutputAspect>('auto')
   const outputFill = ref<OutputFill>('pad')
+  /** Hintergrundmusik (`null` = keine). Wie angehängte Videos kein Teil von Undo. */
+  const music = ref<MusicSettings | null>(null)
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -169,6 +187,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   /** Werden weitere Videos angehängt? (erzwingt Re-Encode.) */
   const hasAppends = computed(() => appendClips.value.length > 0)
   const canAppend = computed(() => appendClips.value.length < MAX_APPEND_CLIPS)
+  /** Hintergrundmusik gewählt? (erzwingt Re-Encode.) */
+  const hasMusic = computed(() => music.value !== null)
   /** Angehängte Videos getrennt nach Position (je Gruppe in Listenreihenfolge). */
   const appendsBefore = computed(() => appendClips.value.filter((c) => c.position === 'before'))
   const appendsAfter = computed(() => appendClips.value.filter((c) => c.position === 'after'))
@@ -361,6 +381,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
     crop.value = null
     appendClips.value = []
+    music.value = null
   }
 
   function setDuration(d: number): void {
@@ -604,6 +625,27 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     outputFill.value = f
   }
 
+  /** Wählt eine Musikdatei; Einstellungen einer vorherigen Musik bleiben erhalten. */
+  function setMusicFile(f: File): void {
+    music.value = music.value
+      ? { ...music.value, file: f }
+      : { file: f, volume: DEFAULT_MUSIC_VOLUME, originalVolume: 1, fade: true, loop: true }
+  }
+
+  /** Ändert Musik-Einstellungen; Lautstärken werden auf 0–1 begrenzt. */
+  function updateMusic(patch: Partial<Omit<MusicSettings, 'file'>>): void {
+    if (!music.value) return
+    const next = { ...music.value, ...patch }
+    const unit = (v: number, fb: number) => (Number.isFinite(v) ? clamp(v, 0, 1) : fb)
+    next.volume = unit(next.volume, music.value.volume)
+    next.originalVolume = unit(next.originalVolume, music.value.originalVolume)
+    music.value = next
+  }
+
+  function clearMusic(): void {
+    music.value = null
+  }
+
   function clearAppendClips(): void {
     appendClips.value = []
   }
@@ -635,8 +677,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     segments.value = []
     crop.value = null
-    // Angehängte Videos sind jetzt Teil des Ergebnisses.
+    // Angehängte Videos und Musik sind jetzt Teil des Ergebnisses.
     appendClips.value = []
+    music.value = null
     error.value = ''
     // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
@@ -663,6 +706,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
     crop.value = null
     appendClips.value = []
+    music.value = null
     resetHistory()
   }
 
@@ -685,6 +729,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     normalizeAudio,
     outputAspect,
     outputFill,
+    music,
     resultName,
     resultBlob,
     hasResult,
@@ -701,6 +746,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     cropPixelSize,
     hasAppends,
     canAppend,
+    hasMusic,
     appendsBefore,
     appendsAfter,
     mainParts,
@@ -731,6 +777,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setNormalizeAudio,
     setOutputAspect,
     setOutputFill,
+    setMusicFile,
+    updateMusic,
+    clearMusic,
     clearAppendClips,
     setCrop,
     enableCrop,
