@@ -68,9 +68,22 @@ Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
 Datei `{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
 Ausschnitt einfügen) und optional `normalizeAudio=1`. Analyse per `ffprobe`
 (`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet
-`"features":["crop","append","appendTrim","appendSlots","normalizeAudio"]`.
+`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat"]`.
 Ein älteres Backend ohne diese Features wird erkannt; der Job wird dann mit
 Hinweis abgebrochen statt falsch zusammengefügt.
+
+## Ausgabeformat (16:9 / 9:16 / 1:1)
+
+Das Menü **„Ausgabeformat"** in der Werkzeugleiste stellt das Seitenverhältnis
+des Ergebnisses ein: **Original** (wie Hauptvideo bzw. Bildausschnitt),
+**16:9**, **9:16** oder **1:1**. Die kurze Kante des Hauptvideos bleibt dabei
+erhalten (1920×1080 → 9:16 = 1080×1920). Clips mit anderem Seitenverhältnis
+werden wahlweise mit **schwarzen Balken**, auf **unscharfem Hintergrund** oder
+**zugeschnitten** eingepasst. Gilt auch ohne angehängte Videos; erzwingt
+Re-Encode.
+
+Backend: optionale Felder `outputAspect` (`auto|16:9|9:16|1:1`) und
+`outputFill` (`pad|blur|crop`), Feature `outputFormat`.
 
 ## Deployment auf den VPS
 

@@ -4,6 +4,7 @@ import {
   useServerCut,
   CROP_UNSUPPORTED,
   APPEND_UNSUPPORTED,
+  FORMAT_UNSUPPORTED,
 } from '@/composables/useServerCut'
 
 describe('parseJobStart', () => {
@@ -15,6 +16,7 @@ describe('parseJobStart', () => {
       appendTrim: false,
       appendSlots: false,
       normalizeAudio: false,
+      outputFormat: false,
     })
   })
 
@@ -26,6 +28,7 @@ describe('parseJobStart', () => {
       appendTrim: false,
       appendSlots: false,
       normalizeAudio: false,
+      outputFormat: false,
     })
   })
 
@@ -193,6 +196,48 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
     expect(parseJobStart('{"jobId":"j"}')).toMatchObject({
       appendSlots: false,
       normalizeAudio: false,
+      outputFormat: false,
     })
+  })
+
+  it('sendet Ausgabeformat nur bei != auto und bricht ab, wenn der Server es nicht bestätigt', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-6"}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const { cut } = useServerCut()
+
+    await expect(
+      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [], false, {
+        aspect: '9:16',
+        fill: 'blur',
+      }),
+    ).rejects.toThrow(FORMAT_UNSUPPORTED)
+    expect(instances[0].sentForm?.get('outputAspect')).toBe('9:16')
+    expect(instances[0].sentForm?.get('outputFill')).toBe('blur')
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-6', { method: 'DELETE' })
+  })
+
+  it("'auto' sendet keine Formatfelder", async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-7"}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        onmessage: null | ((ev: { data: string }) => void) = null
+        onerror: null | (() => void) = null
+        constructor() {
+          queueMicrotask(() =>
+            this.onmessage?.({ data: '{"state":"done","progress":100,"error":null}' }),
+          )
+        }
+        close(): void {}
+      },
+    )
+    fetchMock.mockResolvedValueOnce(new Response('xyz', { status: 200 }))
+    const { cut } = useServerCut()
+    await cut(file, segments, 'copy', 'keep', 10, undefined, undefined, [], false, {
+      aspect: 'auto',
+      fill: 'pad',
+    })
+    expect(instances[0].sentForm?.has('outputAspect')).toBe(false)
   })
 })

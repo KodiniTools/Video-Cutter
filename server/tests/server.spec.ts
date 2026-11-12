@@ -8,12 +8,14 @@ import {
   mergeTargetSize,
   mergeSequence,
   LOUDNORM_FILTER,
+  outputTargetSize,
 } from '../src/lib/args'
 import { parseProbeOutput } from '../src/lib/probe'
 import {
   parseAppendMeta,
   parseCutParams,
   parseNormalizeAudio,
+  parseOutputFormat,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -824,5 +826,71 @@ describe('Lautstärke angleichen (loudnorm)', () => {
     expect(parseNormalizeAudio({ normalizeAudio: '1' })).toBe(true)
     expect(parseNormalizeAudio({ normalizeAudio: 'true' })).toBe(true)
     expect(parseNormalizeAudio({ normalizeAudio: '0' })).toBe(false)
+  })
+})
+
+describe('Ausgabeformat (Seitenverhältnis + Füllmodus)', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 2, duration: 3 }],
+    mainHasAudio: true,
+    width: 1080,
+    height: 1920,
+    appends: [],
+  }
+  const filterOf = (args: string[]) => args[args.indexOf('-filter_complex') + 1]
+
+  it('outputTargetSize behält die kurze Kante', () => {
+    const hd = { width: 1920, height: 1080 }
+    expect(outputTargetSize(hd, 'auto')).toEqual({ width: 1920, height: 1080 })
+    expect(outputTargetSize(hd, '16:9')).toEqual({ width: 1920, height: 1080 })
+    expect(outputTargetSize(hd, '9:16')).toEqual({ width: 1080, height: 1920 })
+    expect(outputTargetSize(hd, '1:1')).toEqual({ width: 1080, height: 1080 })
+    // Ungerade/kleine Quellen -> gerade Pixelzahlen.
+    expect(outputTargetSize({ width: 641, height: 361 }, '9:16')).toEqual({
+      width: 360,
+      height: 640,
+    })
+  })
+
+  it("'pad' (Standard) = schwarze Balken wie bisher", () => {
+    const f = filterOf(buildMergeArgs(base))
+    expect(f).toContain('scale=1080:1920:force_original_aspect_ratio=decrease')
+    expect(f).toContain('pad=1080:1920:(ow-iw)/2:(oh-ih)/2')
+  })
+
+  it("'crop' füllt und schneidet den Überstand ab", () => {
+    const f = filterOf(buildMergeArgs({ ...base, fill: 'crop' }))
+    expect(f).toContain('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,')
+    expect(f).not.toContain('pad=')
+  })
+
+  it("'blur' legt das Bild auf einen unscharfen Hintergrund", () => {
+    const f = filterOf(buildMergeArgs({ ...base, fill: 'blur' }))
+    expect(f).toContain('[0:v]split=2[v0b][v0f];')
+    expect(f).toContain(
+      '[v0b]scale=134:240:force_original_aspect_ratio=increase,crop=134:240,gblur',
+    )
+    expect(f).toContain('scale=1080:1920,setsar=1[v0bb]')
+    expect(f).toContain('[v0bb][v0ff]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30')
+    expect(f).toContain('concat=n=1:v=1:a=1[outv][outa]')
+  })
+
+  it("'blur' mit Crop: Zuschnitt vor dem split", () => {
+    const f = filterOf(
+      buildMergeArgs({ ...base, fill: 'blur', crop: { x: 0, y: 0, width: 0.5, height: 1 } }),
+    )
+    expect(f).toMatch(/\[0:v\]crop=[^;]*,split=2\[v0b\]\[v0f\]/)
+  })
+
+  it('parseOutputFormat: Standard, gültige und ungültige Werte', () => {
+    expect(parseOutputFormat({})).toEqual({ aspect: 'auto', fill: 'pad' })
+    expect(parseOutputFormat({ outputAspect: '9:16', outputFill: 'blur' })).toEqual({
+      aspect: '9:16',
+      fill: 'blur',
+    })
+    expect(() => parseOutputFormat({ outputAspect: '4:3' })).toThrow(ValidationError)
+    expect(() => parseOutputFormat({ outputFill: 'stretch' })).toThrow(ValidationError)
   })
 })

@@ -7,6 +7,10 @@ import {
   type TransitionPreset,
   type CropRect,
   type AppendPosition,
+  type OutputAspect,
+  type OutputFill,
+  OUTPUT_ASPECTS,
+  OUTPUT_FILLS,
 } from './args'
 
 export class ValidationError extends Error {
@@ -190,6 +194,27 @@ export interface AppendMeta {
 
 /** Höchster sinnvoller Slot-Wert (größere Werte bedeuten ohnehin „am Ende"). */
 const MAX_APPEND_SLOT = 10_000
+
+/**
+ * Liest das Ausgabeformat (`outputAspect`, `outputFill`). Fehlende Felder =
+ * Standard (auto / Balken); unbekannte Werte werden abgelehnt.
+ */
+export function parseOutputFormat(body: Record<string, unknown>): {
+  aspect: OutputAspect
+  fill: OutputFill
+} {
+  const a = body.outputAspect
+  const f = body.outputFill
+  const aspect = a === undefined || a === '' ? 'auto' : a
+  const fill = f === undefined || f === '' ? 'pad' : f
+  if (typeof aspect !== 'string' || !OUTPUT_ASPECTS.includes(aspect as OutputAspect)) {
+    throw new ValidationError('Ungültiges Ausgabeformat.')
+  }
+  if (typeof fill !== 'string' || !OUTPUT_FILLS.includes(fill as OutputFill)) {
+    throw new ValidationError('Ungültiger Füllmodus.')
+  }
+  return { aspect: aspect as OutputAspect, fill: fill as OutputFill }
+}
 
 /** Liest den Schalter „Lautstärke angleichen" (`normalizeAudio`: '1'/'true'). */
 export function parseNormalizeAudio(body: Record<string, unknown>): boolean {
