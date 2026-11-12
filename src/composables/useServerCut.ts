@@ -1,13 +1,8 @@
 import { ref } from 'vue'
 import type { TrimMode } from '@/lib/ffmpegCommand'
 import type { CutOperation, CropRect } from '@/stores/videoEditor'
-
-/**
- * Basis-URL des Backends.
- * - Produktion: VITE_API_BASE=/video-cutter -> Aufrufe unter /video-cutter/api/*
- * - Entwicklung: leer lassen, Vite proxyt /api auf den Dev-Server.
- */
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
+import { API_BASE } from '@/lib/apiBase'
+import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
 export const CUT_CANCELLED = 'CUT_CANCELLED'
@@ -51,6 +46,8 @@ export interface JobStartResponse {
   music?: boolean
   /** Hat der Server die Übergänge je Nahtstelle übernommen? */
   seamTransitions?: boolean
+  /** Wird das Ergebnis in der Video-Bibliothek gespeichert? */
+  storeResult?: boolean
 }
 
 /**
@@ -68,6 +65,7 @@ export function parseJobStart(text: string): JobStartResponse {
     outputFormat?: unknown
     music?: unknown
     seamTransitions?: unknown
+    storeResult?: unknown
   }
   let data: Raw
   try {
@@ -89,6 +87,7 @@ export function parseJobStart(text: string): JobStartResponse {
     outputFormat: data.outputFormat === true,
     music: data.music === true,
     seamTransitions: data.seamTransitions === true,
+    storeResult: data.storeResult === true,
   }
 }
 
@@ -96,6 +95,8 @@ interface JobEvent {
   state: 'processing' | 'done' | 'error'
   progress: number
   error: string | null
+  /** Bibliotheks-ID des Ergebnisses (nur mit `storeResult`). */
+  mediaId?: string
 }
 
 /** Aktuelle Phase für die UI: Upload der Datei oder serverseitige Verarbeitung. */
@@ -178,8 +179,11 @@ function uploadForJob(
   })
 }
 
-/** Wartet via SSE bis der Job fertig ist; aktualisiert `progress`. */
-function waitForJob(jobId: string): Promise<void> {
+/**
+ * Wartet via SSE bis der Job fertig ist; aktualisiert `progress`. Liefert die
+ * Bibliotheks-ID des Ergebnisses, falls der Server es gespeichert hat.
+ */
+function waitForJob(jobId: string): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     const source = new EventSource(`${API_BASE}/api/cut/${jobId}/events`)
     currentSource = source
@@ -202,7 +206,7 @@ function waitForJob(jobId: string): Promise<void> {
         settled = true
         cleanup()
         source.close()
-        resolve()
+        resolve(typeof data.mediaId === 'string' && data.mediaId ? data.mediaId : undefined)
       } else if (data.state === 'error') {
         settled = true
         cleanup()
@@ -252,9 +256,13 @@ export interface CutTransition {
   duration: number
 }
 
-/** Ein angehängtes Video mit optionaler Kürzung und Position. */
+/**
+ * Ein angehängtes Video mit optionaler Kürzung und Position – entweder als
+ * Datei (`file`, wird hochgeladen) ODER als Bibliotheks-ID (`mediaId`).
+ */
 export interface AppendInput {
-  file: File
+  file?: File
+  mediaId?: string
   /** Startpunkt im angehängten Video (Sekunden), Standard 0. */
   start?: number
   /** Verwendete Länge (Sekunden); fehlt = bis zum Ende. */
@@ -285,8 +293,176 @@ function needsAppendTrim(a: AppendInput): boolean {
   return (a.start ?? 0) > 0 || a.duration !== undefined || a.position === 'before'
 }
 
+/** Alle Parameter eines Server-Jobs (intern). */
+interface JobRequest {
+  /** Hauptvideo: Datei (Upload) oder Bibliotheks-ID. */
+  source: File | { mediaId: string }
+  segments: CutSegment[]
+  mode: TrimMode
+  operation: CutOperation
+  total: number
+  transition?: CutTransition
+  crop?: CropRect
+  appends: AppendInput[]
+  normalizeAudio: boolean
+  output?: CutOutputFormat
+  music?: MusicInput
+  seams?: (string | null)[]
+  /** Ergebnis in der Bibliothek speichern (statt zum Download bereitzuhalten). */
+  storeResult?: boolean
+}
+
+/** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
+async function abortJob(jobId: string, code: string): Promise<never> {
+  currentJobId = null
+  await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
+  throw new Error(code)
+}
+
 /**
- * Schneidet ein Video serverseitig.
+ * Lädt hoch bzw. referenziert die Bibliothek, legt den Job an, prüft die
+ * Bestätigungen des Backends und wartet bis zum Ende (SSE).
+ */
+async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?: string }> {
+  const { segments, mode, operation, total, transition, crop, appends, normalizeAudio } = req
+  const { output, music, seams } = req
+  const form = new FormData()
+  // Textfelder vor den Dateien, damit der Server sie beim Upload schon kennt.
+  if (!(req.source instanceof File)) form.append('mediaId', req.source.mediaId)
+  if (req.storeResult) form.append('storeResult', '1')
+  form.append('segments', JSON.stringify(segments))
+  form.append('mode', mode)
+  form.append('operation', operation)
+  if (operation === 'remove') form.append('total', String(total))
+  if (transition && transition.preset !== 'none') {
+    form.append('transitionPreset', transition.preset)
+    form.append('transitionDuration', String(transition.duration))
+  }
+  const wantsSeams = appends.length > 0 && seams !== undefined && seams.some((p) => p !== null)
+  if (wantsSeams) {
+    form.append('seamTransitions', JSON.stringify(seams))
+    // Dauer auch dann mitschicken, wenn global „keine" Animation gewählt ist.
+    if (!form.has('transitionDuration') && transition) {
+      form.append('transitionDuration', String(transition.duration))
+    }
+  }
+  if (crop) form.append('crop', JSON.stringify(crop))
+  const wantsFormat = output !== undefined && output.aspect !== 'auto'
+  if (wantsFormat) {
+    form.append('outputAspect', output.aspect)
+    form.append('outputFill', output.fill)
+  }
+  if (music) {
+    form.append('musicVolume', String(music.volume))
+    form.append('musicOriginalVolume', String(music.originalVolume))
+    form.append('musicFade', music.fade ? '1' : '0')
+    form.append('musicLoop', music.loop ? '1' : '0')
+  }
+  if (appends.length) {
+    form.append(
+      'appendMeta',
+      JSON.stringify(
+        appends.map((a) => ({
+          start: a.start ?? 0,
+          ...(a.duration !== undefined ? { duration: a.duration } : {}),
+          position: a.position ?? 'after',
+          ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
+        })),
+      ),
+    )
+    if (normalizeAudio) form.append('normalizeAudio', '1')
+    // Bibliotheks-IDs und Datei-Uploads lassen sich nicht mischen (Server).
+    const ids = appends.map((a) => a.mediaId)
+    if (ids.every((id): id is string => typeof id === 'string' && id.length > 0)) {
+      form.append('appendMediaIds', JSON.stringify(ids))
+    } else {
+      for (const a of appends) {
+        if (!a.file) throw new Error('Angehängtes Video ohne Datei.')
+        form.append('append', a.file)
+      }
+    }
+  }
+  if (req.source instanceof File) form.append('video', req.source)
+  if (music) form.append('music', music.file)
+
+  // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
+  let lastTime = 0
+  let lastLoaded = 0
+  const started = await uploadForJob(form, (loaded, tot) => {
+    progress.value = tot > 0 ? Math.round((loaded / tot) * 100) : 0
+    uploadedBytes.value = loaded
+    totalBytes.value = tot
+    const now = performance.now()
+    if (lastTime && now - lastTime > 300) {
+      const inst = ((loaded - lastLoaded) / (now - lastTime)) * 1000 // Bytes/s
+      bytesPerSec.value = bytesPerSec.value ? bytesPerSec.value * 0.7 + inst * 0.3 : inst
+      lastTime = now
+      lastLoaded = loaded
+    } else if (!lastTime) {
+      lastTime = now
+      lastLoaded = loaded
+    }
+  })
+  const jobId = started.jobId
+  currentJobId = jobId
+
+  // Zuschnitt angefordert, aber vom Backend nicht bestätigt: Der Server ist
+  // veraltet und würde das volle Bild liefern. Job abbrechen (kein unnötiger
+  // Encode) und klar melden, statt ein falsches Ergebnis anzuzeigen.
+  if (crop && !started.crop) await abortJob(jobId, CROP_UNSUPPORTED)
+
+  // Angehängte Videos nicht (vollständig) übernommen -> veralteter Server.
+  // … oder Kürzung/Position verlangt, aber nicht bestätigt (würde sonst
+  // stillschweigend vollständig und hinten angehängt).
+  if (
+    appends.length &&
+    (started.append !== appends.length ||
+      (appends.some(needsAppendTrim) && !started.appendTrim) ||
+      // Einfügestelle zwischen Ausschnitten bzw. Lautstärke-Angleichung nicht bestätigt.
+      (appends.some((a) => a.slot !== undefined && a.position !== 'before') &&
+        !started.appendSlots) ||
+      (normalizeAudio && !started.normalizeAudio) ||
+      (wantsSeams && !started.seamTransitions))
+  ) {
+    await abortJob(jobId, APPEND_UNSUPPORTED)
+  }
+
+  // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
+  if (wantsFormat && !started.outputFormat) await abortJob(jobId, FORMAT_UNSUPPORTED)
+
+  // Musik verlangt, aber nicht bestätigt -> veralteter Server.
+  if (music && !started.music) await abortJob(jobId, MUSIC_UNSUPPORTED)
+
+  // Speichern in der Bibliothek verlangt, aber nicht bestätigt -> veralteter Server.
+  if (req.storeResult && !started.storeResult) await abortJob(jobId, MEDIA_UNSUPPORTED)
+
+  // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
+  phase.value = 'process'
+  progress.value = 0
+  const mediaId = await waitForJob(jobId)
+  return { jobId, mediaId }
+}
+
+/** Setzt den gemeinsamen Fortschritts-Zustand für die Dauer eines Vorgangs. */
+async function withProcessing<T>(fn: () => Promise<T>): Promise<T> {
+  isProcessing.value = true
+  phase.value = 'upload'
+  progress.value = 0
+  uploadedBytes.value = 0
+  totalBytes.value = 0
+  bytesPerSec.value = 0
+  currentJobId = null
+  try {
+    return await fn()
+  } finally {
+    isProcessing.value = false
+    phase.value = 'idle'
+    currentJobId = null
+  }
+}
+
+/**
+ * Schneidet ein Video serverseitig (Datei-Upload je Vorgang).
  * @param segments   Ein oder mehrere Ausschnitte ({ start, duration }).
  * @param operation  'keep' behält die Ausschnitte, 'remove' entfernt sie.
  * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
@@ -314,139 +490,92 @@ async function cut(
   music?: MusicInput,
   seams?: (string | null)[],
 ): Promise<Blob> {
-  isProcessing.value = true
-  phase.value = 'upload'
-  progress.value = 0
-  uploadedBytes.value = 0
-  totalBytes.value = 0
-  bytesPerSec.value = 0
-  currentJobId = null
-  try {
-    const form = new FormData()
-    form.append('video', file)
-    form.append('segments', JSON.stringify(segments))
-    form.append('mode', mode)
-    form.append('operation', operation)
-    if (operation === 'remove') form.append('total', String(total))
-    if (transition && transition.preset !== 'none') {
-      form.append('transitionPreset', transition.preset)
-      form.append('transitionDuration', String(transition.duration))
-    }
-    const wantsSeams = appends.length > 0 && seams !== undefined && seams.some((p) => p !== null)
-    if (wantsSeams) {
-      form.append('seamTransitions', JSON.stringify(seams))
-      // Dauer auch dann mitschicken, wenn global „keine" Animation gewählt ist.
-      if (!form.has('transitionDuration') && transition) {
-        form.append('transitionDuration', String(transition.duration))
-      }
-    }
-    if (crop) form.append('crop', JSON.stringify(crop))
-    if (music) {
-      form.append('musicVolume', String(music.volume))
-      form.append('musicOriginalVolume', String(music.originalVolume))
-      form.append('musicFade', music.fade ? '1' : '0')
-      form.append('musicLoop', music.loop ? '1' : '0')
-      form.append('music', music.file)
-    }
-    const wantsFormat = output !== undefined && output.aspect !== 'auto'
-    if (wantsFormat) {
-      form.append('outputAspect', output.aspect)
-      form.append('outputFill', output.fill)
-    }
-    if (appends.length) {
-      form.append(
-        'appendMeta',
-        JSON.stringify(
-          appends.map((a) => ({
-            start: a.start ?? 0,
-            ...(a.duration !== undefined ? { duration: a.duration } : {}),
-            position: a.position ?? 'after',
-            ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
-          })),
-        ),
-      )
-      for (const a of appends) form.append('append', a.file)
-      if (normalizeAudio) form.append('normalizeAudio', '1')
-    }
-
-    // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
-    let lastTime = 0
-    let lastLoaded = 0
-    const started = await uploadForJob(form, (loaded, tot) => {
-      progress.value = tot > 0 ? Math.round((loaded / tot) * 100) : 0
-      uploadedBytes.value = loaded
-      totalBytes.value = tot
-      const now = performance.now()
-      if (lastTime && now - lastTime > 300) {
-        const inst = ((loaded - lastLoaded) / (now - lastTime)) * 1000 // Bytes/s
-        bytesPerSec.value = bytesPerSec.value ? bytesPerSec.value * 0.7 + inst * 0.3 : inst
-        lastTime = now
-        lastLoaded = loaded
-      } else if (!lastTime) {
-        lastTime = now
-        lastLoaded = loaded
-      }
+  return withProcessing(async () => {
+    const { jobId } = await startAndWait({
+      source: file,
+      segments,
+      mode,
+      operation,
+      total,
+      transition,
+      crop,
+      appends,
+      normalizeAudio,
+      output,
+      music,
+      seams,
     })
-    const jobId = started.jobId
-    currentJobId = jobId
-
-    // Zuschnitt angefordert, aber vom Backend nicht bestätigt: Der Server ist
-    // veraltet und würde das volle Bild liefern. Job abbrechen (kein unnötiger
-    // Encode) und klar melden, statt ein falsches Ergebnis anzuzeigen.
-    if (crop && !started.crop) {
-      currentJobId = null
-      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      throw new Error(CROP_UNSUPPORTED)
-    }
-
-    // Angehängte Videos nicht (vollständig) übernommen -> veralteter Server.
-    // … oder Kürzung/Position verlangt, aber nicht bestätigt (würde sonst
-    // stillschweigend vollständig und hinten angehängt).
-    if (
-      appends.length &&
-      (started.append !== appends.length ||
-        (appends.some(needsAppendTrim) && !started.appendTrim) ||
-        // Einfügestelle zwischen Ausschnitten bzw. Lautstärke-Angleichung nicht bestätigt.
-        (appends.some((a) => a.slot !== undefined && a.position !== 'before') &&
-          !started.appendSlots) ||
-        (normalizeAudio && !started.normalizeAudio) ||
-        (wantsSeams && !started.seamTransitions))
-    ) {
-      currentJobId = null
-      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      throw new Error(APPEND_UNSUPPORTED)
-    }
-
-    // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
-    if (wantsFormat && !started.outputFormat) {
-      currentJobId = null
-      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      throw new Error(FORMAT_UNSUPPORTED)
-    }
-
-    // Musik verlangt, aber nicht bestätigt -> veralteter Server.
-    if (music && !started.music) {
-      currentJobId = null
-      await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      throw new Error(MUSIC_UNSUPPORTED)
-    }
-
-    // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
-    phase.value = 'process'
-    progress.value = 0
-    await waitForJob(jobId)
-
     const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
     if (!download.ok) throw new Error(await readError(download))
     currentJobId = null
     return await download.blob()
-  } finally {
-    isProcessing.value = false
-    phase.value = 'idle'
+  })
+}
+
+/** Auftrag für ein Video aus der Bibliothek (Ergebnis wird dort gespeichert). */
+export interface MediaCutRequest {
+  /** Bibliotheks-ID des Hauptvideos. */
+  mediaId: string
+  segments: CutSegment[]
+  mode: TrimMode
+  operation?: CutOperation
+  total?: number
+  transition?: CutTransition
+  crop?: CropRect
+  /** Angehängte Videos – hier per `mediaId`. */
+  appends?: AppendInput[]
+  normalizeAudio?: boolean
+  output?: CutOutputFormat
+  music?: MusicInput
+  seams?: (string | null)[]
+}
+
+/** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
+export interface MediaCutResult {
+  media: MediaView
+  blob: Blob
+}
+
+/**
+ * Schneidet/fügt Videos aus der Bibliothek zusammen, ohne sie erneut
+ * hochzuladen. Das Ergebnis wird als neues Bibliotheks-Video gespeichert.
+ */
+async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
+  return withProcessing(async () => {
+    const { mediaId } = await startAndWait({
+      source: { mediaId: req.mediaId },
+      segments: req.segments,
+      mode: req.mode,
+      operation: req.operation ?? 'keep',
+      total: req.total ?? 0,
+      transition: req.transition,
+      crop: req.crop,
+      appends: req.appends ?? [],
+      normalizeAudio: req.normalizeAudio ?? false,
+      output: req.output,
+      music: req.music,
+      seams: req.seams,
+      storeResult: true,
+    })
     currentJobId = null
-  }
+    if (!mediaId) throw new Error(MEDIA_UNSUPPORTED)
+    const [media, blob] = await Promise.all([fetchMediaInfo(mediaId), fetchMediaFile(mediaId)])
+    return { media, blob }
+  })
 }
 
 export function useServerCut() {
-  return { isProcessing, progress, phase, uploadedBytes, totalBytes, bytesPerSec, cut, cancel }
+  return {
+    isProcessing,
+    progress,
+    phase,
+    uploadedBytes,
+    totalBytes,
+    bytesPerSec,
+    cut,
+    cutMedia,
+    cancel,
+  }
 }
+
+export { MEDIA_UNSUPPORTED }

@@ -6,6 +6,8 @@ import { mkdir } from 'node:fs/promises'
 import { MulterError } from 'multer'
 import { config } from './config'
 import { cutRouter, SERVER_FEATURES } from './routes/cut'
+import { mediaRouter } from './routes/media'
+import { mediaStore } from './lib/media'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
 
@@ -48,6 +50,7 @@ async function bootstrap(): Promise<void> {
   })
 
   app.use('/api', cutRouter)
+  app.use('/api', mediaRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))
@@ -87,7 +90,10 @@ async function bootstrap(): Promise<void> {
   const shutdown = (signal: string) => {
     console.log(`${signal} empfangen – fahre herunter …`)
     server.close(() => {
-      void jobManager.shutdown().finally(() => process.exit(0))
+      void jobManager
+        .shutdown()
+        .then(() => mediaStore.shutdown())
+        .finally(() => process.exit(0))
     })
     // Notausstieg, falls Verbindungen hängen.
     setTimeout(() => process.exit(0), 10_000).unref()

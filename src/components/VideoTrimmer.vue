@@ -2,7 +2,8 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useVideoEditorStore, MAX_APPEND_CLIPS } from '@/stores/videoEditor'
+import { useVideoEditorStore } from '@/stores/videoEditor'
+import { useLibraryStore, itemLength, MAX_MERGE_ITEMS } from '@/stores/library'
 import {
   useServerCut,
   CUT_CANCELLED,
@@ -10,16 +11,16 @@ import {
   APPEND_UNSUPPORTED,
   FORMAT_UNSUPPORTED,
   MUSIC_UNSUPPORTED,
+  MEDIA_UNSUPPORTED,
 } from '@/composables/useServerCut'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
-import { getExtension } from '@/lib/ffmpegCommand'
 import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import { readVideoDuration } from '@/lib/videoMeta'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
-import MergeOrderList from './MergeOrderList.vue'
+import LibraryList from './LibraryList.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -36,10 +37,6 @@ const {
   crop,
   hasCrop,
   cropPixelSize,
-  appendClips,
-  hasAppends,
-  canAppend,
-  normalizeAudio,
   outputAspect,
   outputFill,
   music,
@@ -51,11 +48,12 @@ const {
   canRedo,
   effectiveSegments,
   selectionDuration,
-  resultName,
-  resultBlob,
-  hasResult,
   error,
 } = storeToRefs(store)
+
+// Video-Bibliothek: markiertes Video = Arbeitsvideo im Editor.
+const library = useLibraryStore()
+const { items, selected, mergeItems, canMerge, normalizeAudio } = storeToRefs(library)
 
 const {
   isProcessing,
@@ -64,7 +62,7 @@ const {
   uploadedBytes,
   totalBytes,
   bytesPerSec,
-  cut: serverCut,
+  cutMedia,
   cancel: serverCancel,
 } = useServerCut()
 
@@ -117,12 +115,7 @@ function pickFill(f: (typeof FILL_OPTIONS)[number]['value'], close: () => void):
 // Beim Entfernen, bei aktivem Zuschnitt ODER angehängten Videos wird immer neu
 // kodiert -> Modus ist dann fest & deaktiviert (Decode+Encode nötig).
 const modeDisabled = computed(
-  () =>
-    operation.value === 'remove' ||
-    hasCrop.value ||
-    hasAppends.value ||
-    hasOutputFormat.value ||
-    hasMusic.value,
+  () => operation.value === 'remove' || hasCrop.value || hasOutputFormat.value || hasMusic.value,
 )
 const modeLabel = computed(() =>
   modeDisabled.value
@@ -193,44 +186,48 @@ function onMusicInput(e: Event): void {
   store.setMusicFile(f)
 }
 
-function onAppendInput(e: Event): void {
-  const target = e.target as HTMLInputElement
-  const files = Array.from(target.files ?? [])
-  target.value = '' // erneutes Auswählen derselben Datei erlauben
+/**
+ * Nimmt Videos in die Bibliothek auf (Upload auf den Server läuft im
+ * Hintergrund). Ist noch nichts markiert, öffnet sich das erste im Editor.
+ */
+function addVideos(files: File[]): void {
   if (!files.length) return
   const videos = files.filter((f) => f.type.startsWith('video/'))
   if (videos.length < files.length) store.setError(t('errors.notVideo'))
-  const added = store.addAppendClips(videos)
-  if (added.length < videos.length) store.setError(t('append.limit', { max: MAX_APPEND_CLIPS }))
-  // Dauer nur für die Anzeige nachladen (Backend ermittelt sie selbst).
-  for (const clip of added) {
-    void readVideoDuration(clip.file).then((d) => store.setAppendDuration(clip.id, d))
+  const added = library.addFiles(videos)
+  // Dauer lokal vorab lesen (Anzeige), der Server liefert sie nach dem Upload.
+  for (const it of added) {
+    void readVideoDuration(it.file).then((d) => library.setDuration(it.id, d))
   }
 }
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const isDragOver = ref(false)
 
-function pickFile(files: FileList | null): void {
-  const f = files?.[0]
-  if (!f) return
-  if (!f.type.startsWith('video/')) {
-    store.setError(t('errors.notVideo'))
-    return
-  }
-  store.setFile(f)
-}
-
 function onInputChange(e: Event): void {
   const target = e.target as HTMLInputElement
-  pickFile(target.files)
+  addVideos(Array.from(target.files ?? []))
   target.value = '' // erneutes Auswählen derselben Datei erlauben
 }
 
 function onDrop(e: DragEvent): void {
   isDragOver.value = false
-  pickFile(e.dataTransfer?.files ?? null)
+  addVideos(Array.from(e.dataTransfer?.files ?? []))
 }
+
+// Markiertes Video in den Editor laden (neue Auswahl oder ersetzt durch ein
+// Schnitt-Ergebnis). Keins mehr übrig -> zurück zur Upload-Ansicht.
+watch(
+  () => selected.value?.file ?? null,
+  (f) => {
+    if (!f) {
+      if (store.file) store.reset()
+      return
+    }
+    if (f !== store.file) store.setFile(f)
+  },
+  { immediate: true },
+)
 
 // Beim In-place-Wechsel (Ergebnis wird zum neuen Arbeitsvideo) muss die Dauer
 // neu gelesen werden. Ein fragmentiertes MP4 (client-seitiger Remux) meldet
@@ -399,71 +396,119 @@ function msLabel(sec: number): string {
 }
 const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
+/** Laufender Vorgang (für die Fortschrittsanzeige am passenden Button). */
+const activeJob = ref<'cut' | 'merge' | null>(null)
+/** Zuletzt erzeugtes Ergebnis (für den Hinweis „Fertig"). */
+const lastResultId = ref<number | null>(null)
+
+/** Markiertes Video liegt auf dem Server und hat einen gültigen Ausschnitt. */
+const canCut = computed(
+  () => canExport.value && selected.value?.status === 'ready' && !!selected.value.mediaId,
+)
+/** Mehr markierte Videos, als der Server zusammenfügen kann. */
+const tooManyToMerge = computed(() => mergeItems.value.length > MAX_MERGE_ITEMS)
+
+function showJobError(e: unknown): void {
+  // Nutzer-Abbruch nicht als Fehler anzeigen.
+  const msg = e instanceof Error ? e.message : String(e)
+  if (msg === CUT_CANCELLED) return
+  const known: Record<string, string> = {
+    [CROP_UNSUPPORTED]: 'errors.cropUnsupported',
+    [APPEND_UNSUPPORTED]: 'errors.appendUnsupported',
+    [FORMAT_UNSUPPORTED]: 'errors.formatUnsupported',
+    [MUSIC_UNSUPPORTED]: 'errors.musicUnsupported',
+    [MEDIA_UNSUPPORTED]: 'errors.mediaUnsupported',
+  }
+  store.setError(known[msg] ? t(known[msg]) : msg)
+}
+
+/** Ergebnis-Datei mit dem vom Server vergebenen Namen. */
+function resultFile(blob: Blob, name: string): File {
+  return new File([blob], name, { type: blob.type || 'video/mp4' })
+}
+
+/** „Schneiden": nur das markierte Video; das Ergebnis ersetzt es in der Liste. */
 async function onExport(): Promise<void> {
-  if (!store.file || !canExport.value) return
+  const item = selected.value
+  if (!item?.mediaId || !canCut.value || busy.value) return
   store.setError('')
+  activeJob.value = 'cut'
   try {
-    // Vorhandenes „_cut" nicht stapeln (kumulatives Schneiden).
-    const base = fileName.value.replace(/\.[^.]+$/, '').replace(/_cut$/, '') || 'video'
-    const cutSegments = effectiveSegments.value.map((s) => ({
-      start: s.start,
-      duration: Math.max(0, s.end - s.start),
-    }))
-    // Container-Wahl (muss zur Server-Logik passen):
-    //  - verlustfrei (copy behalten, genau ein Ausschnitt): Original-Endung.
-    //  - sonst (entfernen, mehrere Ausschnitte, neu kodieren): WebM bleibt
-    //    WebM, sonst .mp4.
-    const inputExt = getExtension(fileName.value)
-    const isWebm = inputExt === 'webm'
-    const lossless =
-      !hasAppends.value &&
-      !hasOutputFormat.value &&
-      !hasMusic.value &&
-      !hasCrop.value &&
-      operation.value === 'keep' &&
-      mode.value === 'copy' &&
-      cutSegments.length === 1
-    const ext = lossless ? inputExt : isWebm ? 'webm' : 'mp4'
-
-    const blob = await serverCut(
-      store.file,
-      cutSegments,
-      mode.value,
-      operation.value,
-      duration.value,
-      { preset: animation.value, duration: animDuration.value },
-      crop.value ?? undefined,
-      appendClips.value.map((c) => ({
-        file: c.file,
-        start: c.start,
-        // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende (Server prüft die Dauer).
-        duration: c.end !== null ? Math.max(0, c.end - c.start) : undefined,
-        position: c.position,
-        // Einfügestelle zwischen zwei Ausschnitten (nur bei „danach").
-        slot: c.position === 'after' && c.slot !== null ? c.slot : undefined,
+    const { media, blob } = await cutMedia({
+      mediaId: item.mediaId,
+      segments: effectiveSegments.value.map((s) => ({
+        start: s.start,
+        duration: Math.max(0, s.end - s.start),
       })),
-      normalizeAudio.value,
-      { aspect: outputAspect.value, fill: outputFill.value },
-      music.value ?? undefined,
-      store.seamPresets,
-    )
-
-    store.applyCutResult(blob, `${base}_cut.${ext}`)
+      mode: mode.value,
+      operation: operation.value,
+      total: duration.value,
+      transition: { preset: animation.value, duration: animDuration.value },
+      crop: crop.value ?? undefined,
+      output: { aspect: outputAspect.value, fill: outputFill.value },
+      music: music.value ?? undefined,
+    })
+    // Name vom Server: „…_cut.<ext>" (Container passend zum Modus).
+    library.replaceWithResult(item.id, media, resultFile(blob, media.name))
+    store.clearMusic() // ist jetzt Teil des Ergebnisses
+    lastResultId.value = item.id
   } catch (e) {
-    // Nutzer-Abbruch nicht als Fehler anzeigen.
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg === CUT_CANCELLED) return
-    store.setError(
-      msg === CROP_UNSUPPORTED
-        ? t('errors.cropUnsupported')
-        : msg === APPEND_UNSUPPORTED
-          ? t('errors.appendUnsupported')
-          : msg === FORMAT_UNSUPPORTED
-            ? t('errors.formatUnsupported')
-            : msg === MUSIC_UNSUPPORTED
-              ? t('errors.musicUnsupported')
-              : msg,
-    )
+    showJobError(e)
+  } finally {
+    activeJob.value = null
+  }
+}
+
+/**
+ * „Zusammenfügen": alle vorgemerkten Videos in Listenreihenfolge (jeweils
+ * Von/Bis), mit Übergängen, Musik, Lautstärke-Angleichung und Ausgabeformat.
+ * Das Ergebnis kommt als neues Video in die Liste und wird markiert.
+ */
+async function onMerge(): Promise<void> {
+  const list = mergeItems.value
+  if (!canMerge.value || busy.value) return
+  const [first, ...rest] = list
+  if (!first.mediaId) return
+  store.setError('')
+  activeJob.value = 'merge'
+  try {
+    const { media, blob } = await cutMedia({
+      mediaId: first.mediaId,
+      segments: [{ start: first.start, duration: itemLength(first) }],
+      mode: 'reencode',
+      operation: 'keep',
+      transition: { preset: animation.value, duration: animDuration.value },
+      appends: rest.map((it) => ({
+        mediaId: it.mediaId ?? undefined,
+        start: it.start,
+        // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende.
+        duration: it.end !== null ? Math.max(0, it.end - it.start) : undefined,
+        position: 'after' as const,
+      })),
+      normalizeAudio: normalizeAudio.value,
+      output: { aspect: outputAspect.value, fill: outputFill.value },
+      music: music.value ?? undefined,
+      seams: library.seamPresets,
+    })
+    const base = first.name.replace(/\.[^.]+$/, '').replace(/_(cut|merged)$/, '') || 'video'
+    const ext = media.name.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'mp4'
+    const added = library.addResult(media, resultFile(blob, `${base}_merged.${ext}`))
+    store.clearMusic()
+    lastResultId.value = added.id
+  } catch (e) {
+    showJobError(e)
+  } finally {
+    activeJob.value = null
+  }
+}
+
+/** Video aus der Liste entfernen und sofort vom Server löschen. */
+async function onRemoveItem(id: number): Promise<void> {
+  if (lastResultId.value === id) lastResultId.value = null
+  try {
+    await library.remove(id)
+  } catch {
+    store.setError(t('library.deleteFailed'))
   }
 }
 
@@ -471,12 +516,13 @@ function onCancel(): void {
   serverCancel()
 }
 
-/** Geladenes Video entfernen und zur Upload-Ansicht zurückkehren. */
+/** Markiertes Video löschen (auch vom Server); der Nachbar wird markiert. */
 function onDeleteVideo(): void {
   if (busy.value) {
-    serverCancel() // laufenden Upload/Job stoppen
+    serverCancel() // laufenden Job stoppen
   }
-  store.reset()
+  const id = selected.value?.id
+  if (id !== undefined) void onRemoveItem(id)
 }
 
 // --- Undo/Redo -----------------------------------------------------------
@@ -523,13 +569,18 @@ onBeforeUnmount(() => {
 
 const appleMobile = isAppleMobile()
 
-/** Lädt das aktuelle Schnitt-Ergebnis herunter (getrennt vom Schneiden). */
+/** Ergebnis des letzten Vorgangs ist markiert? (Hinweis „Fertig") */
+const showResult = computed(
+  () => lastResultId.value !== null && selected.value?.id === lastResultId.value,
+)
+
+/** Lädt das markierte Video herunter (z. B. das Schnitt-Ergebnis). */
 async function downloadResult(): Promise<void> {
-  const blob = resultBlob.value
-  if (!blob) return
+  const item = selected.value
+  if (!item) return
   // Einheitlicher, robuster Pfad (iOS-Teilen / Anker / neuer Tab).
   try {
-    await saveFile({ blob, name: resultName.value })
+    await saveFile({ blob: item.file, name: item.name })
   } catch (err) {
     store.setError(err instanceof Error ? err.message : String(err))
   }
@@ -547,7 +598,7 @@ async function downloadResult(): Promise<void> {
       @dragleave.prevent="isDragOver = false"
       @drop.prevent="onDrop"
     >
-      <input type="file" accept="video/*" class="sr-only" @change="onInputChange" />
+      <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
       <div class="dz-icon" aria-hidden="true">▶</div>
       <p class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</p>
       <p class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</p>
@@ -583,9 +634,10 @@ async function downloadResult(): Promise<void> {
               ↷
             </button>
           </div>
-          <button class="btn ghost" type="button" @click="store.reset()">
-            {{ t('actions.change') }}
-          </button>
+          <label class="btn ghost">
+            <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
+            {{ t('library.add') }}
+          </label>
           <button class="btn ghost danger" type="button" @click="onDeleteVideo">
             🗑 {{ t('actions.removeVideo') }}
           </button>
@@ -595,6 +647,45 @@ async function downloadResult(): Promise<void> {
       <div class="editor-grid">
         <!-- LINKS: Auswahl & Ausschnitte -->
         <div class="panel panel-left">
+          <!-- Meine Videos: auf dem Server gespeichert; markiertes Video = Editor -->
+          <section class="card segments library">
+            <div class="card-head">
+              <h3 class="panel-title">{{ t('library.title') }}</h3>
+              <span v-if="items.length" class="count">{{ items.length }}</span>
+            </div>
+
+            <label class="btn block add">
+              <input
+                type="file"
+                accept="video/*"
+                multiple
+                class="sr-only"
+                @change="onInputChange"
+              />
+              {{ t('library.add') }}
+            </label>
+
+            <LibraryList :disabled="busy" @remove="onRemoveItem" />
+
+            <label v-if="mergeItems.length > 1" class="check-row">
+              <input
+                type="checkbox"
+                :checked="normalizeAudio"
+                :disabled="busy"
+                @change="library.setNormalizeAudio(($event.target as HTMLInputElement).checked)"
+              />
+              <span>
+                {{ t('append.normalize') }}
+                <small>{{ t('append.normalizeHint') }}</small>
+              </span>
+            </label>
+
+            <p v-if="tooManyToMerge" class="segments-hint warn" role="status">
+              {{ t('library.mergeLimit', { max: MAX_MERGE_ITEMS }) }}
+            </p>
+            <p class="segments-hint">{{ t('library.hint') }}</p>
+          </section>
+
           <!-- Auswahl: numerisch eingeben; Slider reagiert automatisch -->
           <section class="card">
             <h3 class="panel-title">{{ t('labels.selection') }}</h3>
@@ -859,44 +950,6 @@ async function downloadResult(): Promise<void> {
             <p class="segments-hint">{{ t('segments.hint') }}</p>
           </section>
 
-          <!-- Weitere Videos hochladen und vor/hinter die Ausschnitte setzen -->
-          <section class="card segments append">
-            <div class="card-head">
-              <h3 class="panel-title">{{ t('append.title') }}</h3>
-              <span v-if="appendClips.length" class="count">{{ appendClips.length }}</span>
-            </div>
-
-            <label class="btn block add" :class="{ disabled: !canAppend || busy }">
-              <input
-                type="file"
-                accept="video/*"
-                multiple
-                class="sr-only"
-                :disabled="!canAppend || busy"
-                @change="onAppendInput"
-              />
-              {{ t('append.add') }}
-            </label>
-
-            <MergeOrderList v-if="appendClips.length" :disabled="busy" />
-            <p v-else class="segments-empty">{{ t('append.empty') }}</p>
-
-            <label v-if="appendClips.length" class="check-row">
-              <input
-                type="checkbox"
-                :checked="normalizeAudio"
-                :disabled="busy"
-                @change="store.setNormalizeAudio(($event.target as HTMLInputElement).checked)"
-              />
-              <span>
-                {{ t('append.normalize') }}
-                <small>{{ t('append.normalizeHint') }}</small>
-              </span>
-            </label>
-
-            <p class="segments-hint">{{ t('append.hint') }}</p>
-          </section>
-
           <!-- Hintergrundmusik über das gesamte Ergebnis -->
           <section class="card segments music">
             <div class="card-head">
@@ -1126,16 +1179,30 @@ async function downloadResult(): Promise<void> {
               <button
                 class="btn primary export"
                 type="button"
-                :disabled="!canExport || busy"
+                :disabled="!canCut || busy"
+                :title="t('actions.cutHint')"
                 @click="onExport"
               >
-                <template v-if="isProcessing">{{ statusLabel }} {{ progress }}%</template>
+                <template v-if="activeJob === 'cut'">{{ statusLabel }} {{ progress }}%</template>
                 <template v-else>{{ t('actions.cut') }}</template>
+              </button>
+              <button
+                class="btn primary merge"
+                type="button"
+                :disabled="!canMerge || busy"
+                :title="t('actions.mergeHint')"
+                @click="onMerge"
+              >
+                <template v-if="activeJob === 'merge'">{{ statusLabel }} {{ progress }}%</template>
+                <template v-else>
+                  {{ t('actions.merge') }}
+                  <span v-if="mergeItems.length > 1">({{ mergeItems.length }})</span>
+                </template>
               </button>
               <button
                 class="btn primary"
                 type="button"
-                :disabled="!hasResult || busy"
+                :disabled="!selected || busy"
                 @click="downloadResult"
               >
                 {{ t('actions.download') }}
@@ -1229,10 +1296,10 @@ async function downloadResult(): Promise<void> {
 
           <!-- Ergebnis-Status: das Ergebnis läuft im selben Player oben,
                kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
-          <p v-if="hasResult && !busy" class="result-status">
-            {{ t('result.ready') }} {{ resultName }}
+          <p v-if="showResult && !busy" class="result-status">
+            {{ t('result.ready') }} {{ selected?.name }}
           </p>
-          <p v-if="hasResult && appleMobile && !busy" class="result-hint">
+          <p v-if="showResult && appleMobile && !busy" class="result-hint">
             {{ t('result.iosHint') }}
           </p>
         </div>
@@ -1919,6 +1986,14 @@ label.btn.block {
   margin: 0;
   font-size: var(--ds-text-xs);
   color: var(--ds-text-2);
+}
+.segments-hint.warn {
+  color: var(--ds-danger);
+}
+/* Datei-Auswahl als Button (Leiste oben). */
+label.btn {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Buttons */

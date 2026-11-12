@@ -1,6 +1,8 @@
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
 import { runFfmpeg, type RunHandle } from './ffmpeg'
+import { mediaStore } from './media'
+import { probeMedia } from './probe'
 
 export type JobState = 'processing' | 'done' | 'error'
 
@@ -9,6 +11,8 @@ export interface JobSnapshot {
   state: JobState
   progress: number
   error: string | null
+  /** ID des als Video gespeicherten Ergebnisses (nur mit storeResult). */
+  mediaId?: string
 }
 
 interface Job {
@@ -17,8 +21,15 @@ interface Job {
   progress: number
   error: string | null
   inputPath: string
+  /** Gehört die Haupt-Eingabedatei dem Job (Upload) oder der Bibliothek? */
+  ownsInput: boolean
   /** Weitere Eingabedateien (angehängte Videos) – werden mit aufgeräumt. */
   extraInputPaths: string[]
+  /** Benutzte Bibliotheks-Videos (für die Dauer des Jobs gegen Löschen gesperrt). */
+  mediaRefs: string[]
+  /** Ergebnis als neues Bibliotheks-Video speichern statt zum Download bereitzuhalten. */
+  storeResult: boolean
+  resultMediaId: string | null
   outputPath: string
   outputName: string
   handle: RunHandle | null
@@ -27,13 +38,26 @@ interface Job {
 }
 
 function snapshot(job: Job): JobSnapshot {
-  return { id: job.id, state: job.state, progress: job.progress, error: job.error }
+  return {
+    id: job.id,
+    state: job.state,
+    progress: job.progress,
+    error: job.error,
+    ...(job.resultMediaId ? { mediaId: job.resultMediaId } : {}),
+  }
 }
 
+/** Löscht die dem Job gehörenden Eingaben und gibt Bibliotheks-Sperren frei (einmalig). */
 async function removeInputs(job: Job): Promise<void> {
-  for (const p of [job.inputPath, ...job.extraInputPaths]) {
+  const owned = job.ownsInput ? [job.inputPath, ...job.extraInputPaths] : job.extraInputPaths
+  for (const p of owned) {
     await rm(p, { force: true }).catch(() => {})
   }
+  job.extraInputPaths = []
+  job.ownsInput = false
+  const refs = job.mediaRefs
+  job.mediaRefs = []
+  if (refs.length) await mediaStore.release(refs)
 }
 
 class JobManager {
@@ -59,7 +83,10 @@ class JobManager {
   create(params: {
     id: string
     inputPath: string
+    ownsInput?: boolean
     extraInputPaths?: string[]
+    mediaRefs?: string[]
+    storeResult?: boolean
     outputPath: string
     outputName: string
   }): Job {
@@ -69,7 +96,11 @@ class JobManager {
       progress: 0,
       error: null,
       inputPath: params.inputPath,
+      ownsInput: params.ownsInput ?? true,
       extraInputPaths: params.extraInputPaths ?? [],
+      mediaRefs: params.mediaRefs ?? [],
+      storeResult: params.storeResult ?? false,
+      resultMediaId: null,
       outputPath: params.outputPath,
       outputName: params.outputName,
       handle: null,
@@ -117,12 +148,19 @@ class JobManager {
       })
       job.handle = handle
       await handle.promise
+      if (job.storeResult) {
+        // Ergebnis in die Bibliothek übernehmen; die Datei gehört dann dort hin.
+        const info = await probeMedia(job.outputPath)
+        const item = await mediaStore.add(job.outputPath, job.outputName, info)
+        job.resultMediaId = item.id
+        job.outputPath = ''
+      }
       job.state = 'done'
       job.progress = 100
     } catch (e) {
       job.state = 'error'
       job.error = e instanceof Error ? e.message : String(e)
-      await rm(job.outputPath, { force: true }).catch(() => {})
+      if (job.outputPath) await rm(job.outputPath, { force: true }).catch(() => {})
     } finally {
       this.active--
       job.handle = null
@@ -147,12 +185,12 @@ class JobManager {
     if (!job) return
     this.jobs.delete(id)
     await removeInputs(job)
-    await rm(job.outputPath, { force: true }).catch(() => {})
+    if (job.outputPath) await rm(job.outputPath, { force: true }).catch(() => {})
   }
 
   getOutput(id: string): { path: string; name: string } | undefined {
     const job = this.jobs.get(id)
-    if (!job || job.state !== 'done') return undefined
+    if (!job || job.state !== 'done' || !job.outputPath) return undefined
     return { path: job.outputPath, name: job.outputName }
   }
 

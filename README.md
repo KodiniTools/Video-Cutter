@@ -49,31 +49,55 @@ Der Video Cutter nutzt dasselbe Design-System wie der
 - **Schnell (verlustfrei):** `-c copy`, extrem schnell, schneidet an Keyframes.
 - **Genau (neu kodieren):** H.264/AAC, frame-genau, langsamer, immer `.mp4`.
 
-## Videos anhängen (Zusammenfügen)
+## Meine Videos (Video-Bibliothek)
 
-In der Karte **„Videos anhängen"** lassen sich bis zu 5 weitere Videos
-hochladen und mit **Von/Bis** kürzen (Bis leer = bis zum Ende). Die Liste zeigt
-die Gesamtreihenfolge: Ausschnitte des Hauptvideos (fest, in Zeitreihenfolge)
-und angehängte Videos. Videos lassen sich am Griff ⠿ per **Drag & Drop** (oder
-mit ↑/↓) **vor, zwischen oder hinter** die Ausschnitte setzen; „Davor/Danach"
-setzt ein Video direkt an den Anfang bzw. das Ende. Optional gleicht
+Mehrere Videos lassen sich auf einmal hochladen (Dropzone oder
+**„+ Videos hochladen"**). Jedes Video wird **einmal** auf den Server geladen und
+dort gespeichert; danach wird es nur noch per ID referenziert – Schneiden und
+Zusammenfügen laden nichts erneut hoch.
+
+- **Markieren:** Klick auf ein Video öffnet es im Haupt-Editor.
+- **„Schneiden"** wirkt nur auf das markierte Video (Ausschnitte, Bildausschnitt,
+  Modus). Das Ergebnis **ersetzt** das Video in der Liste; das alte wird vom
+  Server gelöscht. „Herunterladen" speichert das markierte Video.
+- **„Zusammenfügen"** verbindet alle angehakten Videos (**„Beim Zusammenfügen
+  verwenden"**, max. 6) in Listenreihenfolge, jeweils mit **Von/Bis** gekürzt.
+  Das Ergebnis kommt als **neues** Video in die Liste (zunächst nicht angehakt).
+- **🗑** löscht ein Video sofort vom Server (ein laufender Upload wird abgebrochen).
+- **Auto-Aufräumen:** Videos, die `MEDIA_TTL_SEC` (Standard 2 h) nicht benutzt
+  wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`
+  (Standard 20 GB, sonst 507). Die Bibliothek liegt im Arbeitsspeicher des
+  Servers – ein Neustart des Backends löscht alle gespeicherten Videos.
+
+Backend: `POST /api/media` (multipart `video`) → `{ id, name, size, duration,
+width, height, hasAudio }`, `GET /api/media/:id`, `GET /api/media/:id/file`,
+`DELETE /api/media/:id`. `POST /api/cut` akzeptiert statt Dateien `mediaId` und
+`appendMediaIds` (JSON-Array) sowie `storeResult=1` – das Ergebnis wird dann
+gespeichert und seine ID im SSE-Ereignis `done` als `mediaId` gemeldet.
+Feature `media`.
+
+## Zusammenfügen
+
+Die Liste „Meine Videos" bestimmt die Reihenfolge: am Griff ⠿ per
+**Drag & Drop** oder mit ↑/↓ sortieren. Optional gleicht
 **„Lautstärke angleichen"** alle Clips per `loudnorm` (EBU R128, −16 LUFS) auf
 eine einheitliche Lautheit an. Alles wird serverseitig zu einer Datei
-zusammengefügt. Dabei wird immer neu kodiert: Alle Clips werden auf die (ggf.
-zugeschnittene) Auflösung des Hauptvideos skaliert (Letterbox statt Verzerrung),
-auf 30 fps und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten Stille. Die
-gewählte Animation gilt auch zwischen den angehängten Videos.
+zusammengefügt. Dabei wird immer neu kodiert: Alle Clips werden auf die
+Auflösung des ersten Videos skaliert (Letterbox statt Verzerrung), auf 30 fps
+und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten Stille. Die gewählte
+Animation gilt als Standard-Übergang.
 
-Zwischen je zwei Einträgen der Liste lässt sich ein **eigener Übergang** wählen
+Zwischen je zwei zusammenzufügenden Videos lässt sich ein **eigener Übergang** wählen
 (Standard = globale Animation, Keine, Ein-/Ausblenden, Gleiten, Zoomen,
 Umklappen). Die Übergangsdauer ist für alle Nahtstellen gleich.
 
-Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
-Datei `{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
+Backend: angehängte Videos als `appendMediaIds` (Bibliothek) oder als
+Multipart-Dateien `append`, plus `appendMeta` (JSON, je Video
+`{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
 Ausschnitt einfügen) optional `normalizeAudio=1` und `seamTransitions` (JSON-Array je Nahtstelle,
 `null` = global; Dauer aus `transitionDuration`). Analyse per `ffprobe`
 (`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet
-`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat","music","seamTransitions"]`.
+`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat","music","seamTransitions","media"]`.
 Ein älteres Backend ohne diese Features wird erkannt; der Job wird dann mit
 Hinweis abgebrochen statt falsch zusammengefügt.
 
@@ -93,7 +117,8 @@ Backend: optionale Felder `outputAspect` (`auto|16:9|9:16|1:1`) und
 ## Hintergrundmusik
 
 In der Karte **„Hintergrundmusik"** lässt sich eine Audiodatei (oder ein Video
-mit Tonspur) unter das gesamte Ergebnis legen, inklusive angehängter Videos.
+mit Tonspur) unter das gesamte nächste Ergebnis legen (Schneiden oder
+Zusammenfügen); danach wird sie zurückgesetzt.
 Einstellbar sind die Lautstärke von **Musik** und **Originalton**,
 **Ein-/Ausblenden** (2 s) und **Wiederholen**, falls die Musik kürzer ist. Die
 Musik endet mit dem Video. Erzwingt Re-Encode.

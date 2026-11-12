@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  appendClipLength,
-  isAppendTrimmed,
-  type AppendClip,
-  type AppendPosition,
-} from '@/stores/videoEditor'
+import { itemLength, isItemTrimmed, type LibraryItem } from '@/stores/library'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
+import { MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
 
 /**
- * Eine Zeile der Liste „Videos anhängen": Name, Position (davor/danach),
- * verwendeter Bereich (Von/Bis) sowie Sortieren (Griff zum Ziehen, ▲▼) und Entfernen.
- * Vorschaubild am Startpunkt; aufklappbarer Mini-Player, um Von/Bis an der
- * aktuellen Wiedergabeposition zu setzen.
+ * Eine Zeile der Liste „Meine Videos": Vorschaubild, Name/Dauer, Markieren
+ * (Bearbeiten im Haupt-Editor), „Zusammenfügen"-Häkchen, verwendeter Bereich
+ * (Von/Bis), Sortieren (Griff zum Ziehen, ↑↓) und Löschen vom Server.
+ * Aufklappbarer Mini-Player, um Von/Bis an der Wiedergabeposition zu setzen.
  */
 const props = defineProps<{
-  clip: AppendClip
-  /** Laufende Nummer in der Gesamtreihenfolge. */
+  item: LibraryItem
+  /** Laufende Nummer in der Liste. */
   index: number
+  /** Im Haupt-Editor geöffnet? */
+  selected: boolean
   canUp: boolean
   canDown: boolean
   disabled: boolean
@@ -27,12 +25,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'select'): void
+  (e: 'include', on: boolean): void
   (e: 'start', sec: number): void
   (e: 'end', sec: number | null): void
   (e: 'reset'): void
-  (e: 'position', pos: AppendPosition): void
   (e: 'move', delta: number): void
   (e: 'remove'): void
+  (e: 'retry'): void
   (e: 'drag-start', ev: DragEvent): void
   (e: 'drag-end'): void
 }>()
@@ -40,13 +40,24 @@ const emit = defineEmits<{
 const rowEl = ref<HTMLLIElement | null>(null)
 
 // --- Vorschau --------------------------------------------------------------
-// Eine Blob-URL je Zeile (die Datei eines Eintrags ändert sich nie; Zeilen
-// sind per clip.id verschlüsselt). Wird beim Entfernen der Zeile freigegeben.
-const fileUrl = URL.createObjectURL(props.clip.file)
-onBeforeUnmount(() => URL.revokeObjectURL(fileUrl))
+// Eine Blob-URL je Datei. Ersetzt ein Schnitt-Ergebnis die Datei, wird die
+// alte URL freigegeben; beim Entfernen der Zeile ebenso.
+const fileUrl = ref('')
+watch(
+  () => props.item.file,
+  (f) => {
+    const old = fileUrl.value
+    fileUrl.value = URL.createObjectURL(f)
+    if (old) URL.revokeObjectURL(old)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  if (fileUrl.value) URL.revokeObjectURL(fileUrl.value)
+})
 
 /** Vorschaubild = Bild am Startpunkt (Media-Fragment, lädt nur Metadaten). */
-const thumbSrc = computed(() => `${fileUrl}#t=${props.clip.start.toFixed(3)}`)
+const thumbSrc = computed(() => `${fileUrl.value}#t=${props.item.start.toFixed(3)}`)
 
 const previewOpen = ref(false)
 const player = ref<HTMLVideoElement | null>(null)
@@ -56,14 +67,14 @@ const playerTime = ref(0)
 let stopAt: number | null = null
 
 /** Ende des verwendeten Bereichs (Dateiende, falls ungekürzt/unbekannt). */
-const rangeEnd = computed(() => props.clip.end ?? (props.clip.duration || Infinity))
+const rangeEnd = computed(() => props.item.end ?? (props.item.duration || Infinity))
 
 async function togglePreview(): Promise<void> {
   previewOpen.value = !previewOpen.value
   stopAt = null
   if (!previewOpen.value) return
   await nextTick()
-  if (player.value) player.value.currentTime = props.clip.start
+  if (player.value) player.value.currentTime = props.item.start
 }
 
 function onPlayerTime(): void {
@@ -80,7 +91,7 @@ function onPlayerTime(): void {
 function playRange(): void {
   const el = player.value
   if (!el) return
-  el.currentTime = props.clip.start
+  el.currentTime = props.item.start
   stopAt = Number.isFinite(rangeEnd.value) ? rangeEnd.value : null
   // Ältere Browser liefern kein Promise zurück.
   const p = el.play() as Promise<void> | undefined
@@ -106,7 +117,7 @@ function onHandleDragStart(ev: DragEvent): void {
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = 'move'
     // Firefox startet das Ziehen nur mit gesetzten Daten.
-    ev.dataTransfer.setData('text/plain', String(props.clip.id))
+    ev.dataTransfer.setData('text/plain', String(props.item.id))
     if (rowEl.value) ev.dataTransfer.setDragImage(rowEl.value, 16, 16)
   }
   emit('drag-start', ev)
@@ -117,27 +128,32 @@ const { t } = useI18n()
 const startInput = ref('')
 const endInput = ref('')
 watch(
-  () => props.clip.start,
+  () => props.item.start,
   (v) => (startInput.value = formatTimeMs(v)),
   { immediate: true },
 )
 // Ende leer = „bis zum Dateiende"; Platzhalter zeigt dann die Gesamtdauer.
 watch(
-  () => props.clip.end,
+  () => props.item.end,
   (v) => (endInput.value = v === null ? '' : formatTimeMs(v)),
   { immediate: true },
 )
 
 const endPlaceholder = computed(() =>
-  props.clip.duration > 0 ? formatTimeMs(props.clip.duration) : t('append.toEnd'),
+  props.item.duration > 0 ? formatTimeMs(props.item.duration) : t('append.toEnd'),
 )
-const trimmed = computed(() => isAppendTrimmed(props.clip))
-const usedLength = computed(() => appendClipLength(props.clip))
+const trimmed = computed(() => isItemTrimmed(props.item))
+const usedLength = computed(() => itemLength(props.item))
+const progressPct = computed(() => Math.round(props.item.progress * 100))
+/** Fehlertext (veraltetes Backend übersetzt). */
+const errorText = computed(() =>
+  props.item.error === MEDIA_UNSUPPORTED ? t('errors.mediaUnsupported') : props.item.error,
+)
 
 function commitStart(): void {
   const sec = parseTimeInput(startInput.value)
   if (sec !== null) emit('start', sec)
-  startInput.value = formatTimeMs(props.clip.start)
+  startInput.value = formatTimeMs(props.item.start)
 }
 
 function commitEnd(): void {
@@ -148,12 +164,16 @@ function commitEnd(): void {
   }
   const sec = parseTimeInput(raw)
   if (sec !== null) emit('end', sec)
-  endInput.value = props.clip.end === null ? '' : formatTimeMs(props.clip.end)
+  endInput.value = props.item.end === null ? '' : formatTimeMs(props.item.end)
 }
 </script>
 
 <template>
-  <li ref="rowEl" class="append-row" :class="{ dragging }">
+  <li
+    ref="rowEl"
+    class="append-row"
+    :class="{ dragging, selected, failed: item.status === 'error' }"
+  >
     <div class="row-head">
       <span
         class="drag-handle"
@@ -178,13 +198,25 @@ function commitEnd(): void {
         <video class="thumb" :src="thumbSrc" muted playsinline preload="metadata" tabindex="-1" />
         <span class="thumb-icon" aria-hidden="true">{{ previewOpen ? '▴' : '▶' }}</span>
       </button>
-      <span class="info" :title="clip.file.name">
-        <span class="name">{{ clip.file.name }}</span>
-        <small v-if="usedLength > 0">
-          {{ formatTimeMs(usedLength) }}
-          <template v-if="trimmed"> / {{ formatTimeMs(clip.duration) }}</template>
+      <button
+        class="info"
+        type="button"
+        :aria-pressed="selected"
+        :title="`${item.name} – ${selected ? t('library.selected') : t('library.select')}`"
+        :disabled="disabled"
+        @click="emit('select')"
+      >
+        <span class="name">{{ item.name }}</span>
+        <small v-if="item.status === 'uploading'" class="status">
+          {{ t('library.uploading', { pct: progressPct }) }}
         </small>
-      </span>
+        <small v-else-if="item.status === 'error'" class="status error">{{ errorText }}</small>
+        <small v-else-if="usedLength > 0">
+          {{ formatTimeMs(usedLength) }}
+          <template v-if="trimmed"> / {{ formatTimeMs(item.duration) }}</template>
+          <template v-if="selected"> · {{ t('library.inEditor') }}</template>
+        </small>
+      </button>
       <button
         class="btn tiny"
         type="button"
@@ -206,16 +238,34 @@ function commitEnd(): void {
         ↓
       </button>
       <button
-        class="btn tiny"
+        class="btn tiny remove"
         type="button"
         :disabled="disabled"
-        :aria-label="t('append.remove')"
-        :title="t('append.remove')"
+        :aria-label="t('library.delete')"
+        :title="t('library.delete')"
         @click="emit('remove')"
       >
-        ✕
+        🗑
       </button>
     </div>
+
+    <div
+      v-if="item.status === 'uploading'"
+      class="upload-bar"
+      role="progressbar"
+      :aria-valuenow="progressPct"
+    >
+      <div class="upload-fill" :style="{ width: `${progressPct}%` }"></div>
+    </div>
+    <button
+      v-if="item.status === 'error'"
+      class="btn tiny ghost retry"
+      type="button"
+      :disabled="disabled"
+      @click="emit('retry')"
+    >
+      ↻ {{ t('library.retry') }}
+    </button>
 
     <div v-if="previewOpen" class="preview">
       <video
@@ -259,23 +309,17 @@ function commitEnd(): void {
       </div>
     </div>
 
-    <div class="position" role="radiogroup" :aria-label="t('append.position')">
-      <button
-        v-for="pos in ['before', 'after'] as const"
-        :key="pos"
-        class="seg-btn"
-        :class="{ active: clip.position === pos }"
-        type="button"
-        role="radio"
-        :aria-checked="clip.position === pos"
+    <label class="include">
+      <input
+        type="checkbox"
+        :checked="item.include"
         :disabled="disabled"
-        @click="emit('position', pos)"
-      >
-        {{ pos === 'before' ? t('append.before') : t('append.after') }}
-      </button>
-    </div>
+        @change="emit('include', ($event.target as HTMLInputElement).checked)"
+      />
+      <span>{{ t('library.include') }}</span>
+    </label>
 
-    <div class="range">
+    <div v-if="item.include" class="range">
       <label class="range-field">
         <span>{{ t('append.from') }}</span>
         <input
@@ -435,35 +479,54 @@ function commitEnd(): void {
   color: var(--ds-text-2);
   font-variant-numeric: tabular-nums;
 }
-.position {
-  display: flex;
-  border: 1px solid var(--ds-border-strong);
-  border-radius: var(--ds-radius-md);
-  overflow: hidden;
+.append-row.selected {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 1px var(--ds-accent);
 }
-.seg-btn {
-  flex: 1;
-  padding: 5px 8px;
+.append-row.failed {
+  border-color: var(--ds-danger);
+}
+.info {
+  appearance: none;
   border: none;
   background: transparent;
-  color: var(--ds-text-2);
-  font-size: var(--ds-text-xs);
+  color: inherit;
+  padding: 0;
+  text-align: left;
   cursor: pointer;
 }
-.seg-btn + .seg-btn {
-  border-left: 1px solid var(--ds-border-strong);
-}
-.seg-btn.active {
-  background: var(--ds-accent-soft);
-  color: var(--ds-text);
-  font-weight: var(--ds-weight-semibold);
-}
-.seg-btn:disabled {
-  cursor: not-allowed;
-}
-.seg-btn:focus-visible {
+.info:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
+}
+.info:disabled {
+  cursor: not-allowed;
+}
+.status.error {
+  color: var(--ds-danger);
+  white-space: normal;
+}
+.upload-bar {
+  height: 4px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
+  overflow: hidden;
+}
+.upload-fill {
+  height: 100%;
+  background: var(--ds-accent);
+  transition: width 0.2s;
+}
+.retry {
+  align-self: flex-start;
+}
+.include {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+  cursor: pointer;
 }
 .range {
   display: flex;
