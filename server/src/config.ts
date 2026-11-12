@@ -36,6 +36,9 @@ export const config = {
   /** Harte Zeitgrenze pro Job. */
   ffmpegTimeoutMs: num('FFMPEG_TIMEOUT_SEC', 20 * 60) * 1000,
 
+  /** Schriften für Text-Einblendungen (libass `fontsdir`). */
+  fontsDir: process.env.FONTS_DIR ?? path.resolve(__dirname, '../fonts'),
+
   /** Höchstzahl angehängter Videos pro Job. */
   maxAppendFiles: num('MAX_APPEND_FILES', 5),
 

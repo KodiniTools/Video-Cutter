@@ -153,14 +153,14 @@ export function computeKeepRanges(
 }
 
 // Gemeinsame Präfixe/Encoder-Optionen.
-const PROGRESS = ['-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-nostats']
+export const PROGRESS = ['-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-nostats']
 
 /**
  * Re-Encode-Codecs passend zum Ziel-Container (aus der Ausgabe-Endung):
  * - .webm -> VP9 + Opus (behält das WebM-Format des Uploads bei).
  * - sonst -> H.264 + AAC in mp4 (mit faststart fürs Web).
  */
-function reencodeCodecs(outputPath: string): string[] {
+export function reencodeCodecs(outputPath: string): string[] {
   if (/\.webm$/i.test(outputPath)) {
     return [
       '-c:v',

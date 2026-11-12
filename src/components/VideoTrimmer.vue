@@ -12,7 +12,10 @@ import {
   FORMAT_UNSUPPORTED,
   MUSIC_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
+  TEXT_UNSUPPORTED,
 } from '@/composables/useServerCut'
+import { useTextOverlayStore } from '@/stores/textOverlays'
+import { toServerOverlay } from '@/lib/textOverlay'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -21,6 +24,8 @@ import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
 import LibraryList from './LibraryList.vue'
+import TextOverlayLayer from './TextOverlayLayer.vue'
+import TextPanel from './TextPanel.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -63,8 +68,17 @@ const {
   totalBytes,
   bytesPerSec,
   cutMedia,
+  burnText,
   cancel: serverCancel,
 } = useServerCut()
+
+// Text-Einblendungen des markierten Videos.
+const texts = useTextOverlayStore()
+watch(
+  () => selected.value?.id ?? null,
+  (id) => texts.setItem(id),
+  { immediate: true },
+)
 
 const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
 
@@ -397,7 +411,7 @@ function msLabel(sec: number): string {
 const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
 /** Laufender Vorgang (für die Fortschrittsanzeige am passenden Button). */
-const activeJob = ref<'cut' | 'merge' | null>(null)
+const activeJob = ref<'cut' | 'merge' | 'text' | null>(null)
 /** Zuletzt erzeugtes Ergebnis (für den Hinweis „Fertig"). */
 const lastResultId = ref<number | null>(null)
 
@@ -418,6 +432,7 @@ function showJobError(e: unknown): void {
     [FORMAT_UNSUPPORTED]: 'errors.formatUnsupported',
     [MUSIC_UNSUPPORTED]: 'errors.musicUnsupported',
     [MEDIA_UNSUPPORTED]: 'errors.mediaUnsupported',
+    [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
   }
   store.setError(known[msg] ? t(known[msg]) : msg)
 }
@@ -502,9 +517,38 @@ async function onMerge(): Promise<void> {
   }
 }
 
+/** Neuer Text an der aktuellen Stelle (Video wird dafür angehalten). */
+function onAddText(): void {
+  const el = videoEl.value
+  if (el && !el.paused) el.pause()
+  const at = el?.currentTime ?? currentTime.value
+  texts.add(at, duration.value, t('text.defaultText'))
+}
+
+/** „Text einbrennen": alle Texte ins markierte Video; Ergebnis ersetzt es. */
+async function onBurnText(): Promise<void> {
+  const item = selected.value
+  const list = texts.overlays
+  if (!item?.mediaId || item.status !== 'ready' || !list.length || busy.value) return
+  store.setError('')
+  activeJob.value = 'text'
+  try {
+    const { media, blob } = await burnText(item.mediaId, list.map(toServerOverlay))
+    library.replaceWithResult(item.id, media, resultFile(blob, media.name))
+    // Die Texte sind jetzt Teil des Bildes.
+    texts.clearItem(item.id)
+    lastResultId.value = item.id
+  } catch (e) {
+    showJobError(e)
+  } finally {
+    activeJob.value = null
+  }
+}
+
 /** Video aus der Liste entfernen und sofort vom Server löschen. */
 async function onRemoveItem(id: number): Promise<void> {
   if (lastResultId.value === id) lastResultId.value = null
+  texts.clearItem(id)
   try {
     await library.remove(id)
   } catch {
@@ -876,6 +920,15 @@ async function downloadResult(): Promise<void> {
               @durationchange="onDurationChange"
               @timeupdate="onTimeUpdate"
             ></video>
+            <TextOverlayLayer
+              v-if="texts.overlays.length"
+              :overlays="texts.overlays"
+              :selected-id="texts.selectedId"
+              :target="videoEl"
+              :disabled="busy"
+              @select="texts.select"
+              @move="(id, pos) => texts.update(id, pos)"
+            />
             <CropOverlay
               v-if="crop"
               :model-value="crop"
@@ -1203,6 +1256,19 @@ async function downloadResult(): Promise<void> {
 
             <p class="segments-hint">{{ t('segments.hint') }}</p>
           </section>
+
+          <!-- Text / Untertitel einblenden -->
+          <TextPanel
+            :duration="duration"
+            :current-time="currentTime"
+            :busy="busy"
+            :burning="activeJob === 'text'"
+            :progress-label="`${statusLabel} ${progress}%`"
+            :can-burn="selected?.status === 'ready' && !!selected?.mediaId"
+            @add="onAddText"
+            @seek="seekTo"
+            @burn="onBurnText"
+          />
 
           <!-- Hintergrundmusik über das gesamte Ergebnis -->
           <section class="card segments music">
