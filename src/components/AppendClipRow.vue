@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   appendClipLength,
@@ -12,6 +12,8 @@ import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 /**
  * Eine Zeile der Liste „Videos anhängen": Name, Position (davor/danach),
  * verwendeter Bereich (Von/Bis) sowie Sortieren (Griff zum Ziehen, ▲▼) und Entfernen.
+ * Vorschaubild am Startpunkt; aufklappbarer Mini-Player, um Von/Bis an der
+ * aktuellen Wiedergabeposition zu setzen.
  */
 const props = defineProps<{
   clip: AppendClip
@@ -36,6 +38,64 @@ const emit = defineEmits<{
 }>()
 
 const rowEl = ref<HTMLLIElement | null>(null)
+
+// --- Vorschau --------------------------------------------------------------
+// Eine Blob-URL je Zeile (die Datei eines Eintrags ändert sich nie; Zeilen
+// sind per clip.id verschlüsselt). Wird beim Entfernen der Zeile freigegeben.
+const fileUrl = URL.createObjectURL(props.clip.file)
+onBeforeUnmount(() => URL.revokeObjectURL(fileUrl))
+
+/** Vorschaubild = Bild am Startpunkt (Media-Fragment, lädt nur Metadaten). */
+const thumbSrc = computed(() => `${fileUrl}#t=${props.clip.start.toFixed(3)}`)
+
+const previewOpen = ref(false)
+const player = ref<HTMLVideoElement | null>(null)
+/** Aktuelle Position im Mini-Player (Sekunden). */
+const playerTime = ref(0)
+/** Spielt nur den gewählten Bereich ab und hält am Ende an. */
+let stopAt: number | null = null
+
+/** Ende des verwendeten Bereichs (Dateiende, falls ungekürzt/unbekannt). */
+const rangeEnd = computed(() => props.clip.end ?? (props.clip.duration || Infinity))
+
+async function togglePreview(): Promise<void> {
+  previewOpen.value = !previewOpen.value
+  stopAt = null
+  if (!previewOpen.value) return
+  await nextTick()
+  if (player.value) player.value.currentTime = props.clip.start
+}
+
+function onPlayerTime(): void {
+  const el = player.value
+  if (!el) return
+  playerTime.value = el.currentTime
+  if (stopAt !== null && el.currentTime >= stopAt) {
+    el.pause()
+    el.currentTime = stopAt
+    stopAt = null
+  }
+}
+
+function playRange(): void {
+  const el = player.value
+  if (!el) return
+  el.currentTime = props.clip.start
+  stopAt = Number.isFinite(rangeEnd.value) ? rangeEnd.value : null
+  // Ältere Browser liefern kein Promise zurück.
+  const p = el.play() as Promise<void> | undefined
+  p?.catch(() => {
+    /* Autoplay blockiert – Nutzer kann manuell starten. */
+  })
+}
+
+function setFromPlayer(which: 'start' | 'end'): void {
+  const el = player.value
+  if (!el) return
+  stopAt = null
+  if (which === 'start') emit('start', el.currentTime)
+  else emit('end', el.currentTime)
+}
 
 /** Nur der Griff ist ziehbar (Eingabefelder bleiben normal bedienbar). */
 function onHandleDragStart(ev: DragEvent): void {
@@ -107,6 +167,17 @@ function commitEnd(): void {
         >⠿</span
       >
       <span class="segment-index">{{ index }}</span>
+      <button
+        class="thumb-btn"
+        type="button"
+        :aria-expanded="previewOpen"
+        :aria-label="previewOpen ? t('append.hidePreview') : t('append.preview')"
+        :title="previewOpen ? t('append.hidePreview') : t('append.preview')"
+        @click="togglePreview"
+      >
+        <video class="thumb" :src="thumbSrc" muted playsinline preload="metadata" tabindex="-1" />
+        <span class="thumb-icon" aria-hidden="true">{{ previewOpen ? '▴' : '▶' }}</span>
+      </button>
       <span class="info" :title="clip.file.name">
         <span class="name">{{ clip.file.name }}</span>
         <small v-if="usedLength > 0">
@@ -144,6 +215,48 @@ function commitEnd(): void {
       >
         ✕
       </button>
+    </div>
+
+    <div v-if="previewOpen" class="preview">
+      <video
+        ref="player"
+        class="player"
+        :src="fileUrl"
+        controls
+        playsinline
+        preload="metadata"
+        @timeupdate="onPlayerTime"
+        @seeked="onPlayerTime"
+      />
+      <div class="preview-actions">
+        <button
+          class="btn tiny"
+          type="button"
+          :disabled="disabled"
+          :title="t('append.setFrom')"
+          @click="setFromPlayer('start')"
+        >
+          {{ t('append.from') }} ⇤
+        </button>
+        <span class="player-time">{{ formatTimeMs(playerTime) }}</span>
+        <button
+          class="btn tiny"
+          type="button"
+          :disabled="disabled"
+          :title="t('append.setTo')"
+          @click="setFromPlayer('end')"
+        >
+          ⇥ {{ t('append.to') }}
+        </button>
+        <button
+          class="btn tiny ghost"
+          type="button"
+          :title="t('append.playRange')"
+          @click="playRange"
+        >
+          {{ t('append.playRange') }}
+        </button>
+      </div>
     </div>
 
     <div class="position" role="radiogroup" :aria-label="t('append.position')">
@@ -231,6 +344,63 @@ function commitEnd(): void {
 .drag-handle.disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.thumb-btn {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-sm);
+  overflow: hidden;
+  background: #000;
+  cursor: pointer;
+}
+.thumb-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  display: block;
+}
+.thumb-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.player {
+  width: 100%;
+  max-height: 180px;
+  border-radius: var(--ds-radius-sm);
+  background: #000;
+}
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.player-time {
+  flex: 1;
+  text-align: center;
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-2);
 }
 .row-head {
   display: flex;
