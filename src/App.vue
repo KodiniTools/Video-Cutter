@@ -39,6 +39,13 @@ const { t } = useI18n()
   flex-direction: column;
   gap: var(--ds-gap);
 }
+/* Große Bildschirme: mehr Breite für das dreispaltige Editor-Layout
+   (Meine Videos | Video | Auswahl), damit das Video in der Mitte groß bleibt. */
+@media (min-width: 1100px) {
+  .shell {
+    max-width: 1600px;
+  }
+}
 .topbar {
   display: flex;
   align-items: center;
