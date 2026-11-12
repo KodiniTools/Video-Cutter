@@ -32,6 +32,10 @@ export interface JobStartResponse {
   append?: number
   /** Hat der Server Kürzung/Position der angehängten Videos übernommen? */
   appendTrim?: boolean
+  /** Kennt der Server Einfügestellen zwischen den Ausschnitten (`slot`)? */
+  appendSlots?: boolean
+  /** Hat der Server die Lautstärke-Angleichung übernommen? */
+  normalizeAudio?: boolean
 }
 
 /**
@@ -39,7 +43,14 @@ export interface JobStartResponse {
  * Exportiert, damit die Auswertung ohne XHR testbar ist.
  */
 export function parseJobStart(text: string): JobStartResponse {
-  type Raw = { jobId?: unknown; crop?: unknown; append?: unknown; appendTrim?: unknown }
+  type Raw = {
+    jobId?: unknown
+    crop?: unknown
+    append?: unknown
+    appendTrim?: unknown
+    appendSlots?: unknown
+    normalizeAudio?: unknown
+  }
   let data: Raw
   try {
     data = JSON.parse(text) as Raw
@@ -55,6 +66,8 @@ export function parseJobStart(text: string): JobStartResponse {
     crop: data.crop === true,
     append,
     appendTrim: data.appendTrim === true,
+    appendSlots: data.appendSlots === true,
+    normalizeAudio: data.normalizeAudio === true,
   }
 }
 
@@ -227,6 +240,8 @@ export interface AppendInput {
   duration?: number
   /** 'before' = vor den Ausschnitten, 'after' (Standard) = dahinter. */
   position?: 'before' | 'after'
+  /** Nur bei 'after': hinter dem n-ten Teil des Hauptvideos einfügen (1-basiert). */
+  slot?: number
 }
 
 /** Weicht ein angehängtes Video von „vollständig, danach" ab? */
@@ -241,8 +256,9 @@ function needsAppendTrim(a: AppendInput): boolean {
  * @param total      Gesamtdauer des Videos (nur für 'remove' nötig).
  * @param transition Optionaler Übergang beim Zusammenfügen mehrerer Ausschnitte.
  * @param crop       Optionaler Bildausschnitt (Anteile 0–1); erzwingt Re-Encode.
- * @param appends    Weitere Videos (optional gekürzt), die vor oder hinter die Ausschnitte
- *                   gehängt werden (Reihenfolge = Liste); erzwingt Re-Encode.
+ * @param appends    Weitere Videos (optional gekürzt), die vor, zwischen oder hinter die
+ *                   Ausschnitte gesetzt werden (Reihenfolge = Liste); erzwingt Re-Encode.
+ * @param normalizeAudio Lautstärke aller Clips angleichen (nur mit angehängten Videos).
  */
 async function cut(
   file: File,
@@ -253,6 +269,7 @@ async function cut(
   transition?: CutTransition,
   crop?: CropRect,
   appends: AppendInput[] = [],
+  normalizeAudio = false,
 ): Promise<Blob> {
   isProcessing.value = true
   phase.value = 'upload'
@@ -281,10 +298,12 @@ async function cut(
             start: a.start ?? 0,
             ...(a.duration !== undefined ? { duration: a.duration } : {}),
             position: a.position ?? 'after',
+            ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
           })),
         ),
       )
       for (const a of appends) form.append('append', a.file)
+      if (normalizeAudio) form.append('normalizeAudio', '1')
     }
 
     // Geglättete Upload-Geschwindigkeit aus den Fortschritts-Deltas.
@@ -322,7 +341,12 @@ async function cut(
     // stillschweigend vollständig und hinten angehängt).
     if (
       appends.length &&
-      (started.append !== appends.length || (appends.some(needsAppendTrim) && !started.appendTrim))
+      (started.append !== appends.length ||
+        (appends.some(needsAppendTrim) && !started.appendTrim) ||
+        // Einfügestelle zwischen Ausschnitten bzw. Lautstärke-Angleichung nicht bestätigt.
+        (appends.some((a) => a.slot !== undefined && a.position !== 'before') &&
+          !started.appendSlots) ||
+        (normalizeAudio && !started.normalizeAudio))
     ) {
       currentJobId = null
       await fetch(`${API_BASE}/api/cut/${jobId}`, { method: 'DELETE' }).catch(() => {})

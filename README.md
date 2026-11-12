@@ -52,19 +52,25 @@ Der Video Cutter nutzt dasselbe Design-System wie der
 ## Videos anhängen (Zusammenfügen)
 
 In der Karte **„Videos anhängen"** lassen sich bis zu 5 weitere Videos
-hochladen. Jedes Video kann **vor** (Intro) oder **hinter** (Outro) die
-Ausschnitte des Hauptvideos gesetzt und mit **Von/Bis** gekürzt werden (Bis leer
-= bis zum Ende). Innerhalb von „davor" bzw. „danach" bestimmt ↑/↓ die
-Reihenfolge. Alles wird serverseitig zu einer Datei zusammengefügt. Dabei wird
-immer neu kodiert: Alle Clips werden auf die (ggf. zugeschnittene) Auflösung des
-Hauptvideos skaliert (Letterbox statt Verzerrung), auf 30 fps und 48 kHz Stereo
-normiert; Clips ohne Tonspur erhalten Stille. Die gewählte Animation gilt auch
-zwischen den angehängten Videos.
+hochladen und mit **Von/Bis** kürzen (Bis leer = bis zum Ende). Die Liste zeigt
+die Gesamtreihenfolge: Ausschnitte des Hauptvideos (fest, in Zeitreihenfolge)
+und angehängte Videos. Videos lassen sich am Griff ⠿ per **Drag & Drop** (oder
+mit ↑/↓) **vor, zwischen oder hinter** die Ausschnitte setzen; „Davor/Danach"
+setzt ein Video direkt an den Anfang bzw. das Ende. Optional gleicht
+**„Lautstärke angleichen"** alle Clips per `loudnorm` (EBU R128, −16 LUFS) auf
+eine einheitliche Lautheit an. Alles wird serverseitig zu einer Datei
+zusammengefügt. Dabei wird immer neu kodiert: Alle Clips werden auf die (ggf.
+zugeschnittene) Auflösung des Hauptvideos skaliert (Letterbox statt Verzerrung),
+auf 30 fps und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten Stille. Die
+gewählte Animation gilt auch zwischen den angehängten Videos.
 
 Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
-Datei `{ start, duration?, position }`), Analyse per `ffprobe` (`FFPROBE_PATH`,
-Limit `MAX_APPEND_FILES`). Health meldet
-`"features":["crop","append","appendTrim"]`.
+Datei `{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
+Ausschnitt einfügen) und optional `normalizeAudio=1`. Analyse per `ffprobe`
+(`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet
+`"features":["crop","append","appendTrim","appendSlots","normalizeAudio"]`.
+Ein älteres Backend ohne diese Features wird erkannt; der Job wird dann mit
+Hinweis abgebrochen statt falsch zusammengefügt.
 
 ## Deployment auf den VPS
 

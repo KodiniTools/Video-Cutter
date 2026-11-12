@@ -407,9 +407,9 @@ describe('videoEditor store – Videos anhängen', () => {
 
     store.moveAppendClip(added[2].id, -1)
     expect(store.appendClips.map((c) => c.file.name)).toEqual(['a.mp4', 'c.mp4', 'b.mp4'])
-    // Ränder: nicht über den Anfang/das Ende hinaus.
-    store.moveAppendClip(added[0].id, -1)
-    expect(store.appendClips[0].file.name).toBe('a.mp4')
+    // Ränder: nicht über das Ende hinaus.
+    store.moveAppendClip(added[1].id, 1)
+    expect(store.appendClips.map((c) => c.file.name)).toEqual(['a.mp4', 'c.mp4', 'b.mp4'])
 
     store.setAppendDuration(added[1].id, 12.5)
     expect(store.appendClips.find((c) => c.id === added[1].id)?.duration).toBe(12.5)
@@ -486,19 +486,117 @@ describe('videoEditor store – Videos anhängen', () => {
     expect(isAppendTrimmed(get())).toBe(false)
   })
 
-  it('Position: Gruppen davor/danach, Verschieben nur innerhalb der Gruppe', () => {
+  it('Position: Gruppen davor/danach; ▲▼ verschiebt auch über die Ausschnitte hinweg', () => {
     const store = loadVideo(30)
     const [a, b, c] = store.addAppendClips([clip('a.mp4'), clip('b.mp4'), clip('c.mp4')])
     store.setAppendPosition(b.id, 'before')
     expect(store.appendsBefore.map((x) => x.file.name)).toEqual(['b.mp4'])
     expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['a.mp4', 'c.mp4'])
 
-    // c nach oben: überspringt b (andere Gruppe) und tauscht mit a.
+    // c nach oben: tauscht mit a (innerhalb „danach").
     store.moveAppendClip(c.id, -1)
     expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['c.mp4', 'a.mp4'])
-    // b ist allein in seiner Gruppe -> keine Bewegung.
+    // b nach unten: an den Ausschnitten vorbei -> wird zum ersten Outro.
     store.moveAppendClip(b.id, 1)
-    expect(store.appendsBefore.map((x) => x.file.name)).toEqual(['b.mp4'])
-    expect(a.position).toBe('after')
+    expect(store.appendsBefore).toHaveLength(0)
+    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['b.mp4', 'c.mp4', 'a.mp4'])
+    expect(store.appendClips.find((x) => x.id === a.id)?.position).toBe('after')
+  })
+
+  /** Ausschnitt [s, e] festhalten (Ende zuerst: Start darf das Ende nicht überholen). */
+  const seg = (store: ReturnType<typeof loadVideo>, s: number, e: number) => {
+    store.setEnd(e)
+    store.setStart(s)
+    store.addSegment()
+  }
+
+  const names = (store: ReturnType<typeof loadVideo>) =>
+    store.mergeItems.map((it) =>
+      it.kind === 'main' ? `M${it.index + 1}` : it.clip.file.name.replace('.mp4', ''),
+    )
+
+  it('mergeItems: Platzhalter ohne Ausschnitt, Teile in Zeitreihenfolge', () => {
+    const store = loadVideo(30)
+    // Ausschnitt anlegen und wieder entfernen -> keine Auswahl mehr übrig.
+    seg(store, 1, 2)
+    store.removeSegment(0)
+    store.addAppendClips([clip('a.mp4')])
+    expect(names(store)).toEqual(['M1', 'a'])
+    expect(store.mergeItems[0]).toMatchObject({ kind: 'main', range: null })
+
+    seg(store, 10, 12)
+    seg(store, 2, 4)
+    expect(store.mainParts).toEqual([
+      { start: 2, duration: 2 },
+      { start: 10, duration: 2 },
+    ])
+    expect(names(store)).toEqual(['M1', 'M2', 'a'])
+  })
+
+  it('Drag & Drop: Video zwischen zwei Ausschnitte setzen (slot) und zurück', () => {
+    const store = loadVideo(30)
+    for (const [s, e] of [
+      [1, 2],
+      [5, 6],
+      [9, 10],
+    ])
+      seg(store, s, e)
+    const [a, b] = store.addAppendClips([clip('a.mp4'), clip('b.mp4')])
+    expect(names(store)).toEqual(['M1', 'M2', 'M3', 'a', 'b'])
+
+    // a hinter Teil 1 ziehen (Index 1 in der Liste ohne a).
+    store.moveMergeItem(a.id, 1)
+    expect(names(store)).toEqual(['M1', 'a', 'M2', 'M3', 'b'])
+    expect(store.appendClips.find((x) => x.id === a.id)).toMatchObject({
+      position: 'after',
+      slot: 1,
+    })
+
+    // b ganz nach vorne -> Intro.
+    store.moveMergeItem(b.id, 0)
+    expect(names(store)).toEqual(['b', 'M1', 'a', 'M2', 'M3'])
+    expect(store.appendClips.find((x) => x.id === b.id)).toMatchObject({
+      position: 'before',
+      slot: null,
+    })
+
+    // ▲ von a über Teil 1 -> davor (hinter b).
+    store.moveAppendClip(a.id, -1)
+    expect(names(store)).toEqual(['b', 'a', 'M1', 'M2', 'M3'])
+
+    // Davor/Danach-Umschalter setzt die Einfügestelle zurück.
+    store.moveMergeItem(a.id, 3)
+    expect(names(store)).toEqual(['b', 'M1', 'M2', 'a', 'M3'])
+    store.setAppendPosition(a.id, 'after')
+    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
+
+    // Ungültige Ziele werden begrenzt / ignoriert.
+    store.moveMergeItem(a.id, 99)
+    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
+    store.moveMergeItem(12345, 0)
+    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
+  })
+
+  it('Einfügestelle hinter dem letzten Teil fällt ans Ende, wenn Ausschnitte wegfallen', () => {
+    const store = loadVideo(30)
+    for (const [s, e] of [
+      [1, 2],
+      [5, 6],
+    ])
+      seg(store, s, e)
+    const [a] = store.addAppendClips([clip('a.mp4')])
+    store.moveMergeItem(a.id, 1)
+    expect(names(store)).toEqual(['M1', 'a', 'M2'])
+    store.removeSegment(1)
+    expect(names(store)).toEqual(['M1', 'a'])
+  })
+
+  it('Lautstärke angleichen ist eine Einstellung (bleibt bei Reset der Liste)', () => {
+    const store = loadVideo(30)
+    expect(store.normalizeAudio).toBe(false)
+    store.setNormalizeAudio(true)
+    store.addAppendClips([clip('a.mp4')])
+    store.clearAppendClips()
+    expect(store.normalizeAudio).toBe(true)
   })
 })

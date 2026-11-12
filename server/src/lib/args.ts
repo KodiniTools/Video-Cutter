@@ -482,17 +482,41 @@ export interface AppendClip {
   hasAudio: boolean
   /** Standard 'after'. */
   position?: AppendPosition
+  /**
+   * Nur bei 'after': direkt hinter dem n-ten behaltenen Bereich des
+   * Hauptvideos einfügen (1-basiert). Fehlt oder ≥ Anzahl Bereiche = ganz am Ende.
+   */
+  slot?: number
 }
 
-/** Reihenfolge beim Zusammenfügen: alle 'before'-Clips, dann die Ausschnitte, dann 'after'. */
-export function splitAppends(appends: AppendClip[]): {
-  before: AppendClip[]
-  after: AppendClip[]
-} {
-  return {
-    before: appends.filter((a) => a.position === 'before'),
-    after: appends.filter((a) => a.position !== 'before'),
+/**
+ * Effektive Einfügestelle eines angehängten Videos: Anzahl der Bereiche des
+ * Hauptvideos, die VOR ihm laufen (0 = ganz vorne, `mainCount` = ganz hinten).
+ */
+export function appendSlot(a: AppendClip, mainCount: number): number {
+  if (a.position === 'before') return 0
+  const s = a.slot
+  if (s === undefined || !Number.isInteger(s) || s < 1 || s >= mainCount) return mainCount
+  return s
+}
+
+/**
+ * Gesamtreihenfolge beim Zusammenfügen: die Bereiche des Hauptvideos in
+ * Zeitreihenfolge, die angehängten Videos an ihrer Einfügestelle (bei gleicher
+ * Stelle in Listenreihenfolge).
+ */
+export function mergeSequence(
+  mainCount: number,
+  appends: AppendClip[],
+): ({ kind: 'main'; index: number } | { kind: 'append'; index: number })[] {
+  const seq: ({ kind: 'main'; index: number } | { kind: 'append'; index: number })[] = []
+  for (let k = 0; k <= mainCount; k++) {
+    if (k > 0) seq.push({ kind: 'main', index: k - 1 })
+    appends.forEach((a, i) => {
+      if (appendSlot(a, mainCount) === k) seq.push({ kind: 'append', index: i })
+    })
   }
+  return seq
 }
 
 export interface MergeArgsInput {
@@ -510,7 +534,16 @@ export interface MergeArgsInput {
   transition?: Transition
   /** Bildausschnitt – gilt nur für das Hauptvideo (Anteile beziehen sich darauf). */
   crop?: CropRect
+  /** Lautstärke aller Clips per EBU-R128 (`loudnorm`) auf ein Niveau angleichen. */
+  normalizeAudio?: boolean
 }
+
+/**
+ * Lautheits-Angleichung je Clip (EBU R128, Single-Pass): -16 LUFS integriert,
+ * max. -1,5 dBTP. `loudnorm` gibt intern 192 kHz aus – die anschließende
+ * Audio-Normierung (AUDIO_NORM) setzt wieder auf 48 kHz.
+ */
+export const LOUDNORM_FILTER = 'loudnorm=I=-16:TP=-1.5:LRA=11'
 
 /** Gemeinsame Bildrate aller Clips (concat/xfade verlangen identische Parameter). */
 const MERGE_FPS = 30
@@ -553,6 +586,7 @@ export function buildMergeArgs({
   height,
   transition,
   crop,
+  normalizeAudio = false,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -569,25 +603,23 @@ export function buildMergeArgs({
     hasAudio: a.hasAudio,
     crop: undefined as CropRect | undefined,
   })
-  const { before, after } = splitAppends(appends)
+  const mainClip = (r: Segment) => ({
+    inputArgs: [
+      '-ss',
+      formatFfmpegTime(r.start),
+      '-t',
+      formatFfmpegTime(Math.max(0, r.duration)),
+      '-i',
+      inputPath,
+    ],
+    duration: r.duration,
+    hasAudio: mainHasAudio,
+    crop,
+  })
 
-  const clips = [
-    ...before.map(appendClip),
-    ...keep.map((r) => ({
-      inputArgs: [
-        '-ss',
-        formatFfmpegTime(r.start),
-        '-t',
-        formatFfmpegTime(Math.max(0, r.duration)),
-        '-i',
-        inputPath,
-      ],
-      duration: r.duration,
-      hasAudio: mainHasAudio,
-      crop,
-    })),
-    ...after.map(appendClip),
-  ]
+  const clips = mergeSequence(keep.length, appends).map((item) =>
+    item.kind === 'main' ? mainClip(keep[item.index]) : appendClip(appends[item.index]),
+  )
 
   const ranges: Segment[] = clips.map((c) => ({ start: 0, duration: c.duration }))
   const xf = effectiveTransition(ranges, transition)
@@ -604,7 +636,12 @@ export function buildMergeArgs({
       'format=yuv420p',
       'setpts=PTS-STARTPTS',
     ]
-    const afx = [AUDIO_NORM, 'asetpts=PTS-STARTPTS']
+    // Stille (anullsrc) braucht keine Lautheits-Angleichung.
+    const afx = [
+      ...(normalizeAudio && c.hasAudio ? [LOUDNORM_FILTER] : []),
+      AUDIO_NORM,
+      'asetpts=PTS-STARTPTS',
+    ]
     if (dip > 0) {
       const fd = dip.toFixed(3)
       const outStart = Math.max(0, c.duration - dip).toFixed(3)

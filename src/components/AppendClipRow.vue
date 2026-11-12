@@ -11,7 +11,7 @@ import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 
 /**
  * Eine Zeile der Liste „Videos anhängen": Name, Position (davor/danach),
- * verwendeter Bereich (Von/Bis) sowie Sortieren und Entfernen.
+ * verwendeter Bereich (Von/Bis) sowie Sortieren (Griff zum Ziehen, ▲▼) und Entfernen.
  */
 const props = defineProps<{
   clip: AppendClip
@@ -20,6 +20,8 @@ const props = defineProps<{
   canUp: boolean
   canDown: boolean
   disabled: boolean
+  /** Wird diese Zeile gerade gezogen? (nur Optik) */
+  dragging?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,7 +31,26 @@ const emit = defineEmits<{
   (e: 'position', pos: AppendPosition): void
   (e: 'move', delta: number): void
   (e: 'remove'): void
+  (e: 'drag-start', ev: DragEvent): void
+  (e: 'drag-end'): void
 }>()
+
+const rowEl = ref<HTMLLIElement | null>(null)
+
+/** Nur der Griff ist ziehbar (Eingabefelder bleiben normal bedienbar). */
+function onHandleDragStart(ev: DragEvent): void {
+  if (props.disabled) {
+    ev.preventDefault()
+    return
+  }
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = 'move'
+    // Firefox startet das Ziehen nur mit gesetzten Daten.
+    ev.dataTransfer.setData('text/plain', String(props.clip.id))
+    if (rowEl.value) ev.dataTransfer.setDragImage(rowEl.value, 16, 16)
+  }
+  emit('drag-start', ev)
+}
 
 const { t } = useI18n()
 
@@ -72,8 +93,19 @@ function commitEnd(): void {
 </script>
 
 <template>
-  <li class="append-row">
+  <li ref="rowEl" class="append-row" :class="{ dragging }">
     <div class="row-head">
+      <span
+        class="drag-handle"
+        :class="{ disabled }"
+        :draggable="!disabled"
+        role="img"
+        :aria-label="t('append.drag')"
+        :title="t('append.drag')"
+        @dragstart="onHandleDragStart"
+        @dragend="emit('drag-end')"
+        >⠿</span
+      >
       <span class="segment-index">{{ index }}</span>
       <span class="info" :title="clip.file.name">
         <span class="name">{{ clip.file.name }}</span>
@@ -180,6 +212,25 @@ function commitEnd(): void {
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-md);
   background: var(--ds-surface-2);
+}
+.append-row.dragging {
+  opacity: 0.45;
+}
+.drag-handle {
+  flex: none;
+  padding: 2px 2px;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-md);
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.drag-handle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .row-head {
   display: flex;
