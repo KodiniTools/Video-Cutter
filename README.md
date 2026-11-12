@@ -64,11 +64,16 @@ zugeschnittene) Auflösung des Hauptvideos skaliert (Letterbox statt Verzerrung)
 auf 30 fps und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten Stille. Die
 gewählte Animation gilt auch zwischen den angehängten Videos.
 
+Zwischen je zwei Einträgen der Liste lässt sich ein **eigener Übergang** wählen
+(Standard = globale Animation, Keine, Ein-/Ausblenden, Gleiten, Zoomen,
+Umklappen). Die Übergangsdauer ist für alle Nahtstellen gleich.
+
 Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
 Datei `{ start, duration?, position, slot? }` – `slot` = hinter dem n-ten
-Ausschnitt einfügen) und optional `normalizeAudio=1`. Analyse per `ffprobe`
+Ausschnitt einfügen) optional `normalizeAudio=1` und `seamTransitions` (JSON-Array je Nahtstelle,
+`null` = global; Dauer aus `transitionDuration`). Analyse per `ffprobe`
 (`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet
-`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat","music"]`.
+`"features":["crop","append","appendTrim","appendSlots","normalizeAudio","outputFormat","music","seamTransitions"]`.
 Ein älteres Backend ohne diese Features wird erkannt; der Job wird dann mit
 Hinweis abgebrochen statt falsch zusammengefügt.
 

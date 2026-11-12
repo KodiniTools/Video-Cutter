@@ -5,6 +5,7 @@ import {
   MAX_APPEND_CLIPS,
   appendClipLength,
   isAppendTrimmed,
+  seamKey,
 } from '@/stores/videoEditor'
 
 // jsdom kennt createObjectURL nicht -> stubben.
@@ -631,5 +632,29 @@ describe('videoEditor store – Videos anhängen', () => {
     store.setMusicFile(new File([new Uint8Array([1])], 'c.mp3', { type: 'audio/mpeg' }))
     store.reset()
     expect(store.music).toBeNull()
+  })
+
+  it('Übergang je Nahtstelle: an Nachbarn gebunden, Umsortieren setzt auf Standard', () => {
+    const store = loadVideo(30)
+    const [a, b] = store.addAppendClips([clip('a.mp4'), clip('b.mp4')])
+    // Reihenfolge: Ausschnitte, a, b -> zwei Nahtstellen.
+    expect(store.seamPresets).toEqual([null, null])
+    const items = store.mergeItems
+    store.setSeamTransition(seamKey(items[1], items[2]), 'slide')
+    expect(store.seamPresets).toEqual([null, 'slide'])
+
+    // a und b tauschen: neues Paar (b > a) -> wieder Standard.
+    store.moveAppendClip(b.id, -1)
+    expect(store.seamPresets).toEqual([null, null])
+    // Zurück: altes Paar greift wieder.
+    store.moveAppendClip(a.id, -1)
+    expect(store.seamPresets).toEqual([null, 'slide'])
+
+    store.setSeamTransition(seamKey(store.mergeItems[1], store.mergeItems[2]), null)
+    expect(store.seamPresets).toEqual([null, null])
+
+    store.setSeamTransition('x>y', 'fade')
+    store.reset()
+    expect(store.seamTransitions).toEqual({})
   })
 })

@@ -445,6 +445,7 @@ async function onExport(): Promise<void> {
       normalizeAudio.value,
       { aspect: outputAspect.value, fill: outputFill.value },
       music.value ?? undefined,
+      store.seamPresets,
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)

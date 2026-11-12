@@ -59,6 +59,22 @@ export type MergeItem =
     }
   | { kind: 'append'; clip: AppendClip }
 
+/** Übergang an einer Nahtstelle (wie die globale Animation). */
+export type SeamPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
+
+/** Stabiler Schlüssel eines Eintrags der Gesamtreihenfolge. */
+export function mergeItemKey(it: MergeItem): string {
+  return it.kind === 'main' ? `main-${it.index}` : `clip-${it.clip.id}`
+}
+
+/**
+ * Schlüssel einer Nahtstelle aus ihren beiden Nachbarn. Ändert sich die
+ * Reihenfolge, entstehen neue Paare – deren Übergang ist dann wieder „Standard".
+ */
+export function seamKey(left: MergeItem, right: MergeItem): string {
+  return `${mergeItemKey(left)}>${mergeItemKey(right)}`
+}
+
 /** Effektive Einfügestelle: Anzahl der Teile des Hauptvideos VOR dem Clip (wie im Backend). */
 export function appendSlotOf(c: AppendClip, mainCount: number): number {
   if (c.position === 'before') return 0
@@ -158,6 +174,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const outputFill = ref<OutputFill>('pad')
   /** Hintergrundmusik (`null` = keine). Wie angehängte Videos kein Teil von Undo. */
   const music = ref<MusicSettings | null>(null)
+  /** Übergang je Nahtstelle (Schlüssel: seamKey). Fehlt = globaler Übergang. */
+  const seamTransitions = ref<Record<string, SeamPreset>>({})
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -219,6 +237,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     }
     return items
   })
+  /** Übergang je Nahtstelle in Gesamtreihenfolge (`null` = globaler Übergang). */
+  const seamPresets = computed<(SeamPreset | null)[]>(() =>
+    mergeItems.value
+      .slice(1)
+      .map((it, i) => seamTransitions.value[seamKey(mergeItems.value[i], it)] ?? null),
+  )
   /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
   const cropPixelSize = computed(() => {
     if (!crop.value || !videoWidth.value || !videoHeight.value) return null
@@ -382,6 +406,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     crop.value = null
     appendClips.value = []
     music.value = null
+    seamTransitions.value = {}
   }
 
   function setDuration(d: number): void {
@@ -646,6 +671,14 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     music.value = null
   }
 
+  /** Übergang einer Nahtstelle setzen; `null` = wieder globaler Übergang. */
+  function setSeamTransition(key: string, preset: SeamPreset | null): void {
+    const next = { ...seamTransitions.value }
+    if (preset === null) delete next[key]
+    else next[key] = preset
+    seamTransitions.value = next
+  }
+
   function clearAppendClips(): void {
     appendClips.value = []
   }
@@ -680,6 +713,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     // Angehängte Videos und Musik sind jetzt Teil des Ergebnisses.
     appendClips.value = []
     music.value = null
+    seamTransitions.value = {}
     error.value = ''
     // Ergebnis für den Download bereithalten.
     resultBlob.value = blob
@@ -707,6 +741,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     crop.value = null
     appendClips.value = []
     music.value = null
+    seamTransitions.value = {}
     resetHistory()
   }
 
@@ -730,6 +765,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     outputAspect,
     outputFill,
     music,
+    seamTransitions,
     resultName,
     resultBlob,
     hasResult,
@@ -751,6 +787,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     appendsAfter,
     mainParts,
     mergeItems,
+    seamPresets,
     // actions
     setFile,
     setDuration,
@@ -780,6 +817,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setMusicFile,
     updateMusic,
     clearMusic,
+    setSeamTransition,
     clearAppendClips,
     setCrop,
     enableCrop,

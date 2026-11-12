@@ -19,6 +19,7 @@ describe('parseJobStart', () => {
       normalizeAudio: false,
       outputFormat: false,
       music: false,
+      seamTransitions: false,
     })
   })
 
@@ -32,6 +33,7 @@ describe('parseJobStart', () => {
       normalizeAudio: false,
       outputFormat: false,
       music: false,
+      seamTransitions: false,
     })
   })
 
@@ -201,6 +203,7 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
       normalizeAudio: false,
       outputFormat: false,
       music: false,
+      seamTransitions: false,
     })
   })
 
@@ -267,5 +270,56 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
     expect(form?.get('musicFade')).toBe('0')
     expect(form?.get('musicLoop')).toBe('1')
     expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-8', { method: 'DELETE' })
+  })
+
+  it('sendet Übergänge je Nahtstelle (mit Dauer) und bricht ab, wenn nicht bestätigt', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-9","append":1,"appendTrim":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const extra = new File([new Uint8Array([1])], 'b.mp4', { type: 'video/mp4' })
+    const { cut } = useServerCut()
+    await expect(
+      cut(
+        file,
+        segments,
+        'reencode',
+        'keep',
+        10,
+        { preset: 'none', duration: 3 },
+        undefined,
+        [{ file: extra }],
+        false,
+        undefined,
+        undefined,
+        ['slide'],
+      ),
+    ).rejects.toThrow(APPEND_UNSUPPORTED)
+    const form = instances[0].sentForm
+    expect(form?.get('seamTransitions')).toBe('["slide"]')
+    expect(form?.get('transitionDuration')).toBe('3')
+    expect(form?.has('transitionPreset')).toBe(false)
+  })
+
+  it('nur Standard-Nahtstellen -> kein seamTransitions-Feld', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-10"}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const extra = new File([new Uint8Array([1])], 'b.mp4', { type: 'video/mp4' })
+    const { cut } = useServerCut()
+    await expect(
+      cut(
+        file,
+        segments,
+        'reencode',
+        'keep',
+        10,
+        undefined,
+        undefined,
+        [{ file: extra }],
+        false,
+        undefined,
+        undefined,
+        [null],
+      ),
+    ).rejects.toThrow(APPEND_UNSUPPORTED)
+    expect(instances[0].sentForm?.has('seamTransitions')).toBe(false)
   })
 })

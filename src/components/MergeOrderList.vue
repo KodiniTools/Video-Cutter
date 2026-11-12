@@ -2,7 +2,14 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useVideoEditorStore, type MergeItem } from '@/stores/videoEditor'
+import {
+  useVideoEditorStore,
+  mergeItemKey,
+  seamKey,
+  type MergeItem,
+  type SeamPreset,
+} from '@/stores/videoEditor'
+import { ANIMATIONS, useAnimationPref } from '@/composables/useAnimationPref'
 import { formatTimeMs } from '@/lib/timeFormat'
 import AppendClipRow from './AppendClipRow.vue'
 
@@ -17,14 +24,32 @@ defineProps<{
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
-const { mergeItems, mainParts, operation } = storeToRefs(store)
+const { mergeItems, mainParts, operation, seamTransitions } = storeToRefs(store)
+const { animation } = useAnimationPref()
 
 const multiPart = computed(() => mainParts.value.length > 1)
 /** Gesamtlänge des Hauptvideos im Ergebnis (Summe der Teile). */
 const mainTotal = computed(() => mainParts.value.reduce((s, r) => s + r.duration, 0))
 
-function keyOf(it: MergeItem): string {
-  return it.kind === 'main' ? `main-${it.index}` : `clip-${it.clip.id}`
+const keyOf = mergeItemKey
+
+// --- Übergang je Nahtstelle --------------------------------------------------
+/** Name des globalen Übergangs (für die Option „Standard"). */
+const globalAnimLabel = computed(() => {
+  const a = ANIMATIONS.find((x) => x.id === animation.value)
+  return t(a ? a.labelKey : 'anim.none')
+})
+
+/** Gewählter Übergang zwischen Eintrag i und i+1 ('' = Standard). */
+function seamValue(i: number): string {
+  const items = mergeItems.value
+  return seamTransitions.value[seamKey(items[i], items[i + 1])] ?? ''
+}
+
+function onSeamChange(i: number, ev: Event): void {
+  const items = mergeItems.value
+  const v = (ev.target as HTMLSelectElement).value
+  store.setSeamTransition(seamKey(items[i], items[i + 1]), v ? (v as SeamPreset) : null)
 }
 
 // --- Drag & Drop ----------------------------------------------------------
@@ -120,6 +145,22 @@ function mainLabel(it: Extract<MergeItem, { kind: 'main' }>): string {
         @move="store.moveAppendClip(it.clip.id, $event)"
         @remove="store.removeAppendClip(it.clip.id)"
       />
+      <li v-if="i < mergeItems.length - 1" class="seam">
+        <span class="seam-line" aria-hidden="true" />
+        <select
+          class="seam-select"
+          :class="{ custom: seamValue(i) !== '' }"
+          :value="seamValue(i)"
+          :disabled="disabled"
+          :aria-label="t('append.seam', { a: i + 1, b: i + 2 })"
+          :title="t('append.seam', { a: i + 1, b: i + 2 })"
+          @change="onSeamChange(i, $event)"
+        >
+          <option value="">{{ t('append.seamDefault', { name: globalAnimLabel }) }}</option>
+          <option v-for="a in ANIMATIONS" :key="a.id" :value="a.id">{{ t(a.labelKey) }}</option>
+        </select>
+        <span class="seam-line" aria-hidden="true" />
+      </li>
     </template>
   </ol>
 </template>
@@ -161,6 +202,36 @@ function mainLabel(it: Extract<MergeItem, { kind: 'main' }>): string {
 }
 .segment-time small {
   color: var(--ds-text-2);
+}
+/* Übergang zwischen zwei Einträgen. */
+.seam {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0;
+}
+.seam-line {
+  flex: 1;
+  border-top: 1px dashed var(--ds-border);
+}
+.seam-select {
+  max-width: 70%;
+  padding: 2px 6px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
+  cursor: pointer;
+}
+.seam-select.custom {
+  border-color: var(--ds-accent);
+  color: var(--ds-text);
+  font-weight: var(--ds-weight-semibold);
+}
+.seam-select:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 /* Einfügemarke beim Ziehen. */
 .drop-before {

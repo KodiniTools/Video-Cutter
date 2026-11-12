@@ -8,6 +8,8 @@ import {
   buildMergeArgs,
   buildServerArgs,
   computeKeepRanges,
+  mergeOutputDuration,
+  mergeSequence,
   mergeTargetSize,
   outputDurationFor,
   outputTargetSize,
@@ -21,6 +23,7 @@ import {
   parseNormalizeAudio,
   parseOutputFormat,
   parseMusicParams,
+  parseSeamTransitions,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -73,13 +76,15 @@ export const SERVER_FEATURES = [
   'normalizeAudio',
   'outputFormat',
   'music',
+  'seamTransitions',
 ] as const
 
 /**
  * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
  *                 operation, total, crop, transitionPreset, transitionDuration,
  *                 normalizeAudio, outputAspect, outputFill,
- *                 music, musicVolume, musicOriginalVolume, musicFade, musicLoop)
+ *                 music, musicVolume, musicOriginalVolume, musicFade, musicLoop,
+ *                 seamTransitions)
  * Legt einen Job an und startet die Verarbeitung.
  * Antwort: { jobId, crop, append, appendTrim, appendSlots, normalizeAudio } –
  * `crop` bestätigt den Bildausschnitt, `append` die Anzahl der angehängten
@@ -87,7 +92,7 @@ export const SERVER_FEATURES = [
  * `appendSlots` freie Einfügestellen zwischen den Ausschnitten und
  * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen),
  * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus, `music` die
- * Hintergrundmusik.
+ * Hintergrundmusik, `seamTransitions` die Übergänge je Nahtstelle.
  */
 cutRouter.post(
   '/cut',
@@ -117,6 +122,8 @@ cutRouter.post(
       const output = parseOutputFormat(req.body ?? {})
       // Zusammenfügen ODER anderes Seitenverhältnis -> Normierungs-Pipeline.
       const musicParams = musicFile ? parseMusicParams(req.body ?? {}) : null
+      // Übergänge je Nahtstelle gelten nur beim Zusammenfügen mit angehängten Videos.
+      const seamInput = appendFiles.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
       const useMerge = appendFiles.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
 
       if (!jobManager.hasCapacity()) {
@@ -178,6 +185,16 @@ cutRouter.post(
             slot: appendMeta[i].slot,
           }
         })
+        // Übergänge je Nahtstelle: Anzahl muss zur Gesamtreihenfolge passen.
+        const seqLen = mergeSequence(keep.length, appends).length
+        if (seamInput && seamInput.seams.length !== Math.max(0, seqLen - 1)) {
+          throw new ValidationError('Die Übergänge passen nicht zur Anzahl der Clips.')
+        }
+        // Dauer für animierte Nahtstellen auch dann, wenn global „keiner" gewählt ist.
+        const transition = seamInput
+          ? (params.transition ?? { preset: 'none' as const, duration: seamInput.duration })
+          : params.transition
+        const seams = seamInput?.seams
         const size = outputTargetSize(
           mergeTargetSize(mainInfo.width, mainInfo.height, params.crop),
           output.aspect,
@@ -192,16 +209,18 @@ cutRouter.post(
           appends,
           width: size.width,
           height: size.height,
-          transition: params.transition,
+          transition,
           crop: params.crop,
           normalizeAudio,
           fill: output.fill,
           music,
+          seams,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
-        outputDuration = outputDurationFor(
+        outputDuration = mergeOutputDuration(
           [...keep, ...appends.map((a) => ({ start: 0, duration: a.duration }))],
-          params.transition,
+          transition,
+          seams,
         )
       } else {
         // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
@@ -253,6 +272,7 @@ cutRouter.post(
         normalizeAudio,
         outputFormat: true,
         music: musicFile !== undefined,
+        seamTransitions: seamInput !== undefined,
       })
     } catch (err) {
       await removeFiles(allPaths)

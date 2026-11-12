@@ -540,6 +540,56 @@ export interface MergeArgsInput {
   fill?: OutputFill
   /** Optionale Hintergrundmusik über das gesamte Ergebnis. */
   music?: MusicTrack
+  /**
+   * Übergang je Nahtstelle (Länge = Clipanzahl − 1). `null` = globaler Übergang
+   * (`transition`). Ohne Angabe gilt überall der globale Übergang.
+   */
+  seams?: (TransitionPreset | null)[]
+}
+
+/**
+ * Löst die Übergänge je Nahtstelle auf: `null` -> globaler Preset (bzw. 'none').
+ * Liefert zusätzlich die gemeinsame Überblenddauer `d` (Sekunden, je Clip),
+ * begrenzt wie beim globalen Übergang; 0, wenn keine Nahtstelle animiert ist.
+ */
+export function resolveSeams(
+  ranges: Segment[],
+  seams: (TransitionPreset | null)[],
+  transition?: Transition,
+): { presets: TransitionPreset[]; d: number } {
+  const global: TransitionPreset = transition?.preset ?? 'none'
+  const presets = seams.map((p) => p ?? global)
+  const duration = transition?.duration ?? 1
+  // Dieselbe Begrenzung wie global (Preset hier egal, nur nicht 'none').
+  const eff = effectiveTransition(ranges, { preset: 'slide', duration })
+  const d = presets.some((p) => p !== 'none') && eff ? eff.d : 0
+  return { presets: d > 0 ? presets : presets.map(() => 'none'), d }
+}
+
+/**
+ * Ausgabedauer bei Übergängen je Nahtstelle: Summe minus Überlappung jeder
+ * xfade-Nahtstelle (Dip to Black und harte Schnitte überlappen nicht).
+ */
+export function seamOutputDuration(
+  ranges: Segment[],
+  seams: (TransitionPreset | null)[],
+  transition?: Transition,
+): number {
+  const sum = ranges.reduce((acc, r) => acc + r.duration, 0)
+  const { presets, d } = resolveSeams(ranges, seams, transition)
+  const overlaps = presets.filter((p) => p !== 'none' && p !== 'fade').length
+  return Math.max(0, sum - overlaps * d)
+}
+
+/** Ausgabedauer beim Zusammenfügen (mit oder ohne Übergänge je Nahtstelle). */
+export function mergeOutputDuration(
+  ranges: Segment[],
+  transition?: Transition,
+  seams?: (TransitionPreset | null)[],
+): number {
+  return seams
+    ? seamOutputDuration(ranges, seams, transition)
+    : outputDurationFor(ranges, transition)
 }
 
 /** Hintergrundmusik, die unter das fertige Ergebnis gemischt wird. */
@@ -730,6 +780,7 @@ export function buildMergeArgs({
   normalizeAudio = false,
   fill = 'pad',
   music,
+  seams,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -767,6 +818,15 @@ export function buildMergeArgs({
   const ranges: Segment[] = clips.map((c) => ({ start: 0, duration: c.duration }))
   const xf = effectiveTransition(ranges, transition)
   const dip = xf?.preset === 'fade' ? xf.d : 0
+  if (seams && seams.length !== Math.max(0, clips.length - 1)) {
+    throw new Error('Anzahl der Übergänge passt nicht zur Anzahl der Clips.')
+  }
+  const perSeam = seams ? resolveSeams(ranges, seams, transition) : null
+  /** Dip to Black an Nahtstelle k (zwischen Clip k und k+1)? Liefert die Länge oder 0. */
+  const dipAt = (k: number): number => {
+    if (perSeam) return perSeam.presets[k] === 'fade' ? perSeam.d : 0
+    return k >= 0 && k < clips.length - 1 ? dip : 0
+  }
 
   let filter = ''
   clips.forEach((c, i) => {
@@ -778,17 +838,18 @@ export function buildMergeArgs({
       AUDIO_NORM,
       'asetpts=PTS-STARTPTS',
     ]
-    if (dip > 0) {
-      const fd = dip.toFixed(3)
-      const outStart = Math.max(0, c.duration - dip).toFixed(3)
-      if (i > 0) {
-        vfx.push(`fade=t=in:st=0:d=${fd}`)
-        afx.push(`afade=t=in:st=0:d=${fd}`)
-      }
-      if (i < clips.length - 1) {
-        vfx.push(`fade=t=out:st=${outStart}:d=${fd}`)
-        afx.push(`afade=t=out:st=${outStart}:d=${fd}`)
-      }
+    const dipIn = i > 0 ? dipAt(i - 1) : 0
+    const dipOut = i < clips.length - 1 ? dipAt(i) : 0
+    if (dipIn > 0) {
+      const fd = dipIn.toFixed(3)
+      vfx.push(`fade=t=in:st=0:d=${fd}`)
+      afx.push(`afade=t=in:st=0:d=${fd}`)
+    }
+    if (dipOut > 0) {
+      const fd = dipOut.toFixed(3)
+      const outStart = Math.max(0, c.duration - dipOut).toFixed(3)
+      vfx.push(`fade=t=out:st=${outStart}:d=${fd}`)
+      afx.push(`afade=t=out:st=${outStart}:d=${fd}`)
     }
     filter += `${fitFilter(`${i}:v`, `v${i}`, W, H, fill, pre, vfx)};`
     // Ohne Tonspur: Stille in exakt der Clip-Länge erzeugen.
@@ -800,7 +861,36 @@ export function buildMergeArgs({
 
   // Mit Musik endet die Clip-Kette in [amain]; die Mischung liefert dann [outa].
   const aFinal = music ? 'amain' : 'outa'
-  if (xf && xf.preset !== 'fade' && clips.length > 1) {
+  if (perSeam && clips.length > 1) {
+    // Gemischte Kette: je Nahtstelle xfade (überlappend) oder concat (harter
+    // Schnitt bzw. Dip to Black – die Blenden stecken schon in den Clips).
+    let vPrev = 'v0'
+    let aPrev = 'a0'
+    let len = clips[0].duration
+    const d = perSeam.d
+    for (let t = 1; t < clips.length; t++) {
+      const preset = perSeam.presets[t - 1]
+      const last = t === clips.length - 1
+      const vOut = last ? 'outv' : `vs${t}`
+      const aOut = last ? aFinal : `as${t}`
+      if (preset === 'none' || preset === 'fade') {
+        // concat liefert Zeitbasis 1/1000000 – ein folgendes xfade verlangt
+        // dieselbe Zeitbasis wie die Clips (1/fps), daher zurücksetzen.
+        filter += `[${vPrev}][${aPrev}][v${t}][a${t}]concat=n=2:v=1:a=1[${vOut}c][${aOut}];`
+        filter += `[${vOut}c]settb=1/${MERGE_FPS}[${vOut}];`
+        len += clips[t].duration
+      } else {
+        const type = XFADE_TYPES[preset]
+        const offset = Math.max(0, len - d)
+        filter += `[${vPrev}][v${t}]xfade=transition=${type}:duration=${d.toFixed(3)}:offset=${offset.toFixed(3)}[${vOut}];`
+        filter += `[${aPrev}][a${t}]acrossfade=d=${d.toFixed(3)}:c1=tri:c2=tri[${aOut}];`
+        len += clips[t].duration - d
+      }
+      vPrev = vOut
+      aPrev = aOut
+    }
+    filter = filter.replace(/;$/, '')
+  } else if (xf && xf.preset !== 'fade' && clips.length > 1) {
     let vPrev = 'v0'
     let aPrev = 'a0'
     let acc = clips[0].duration
@@ -824,7 +914,7 @@ export function buildMergeArgs({
 
   const musicInput: string[] = []
   if (music) {
-    filter += `;${musicMixFilter(music, clips.length, aFinal, outputDurationFor(ranges, transition))}`
+    filter += `;${musicMixFilter(music, clips.length, aFinal, mergeOutputDuration(ranges, transition, seams))}`
     musicInput.push(...(music.loop ? ['-stream_loop', '-1'] : []), '-i', music.path)
   }
 
