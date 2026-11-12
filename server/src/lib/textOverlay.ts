@@ -1,4 +1,5 @@
 import { ValidationError } from './validate'
+import { getCustomFont } from './customFonts'
 
 /**
  * Text-Einblendungen: Der Client schickt eine Liste von Texten (Zeitbereich,
@@ -10,7 +11,9 @@ import { ValidationError } from './validate'
  */
 
 export const TEXT_FONTS = ['roboto', 'montserrat', 'bebas', 'lora', 'pacifico'] as const
-export type TextFont = (typeof TEXT_FONTS)[number]
+export type BuiltinFont = (typeof TEXT_FONTS)[number]
+/** Mitgelieferte Schrift oder eigene Schrift (`f:<Dateiname>`, siehe customFonts). */
+export type TextFont = BuiltinFont | `f:${string}`
 
 export const TEXT_STYLES = ['outline', 'box', 'shadow', 'none'] as const
 export type TextStyle = (typeof TEXT_STYLES)[number]
@@ -25,7 +28,7 @@ export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
  * `\fs = cssPx * winRatio`. `bold` = Datei ist bereits fett (\b1 verhindert,
  * dass eine evtl. installierte Regular-Variante gewählt wird; kein Kunst-Fett).
  */
-export const FONT_META: Record<TextFont, { family: string; winRatio: number; bold: boolean }> = {
+export const FONT_META: Record<BuiltinFont, { family: string; winRatio: number; bold: boolean }> = {
   roboto: { family: 'Roboto', winRatio: 1.2002, bold: true },
   montserrat: { family: 'Montserrat ExtraBold', winRatio: 1.562, bold: true },
   bebas: { family: 'Bebas Neue', winRatio: 1.3, bold: false },
@@ -86,6 +89,29 @@ function color(v: unknown, label: string): string {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
+function isBuiltinFont(v: string): v is BuiltinFont {
+  return (TEXT_FONTS as readonly string[]).includes(v)
+}
+
+/** Mitgelieferte oder auf dem Server vorhandene eigene Schrift. */
+function parseFont(v: unknown, n: number): TextFont {
+  if (typeof v === 'string' && (isBuiltinFont(v) || (v.startsWith('f:') && getCustomFont(v)))) {
+    return v as TextFont
+  }
+  throw new ValidationError(`Schrift von Text ${n} ist auf dem Server nicht vorhanden.`)
+}
+
+/**
+ * Name/Größenfaktor für libass. Eigene Schriften: Datei ist genau ein Schnitt
+ * -> \b0 (kein Kunst-Fett; libass wählt die Datei über den eindeutigen Namen).
+ */
+export function fontMeta(font: TextFont): { family: string; winRatio: number; bold: boolean } {
+  if (isBuiltinFont(font)) return FONT_META[font]
+  const c = getCustomFont(font)
+  if (!c) throw new ValidationError('Schrift ist auf dem Server nicht vorhanden.')
+  return { family: c.family, winRatio: c.winRatio, bold: false }
+}
+
 /** Bereinigt den Text: Zeilenumbrüche vereinheitlichen, Steuerzeichen entfernen. */
 export function cleanText(raw: string): string {
   return (
@@ -142,7 +168,7 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
       end,
       x: clamp(num(item.x, `Position von Text ${n}`), 0, 1),
       y: clamp(num(item.y, `Position von Text ${n}`), 0, 1),
-      font: oneOf(item.font, TEXT_FONTS, `Schrift von Text ${n}`),
+      font: parseFont(item.font, n),
       size: clamp(num(item.size, `Größe von Text ${n}`), MIN_TEXT_SIZE, MAX_TEXT_SIZE),
       color: color(item.color, `Text ${n}`),
       style: oneOf(item.style, TEXT_STYLES, `Stil von Text ${n}`),
@@ -243,7 +269,7 @@ function styleTags(o: TextOverlay, px: number): { tags: string; alpha: string } 
 export function buildAssEvent(o: TextOverlay, width: number, height: number): string {
   const dur = o.end - o.start
   const px = o.size * height
-  const meta = FONT_META[o.font]
+  const meta = fontMeta(o.font)
   const x = Math.round(o.x * width)
   const y = Math.round(o.y * height)
   const { tags: look, alpha } = styleTags(o, px)

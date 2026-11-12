@@ -139,13 +139,18 @@ class JobManager {
   }
 
   /** Startet den FFmpeg-Lauf. Verwaltet Concurrency-Zähler und Cleanup. */
-  async run(job: Job, args: string[], durationSec: number): Promise<void> {
+  async run(job: Job, args: string[], durationSec: number, env?: NodeJS.ProcessEnv): Promise<void> {
     this.active++
     try {
-      const handle = runFfmpeg(args, durationSec, (p) => {
-        job.progress = p
-        this.emit(job)
-      })
+      const handle = runFfmpeg(
+        args,
+        durationSec,
+        (p) => {
+          job.progress = p
+          this.emit(job)
+        },
+        env,
+      )
       job.handle = handle
       await handle.promise
       if (job.storeResult) {

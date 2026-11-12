@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import path from 'node:path'
 import os from 'node:os'
+import { existsSync } from 'node:fs'
 
 function num(name: string, def: number): number {
   const raw = process.env[name]
@@ -15,6 +16,13 @@ function list(name: string, def: string[]): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+/** Erster vorhandener Ordner: <server>/fonts/custom (VPS) oder <repo>/src/assets/fonts (lokal). */
+function defaultCustomFontsDir(): string {
+  const deployed = path.resolve(__dirname, '../fonts/custom')
+  const repo = path.resolve(__dirname, '../../src/assets/fonts')
+  return existsSync(deployed) ? deployed : repo
 }
 
 export const config = {
@@ -38,6 +46,12 @@ export const config = {
 
   /** Schriften für Text-Einblendungen (libass `fontsdir`). */
   fontsDir: process.env.FONTS_DIR ?? path.resolve(__dirname, '../fonts'),
+  /**
+   * Eigene Schriften (WOFF2/WOFF/TTF/OTF). Auf dem VPS kopiert deploy.sh
+   * src/assets/fonts nach <API_DIR>/fonts/custom; lokal wird direkt
+   * src/assets/fonts des Repos genutzt.
+   */
+  customFontsDir: process.env.FONTS_CUSTOM_DIR ?? defaultCustomFontsDir(),
 
   /** Höchstzahl angehängter Videos pro Job. */
   maxAppendFiles: num('MAX_APPEND_FILES', 5),

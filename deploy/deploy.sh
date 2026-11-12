@@ -119,7 +119,11 @@ else
     --exclude '.env' \
     --exclude 'node_modules' \
     --exclude 'dist' \
+    --exclude 'fonts/custom' \
     server/ "$API_DIR/"
+  # Eigene Schriften für Text-Einblendungen (dieselben Dateien wie im Frontend).
+  sudo mkdir -p "$API_DIR/fonts/custom"
+  sudo rsync -a --delete src/assets/fonts/ "$API_DIR/fonts/custom/"
   # Ab jetzt dem aufrufenden Nutzer gehören lassen, damit npm/pm2 ohne sudo laufen.
   sudo chown -R "$(id -un):$(id -gn)" "$API_DIR"
 
