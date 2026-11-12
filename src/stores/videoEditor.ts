@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { clamp, type TrimMode } from '@/lib/ffmpegCommand'
-import { computeKeepRanges, type KeepRange } from '@/lib/keepRanges'
 
 /** 'keep' = Auswahl behalten, 'remove' = Auswahl entfernen (Rest zusammenfügen). */
 export type CutOperation = 'keep' | 'remove'
@@ -24,76 +23,6 @@ export interface CropRect {
   height: number
 }
 
-/**
- * Ein weiteres Video, das beim Schneiden vollständig HINTER die Ausschnitte
- * gehängt (zusammengefügt) wird.
- */
-/** Wo ein angehängtes Video landet: vor (Intro) oder hinter (Outro) den Ausschnitten. */
-export type AppendPosition = 'before' | 'after'
-
-export interface AppendClip {
-  /** Stabile ID für Liste/Reihenfolge. */
-  id: number
-  file: File
-  /** Gesamtdauer der Datei in Sekunden; 0 = (noch) unbekannt. */
-  duration: number
-  /** Verwendeter Bereich: Start (s) … Ende (s); `end: null` = bis zum Dateiende. */
-  start: number
-  end: number | null
-  position: AppendPosition
-  /**
-   * Nur bei 'after': direkt hinter dem n-ten Teil des Hauptvideos einfügen
-   * (1-basiert, zwischen zwei Ausschnitten). `null` = ganz am Ende.
-   */
-  slot: number | null
-}
-
-/** Ein Eintrag der Gesamtreihenfolge beim Zusammenfügen. */
-export type MergeItem =
-  | {
-      kind: 'main'
-      /** 0-basierter Index des Teils des Hauptvideos. */
-      index: number
-      /** Bereich des Teils; `null`, solange noch kein Ausschnitt existiert (Platzhalter). */
-      range: KeepRange | null
-    }
-  | { kind: 'append'; clip: AppendClip }
-
-/** Übergang an einer Nahtstelle (wie die globale Animation). */
-export type SeamPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
-
-/** Stabiler Schlüssel eines Eintrags der Gesamtreihenfolge. */
-export function mergeItemKey(it: MergeItem): string {
-  return it.kind === 'main' ? `main-${it.index}` : `clip-${it.clip.id}`
-}
-
-/**
- * Schlüssel einer Nahtstelle aus ihren beiden Nachbarn. Ändert sich die
- * Reihenfolge, entstehen neue Paare – deren Übergang ist dann wieder „Standard".
- */
-export function seamKey(left: MergeItem, right: MergeItem): string {
-  return `${mergeItemKey(left)}>${mergeItemKey(right)}`
-}
-
-/** Effektive Einfügestelle: Anzahl der Teile des Hauptvideos VOR dem Clip (wie im Backend). */
-export function appendSlotOf(c: AppendClip, mainCount: number): number {
-  if (c.position === 'before') return 0
-  const s = c.slot
-  if (s === null || !Number.isInteger(s) || s < 1 || s >= mainCount) return mainCount
-  return s
-}
-
-/** Verwendete Länge eines angehängten Videos (0, solange die Dauer unbekannt ist). */
-export function appendClipLength(c: AppendClip): number {
-  const end = c.end ?? c.duration
-  return end > 0 ? Math.max(0, end - c.start) : 0
-}
-
-/** Ist das angehängte Video gekürzt? */
-export function isAppendTrimmed(c: AppendClip): boolean {
-  return c.start > 0 || c.end !== null
-}
-
 /** Ausgabe-Seitenverhältnis: 'auto' = wie das (ggf. zugeschnittene) Hauptvideo. */
 export type OutputAspect = 'auto' | '16:9' | '9:16' | '1:1'
 /** Füllmodus bei abweichendem Seitenverhältnis: Balken, unscharfer Hintergrund, zuschneiden. */
@@ -114,9 +43,6 @@ export interface MusicSettings {
 
 /** Standardwerte für neu gewählte Musik. */
 export const DEFAULT_MUSIC_VOLUME = 0.3
-
-/** Höchstzahl angehängter Videos (muss zu MAX_APPEND_FILES im Backend passen). */
-export const MAX_APPEND_CLIPS = 5
 
 /** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands. */
 interface EditorSnapshot {
@@ -161,25 +87,16 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   const segments = ref<Segment[]>([])
   /** Räumlicher Bildausschnitt. `null` = kein Zuschneiden (volles Bild). */
   const crop = ref<CropRect | null>(null)
-  /**
-   * Angehängte Videos (in Reihenfolge). Bewusst NICHT Teil von Undo/Redo –
-   * es sind Dateien, keine Bearbeitungswerte.
-   */
-  const appendClips = ref<AppendClip[]>([])
-  let nextAppendId = 1
-  /** Lautstärke aller Clips beim Zusammenfügen angleichen (Einstellung, kein Undo). */
-  const normalizeAudio = ref(false)
   /** Ausgabeformat (Einstellung, kein Undo). */
   const outputAspect = ref<OutputAspect>('auto')
   const outputFill = ref<OutputFill>('pad')
-  /** Hintergrundmusik (`null` = keine). Wie angehängte Videos kein Teil von Undo. */
+  /**
+   * Hintergrundmusik (`null` = keine). Kein Teil von Undo; bleibt beim
+   * Wechsel des markierten Videos erhalten (gilt fürs nächste Ergebnis).
+   */
   const music = ref<MusicSettings | null>(null)
-  /** Übergang je Nahtstelle (Schlüssel: seamKey). Fehlt = globaler Übergang. */
-  const seamTransitions = ref<Record<string, SeamPreset>>({})
 
-  // --- Ergebnis / Fehler ---
-  const resultName = ref('')
-  const resultBlob = ref<Blob | null>(null)
+  // --- Fehler ---
   const error = ref('')
 
   const selectionDuration = computed(() => Math.max(0, endTime.value - startTime.value))
@@ -198,51 +115,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
         : [],
   )
   const canExport = computed(() => hasVideo.value && effectiveSegments.value.length > 0)
-  /** Liegt ein herunterladbares Schnitt-Ergebnis vor? */
-  const hasResult = computed(() => resultBlob.value !== null)
   /** Zuschneiden aktiv? (erzwingt Re-Encode, da FFmpeg dafür Frames dekodieren muss.) */
   const hasCrop = computed(() => crop.value !== null)
-  /** Werden weitere Videos angehängt? (erzwingt Re-Encode.) */
-  const hasAppends = computed(() => appendClips.value.length > 0)
-  const canAppend = computed(() => appendClips.value.length < MAX_APPEND_CLIPS)
   /** Hintergrundmusik gewählt? (erzwingt Re-Encode.) */
   const hasMusic = computed(() => music.value !== null)
-  /** Angehängte Videos getrennt nach Position (je Gruppe in Listenreihenfolge). */
-  const appendsBefore = computed(() => appendClips.value.filter((c) => c.position === 'before'))
-  const appendsAfter = computed(() => appendClips.value.filter((c) => c.position === 'after'))
-  /**
-   * Teile des Hauptvideos, so wie das Backend sie zusammenfügt (sortiert,
-   * Überlappungen vereint; bei 'remove' der verbleibende Rest).
-   */
-  const mainParts = computed<KeepRange[]>(() =>
-    computeKeepRanges(
-      effectiveSegments.value.map((s) => ({ start: s.start, duration: s.end - s.start })),
-      operation.value,
-      operation.value === 'remove' ? duration.value : Number.POSITIVE_INFINITY,
-    ),
-  )
-  /**
-   * Gesamtreihenfolge: Teile des Hauptvideos in Zeitreihenfolge, angehängte
-   * Videos an ihrer Einfügestelle. Ohne Ausschnitt steht ein Platzhalter-Teil.
-   */
-  const mergeItems = computed<MergeItem[]>(() => {
-    const parts = mainParts.value
-    const n = Math.max(1, parts.length)
-    const items: MergeItem[] = []
-    for (let k = 0; k <= n; k++) {
-      if (k > 0) items.push({ kind: 'main', index: k - 1, range: parts[k - 1] ?? null })
-      for (const clip of appendClips.value) {
-        if (appendSlotOf(clip, n) === k) items.push({ kind: 'append', clip })
-      }
-    }
-    return items
-  })
-  /** Übergang je Nahtstelle in Gesamtreihenfolge (`null` = globaler Übergang). */
-  const seamPresets = computed<(SeamPreset | null)[]>(() =>
-    mergeItems.value
-      .slice(1)
-      .map((it, i) => seamTransitions.value[seamKey(mergeItems.value[i], it)] ?? null),
-  )
   /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
   const cropPixelSize = computed(() => {
     if (!crop.value || !videoWidth.value || !videoHeight.value) return null
@@ -384,14 +260,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     }, 0)
   }
 
-  function revokeResult(): void {
-    resultName.value = ''
-    resultBlob.value = null
-  }
-
   function setFile(newFile: File): void {
     revokeObjectUrl()
-    revokeResult()
     error.value = ''
     file.value = newFile
     fileName.value = newFile.name
@@ -404,9 +274,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     segments.value = []
     crop.value = null
-    appendClips.value = []
-    music.value = null
-    seamTransitions.value = {}
   }
 
   function setDuration(d: number): void {
@@ -510,138 +377,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     endTime.value = currentTime.value
   }
 
-  /**
-   * Hängt Videos an (max. MAX_APPEND_CLIPS insgesamt). Gibt die angelegten
-   * Einträge zurück, damit die UI deren Dauer nachladen kann.
-   */
-  function addAppendClips(files: File[]): AppendClip[] {
-    const free = MAX_APPEND_CLIPS - appendClips.value.length
-    const added = files.slice(0, Math.max(0, free)).map((file) => ({
-      id: nextAppendId++,
-      file,
-      duration: 0,
-      start: 0,
-      end: null,
-      position: 'after' as AppendPosition,
-      slot: null,
-    }))
-    if (added.length) appendClips.value = [...appendClips.value, ...added]
-    return added
-  }
-
-  function updateAppend(id: number, fn: (c: AppendClip) => AppendClip): void {
-    appendClips.value = appendClips.value.map((c) => (c.id === id ? fn(c) : c))
-  }
-
-  /** Begrenzt Start/Ende auf die (bekannte) Dauer mit Mindestlänge. */
-  function clampAppendRange(c: AppendClip): AppendClip {
-    const dur = c.duration
-    let start = Math.max(0, Number.isFinite(c.start) ? c.start : 0)
-    let end = c.end
-    if (dur > 0) {
-      start = Math.min(start, Math.max(0, dur - MIN_SELECTION))
-      if (end !== null) end = clamp(end, Math.min(start + MIN_SELECTION, dur), dur)
-      // Ende = Dateiende -> wieder „bis zum Ende" (ungekürzt).
-      if (end !== null && dur - end < 1e-3) end = null
-    } else if (end !== null) {
-      end = Math.max(end, start + MIN_SELECTION)
-    }
-    return { ...c, start, end }
-  }
-
-  function setAppendDuration(id: number, d: number): void {
-    const dur = Number.isFinite(d) && d > 0 ? d : 0
-    updateAppend(id, (c) => clampAppendRange({ ...c, duration: dur }))
-  }
-
-  /** Setzt den Start des verwendeten Bereichs; zieht das Ende bei Bedarf mit. */
-  function setAppendStart(id: number, t: number): void {
-    updateAppend(id, (c) => {
-      const start = Number.isFinite(t) ? Math.max(0, t) : 0
-      const end = c.end !== null && c.end < start + MIN_SELECTION ? null : c.end
-      return clampAppendRange({ ...c, start, end })
-    })
-  }
-
-  /** Setzt das Ende des verwendeten Bereichs; `null` = bis zum Dateiende. */
-  function setAppendEnd(id: number, t: number | null): void {
-    updateAppend(id, (c) =>
-      clampAppendRange({ ...c, end: t === null || !Number.isFinite(t) ? null : t }),
-    )
-  }
-
-  /** Kürzung aufheben (ganzes Video verwenden). */
-  function resetAppendRange(id: number): void {
-    updateAppend(id, (c) => ({ ...c, start: 0, end: null }))
-  }
-
-  /** Davor/Danach setzen – setzt eine Einfügestelle zwischen Ausschnitten zurück. */
-  function setAppendPosition(id: number, position: AppendPosition): void {
-    updateAppend(id, (c) => ({ ...c, position, slot: null }))
-  }
-
-  /**
-   * Übernimmt eine neue Gesamtreihenfolge: Position/Einfügestelle jedes
-   * angehängten Videos ergibt sich aus der Zahl der Hauptvideo-Teile davor.
-   */
-  function applyMergeOrder(items: MergeItem[]): void {
-    const n = items.filter((it) => it.kind === 'main').length
-    let k = 0
-    const next: AppendClip[] = []
-    for (const it of items) {
-      if (it.kind === 'main') {
-        k++
-        continue
-      }
-      const current = appendClips.value.find((c) => c.id === it.clip.id)
-      if (!current) continue
-      if (k === 0) next.push({ ...current, position: 'before', slot: null })
-      else if (k >= n) next.push({ ...current, position: 'after', slot: null })
-      else next.push({ ...current, position: 'after', slot: k })
-    }
-    // Sicherheitsnetz: nichts verlieren, falls ein Clip in `items` fehlt.
-    for (const c of appendClips.value) if (!next.some((x) => x.id === c.id)) next.push(c)
-    appendClips.value = next
-  }
-
-  /**
-   * Verschiebt ein angehängtes Video in der Gesamtreihenfolge an Stelle
-   * `toIndex` (Index in der Liste OHNE das verschobene Video). Teile des
-   * Hauptvideos bleiben in Zeitreihenfolge; das Video kann davor, dazwischen
-   * oder dahinter landen (Drag & Drop).
-   */
-  function moveMergeItem(id: number, toIndex: number): void {
-    const items = [...mergeItems.value]
-    const from = items.findIndex((it) => it.kind === 'append' && it.clip.id === id)
-    if (from < 0 || !Number.isFinite(toIndex)) return
-    const [moved] = items.splice(from, 1)
-    const to = Math.min(Math.max(0, Math.trunc(toIndex)), items.length)
-    items.splice(to, 0, moved)
-    applyMergeOrder(items)
-  }
-
-  function removeAppendClip(id: number): void {
-    appendClips.value = appendClips.value.filter((c) => c.id !== id)
-  }
-
-  /**
-   * Verschiebt ein angehängtes Video in der Gesamtreihenfolge um einen Platz
-   * (▲▼): an anderen Videos und an Teilen des Hauptvideos vorbei – so wird
-   * z. B. aus einem Outro ein Video zwischen zwei Ausschnitten.
-   */
-  function moveAppendClip(id: number, delta: number): void {
-    if (delta === 0) return
-    const from = mergeItems.value.findIndex((it) => it.kind === 'append' && it.clip.id === id)
-    if (from < 0) return
-    const to = from + (delta < 0 ? -1 : 1)
-    if (to < 0 || to >= mergeItems.value.length) return
-    moveMergeItem(id, to)
-  }
-
-  function setNormalizeAudio(on: boolean): void {
-    normalizeAudio.value = on
-  }
-
   function setOutputAspect(a: OutputAspect): void {
     outputAspect.value = a
   }
@@ -671,18 +406,6 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     music.value = null
   }
 
-  /** Übergang einer Nahtstelle setzen; `null` = wieder globaler Übergang. */
-  function setSeamTransition(key: string, preset: SeamPreset | null): void {
-    const next = { ...seamTransitions.value }
-    if (preset === null) delete next[key]
-    else next[key] = preset
-    seamTransitions.value = next
-  }
-
-  function clearAppendClips(): void {
-    appendClips.value = []
-  }
-
   function removeSegment(index: number): void {
     segments.value = segments.value.filter((_, i) => i !== index)
   }
@@ -691,43 +414,12 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
   }
 
-  /**
-   * Macht das Schnitt-Ergebnis zum neuen Arbeitsvideo: Es wird im selben
-   * (ersten) Player angezeigt – KEIN zweites Vorschaufenster. Ein weiterer
-   * Schnitt arbeitet damit auf dem Ergebnis (kumulativ, wie im Audio-Cutter).
-   * Der Blob bleibt für den separaten „Herunterladen"-Button erhalten.
-   */
-  function applyCutResult(blob: Blob, name: string): void {
-    revokeObjectUrl()
-    file.value = new File([blob], name, { type: blob.type || 'video/mp4' })
-    fileName.value = name
-    objectUrl.value = URL.createObjectURL(blob)
-    duration.value = 0
-    videoWidth.value = 0
-    videoHeight.value = 0
-    startTime.value = 0
-    endTime.value = 0
-    currentTime.value = 0
-    segments.value = []
-    crop.value = null
-    // Angehängte Videos und Musik sind jetzt Teil des Ergebnisses.
-    appendClips.value = []
-    music.value = null
-    seamTransitions.value = {}
-    error.value = ''
-    // Ergebnis für den Download bereithalten.
-    resultBlob.value = blob
-    resultName.value = name
-    // Die History wird nach dem Laden (setDuration) neu aufgesetzt.
-  }
-
   function setError(message: string): void {
     error.value = message
   }
 
   function reset(): void {
     revokeObjectUrl()
-    revokeResult()
     file.value = null
     fileName.value = ''
     duration.value = 0
@@ -739,9 +431,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     error.value = ''
     segments.value = []
     crop.value = null
-    appendClips.value = []
     music.value = null
-    seamTransitions.value = {}
     resetHistory()
   }
 
@@ -760,15 +450,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     operation,
     segments,
     crop,
-    appendClips,
-    normalizeAudio,
     outputAspect,
     outputFill,
     music,
-    seamTransitions,
-    resultName,
-    resultBlob,
-    hasResult,
     error,
     // getters
     selectionDuration,
@@ -780,14 +464,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canRedo,
     hasCrop,
     cropPixelSize,
-    hasAppends,
-    canAppend,
     hasMusic,
-    appendsBefore,
-    appendsAfter,
-    mainParts,
-    mergeItems,
-    seamPresets,
     // actions
     setFile,
     setDuration,
@@ -802,30 +479,16 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     addSegment,
     removeSegment,
     clearSegments,
-    addAppendClips,
-    setAppendDuration,
-    setAppendStart,
-    setAppendEnd,
-    resetAppendRange,
-    setAppendPosition,
-    removeAppendClip,
-    moveAppendClip,
-    moveMergeItem,
-    setNormalizeAudio,
     setOutputAspect,
     setOutputFill,
     setMusicFile,
     updateMusic,
     clearMusic,
-    setSeamTransition,
-    clearAppendClips,
     setCrop,
     enableCrop,
     clearCrop,
     toggleCrop,
-    applyCutResult,
     setError,
-    revokeResult,
     reset,
     // history
     undo,

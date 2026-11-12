@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import {
-  useVideoEditorStore,
-  MAX_APPEND_CLIPS,
-  appendClipLength,
-  isAppendTrimmed,
-  seamKey,
-} from '@/stores/videoEditor'
+import { useVideoEditorStore } from '@/stores/videoEditor'
 
 // jsdom kennt createObjectURL nicht -> stubben.
 beforeEach(() => {
@@ -332,48 +326,22 @@ describe('videoEditor store – Undo/Redo', () => {
   })
 })
 
-describe('applyCutResult (Ergebnis im selben Player)', () => {
-  it('macht das Ergebnis zum neuen Arbeitsvideo und hält den Download bereit', () => {
+describe('videoEditor store – Videowechsel', () => {
+  it('setFile lädt ein anderes Video und setzt Auswahl/Ausschnitte zurück', () => {
     const store = loadVideo(30)
     store.setStart(5)
     store.setEnd(12)
-    expect(store.hasResult).toBe(false)
-
-    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' })
-    store.applyCutResult(blob, 'clip_cut.mp4')
-
-    // Ergebnis ist jetzt das geladene Video (kein zweites Vorschaufenster).
+    store.addSegment()
+    store.setFile(new File([new Uint8Array([1])], 'clip_cut.mp4', { type: 'video/mp4' }))
     expect(store.fileName).toBe('clip_cut.mp4')
-    expect(store.file).not.toBeNull()
-    expect(store.objectUrl).toBe('blob:mock')
-    // Auswahl/Segmente sind zurückgesetzt, Dauer folgt beim Laden.
     expect(store.startTime).toBe(0)
     expect(store.endTime).toBe(0)
     expect(store.segments).toEqual([])
-    // Download-Status.
-    expect(store.hasResult).toBe(true)
-    expect(store.resultBlob).toBe(blob)
-    expect(store.resultName).toBe('clip_cut.mp4')
-  })
-
-  it('erlaubt kumulatives Schneiden auf dem Ergebnis', () => {
-    const store = loadVideo(30)
-    store.applyCutResult(new Blob([new Uint8Array([1])], { type: 'video/mp4' }), 'clip_cut.mp4')
-    // Neue Dauer des Ergebnisses laden und erneut schneiden können.
+    // Neue Dauer laden und erneut schneiden können (kumulatives Schneiden).
     store.setDuration(10)
-    expect(store.duration).toBe(10)
     store.setStart(2)
     store.setEnd(6)
     expect(store.canExport).toBe(true)
-  })
-
-  it('reset() entfernt auch das Ergebnis', () => {
-    const store = loadVideo(30)
-    store.applyCutResult(new Blob([new Uint8Array([1])], { type: 'video/mp4' }), 'clip_cut.mp4')
-    expect(store.hasResult).toBe(true)
-    store.reset()
-    expect(store.hasResult).toBe(false)
-    expect(store.resultBlob).toBeNull()
   })
 
   it('gibt die alte Blob-URL erst nach dem DOM-Update frei (kein ERR_FILE_NOT_FOUND)', () => {
@@ -384,7 +352,7 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
     try {
       const store = loadVideo(10)
       expect(store.objectUrl).toBe('blob:1')
-      store.applyCutResult(new Blob(['x']), 'clip_cut.mp4')
+      store.setFile(new File([new Uint8Array([1])], 'b.mp4', { type: 'video/mp4' }))
       // Neue URL sofort aktiv, alte noch NICHT freigegeben (Player hält sie bis zum Re-Render).
       expect(store.objectUrl).toBe('blob:2')
       expect(revoke).not.toHaveBeenCalled()
@@ -397,210 +365,7 @@ describe('applyCutResult (Ergebnis im selben Player)', () => {
   })
 })
 
-describe('videoEditor store – Videos anhängen', () => {
-  const clip = (name: string) => new File([new Uint8Array([0])], name, { type: 'video/mp4' })
-
-  it('fügt an, sortiert um und entfernt', () => {
-    const store = loadVideo(30)
-    const added = store.addAppendClips([clip('a.mp4'), clip('b.mp4'), clip('c.mp4')])
-    expect(added).toHaveLength(3)
-    expect(store.hasAppends).toBe(true)
-
-    store.moveAppendClip(added[2].id, -1)
-    expect(store.appendClips.map((c) => c.file.name)).toEqual(['a.mp4', 'c.mp4', 'b.mp4'])
-    // Ränder: nicht über das Ende hinaus.
-    store.moveAppendClip(added[1].id, 1)
-    expect(store.appendClips.map((c) => c.file.name)).toEqual(['a.mp4', 'c.mp4', 'b.mp4'])
-
-    store.setAppendDuration(added[1].id, 12.5)
-    expect(store.appendClips.find((c) => c.id === added[1].id)?.duration).toBe(12.5)
-    store.setAppendDuration(added[1].id, Number.NaN)
-    expect(store.appendClips.find((c) => c.id === added[1].id)?.duration).toBe(0)
-
-    store.removeAppendClip(added[0].id)
-    expect(store.appendClips.map((c) => c.file.name)).toEqual(['c.mp4', 'b.mp4'])
-  })
-
-  it('begrenzt auf MAX_APPEND_CLIPS', () => {
-    const store = loadVideo(30)
-    const added = store.addAppendClips(
-      Array.from({ length: MAX_APPEND_CLIPS + 2 }, (_, i) => clip(`${i}.mp4`)),
-    )
-    expect(added).toHaveLength(MAX_APPEND_CLIPS)
-    expect(store.canAppend).toBe(false)
-    expect(store.addAppendClips([clip('x.mp4')])).toHaveLength(0)
-  })
-
-  it('neues Video, Schnitt-Ergebnis und Reset leeren die Liste', () => {
-    const store = loadVideo(30)
-    store.addAppendClips([clip('a.mp4')])
-    store.applyCutResult(new Blob(['x'], { type: 'video/mp4' }), 'clip_cut.mp4')
-    expect(store.appendClips).toHaveLength(0)
-
-    store.addAppendClips([clip('a.mp4')])
-    store.setFile(clip('neu.mp4'))
-    expect(store.appendClips).toHaveLength(0)
-
-    store.addAppendClips([clip('a.mp4')])
-    store.reset()
-    expect(store.appendClips).toHaveLength(0)
-  })
-
-  it('angehängte Videos sind nicht Teil von Undo/Redo', () => {
-    const store = loadVideo(30)
-    store.setStart(5)
-    store.commitHistory()
-    store.addAppendClips([clip('a.mp4')])
-    store.undo()
-    expect(store.startTime).toBe(0)
-    expect(store.appendClips).toHaveLength(1)
-  })
-
-  it('Kürzung: Start/Ende werden auf die Dauer begrenzt, Ende = Dateiende -> ungekürzt', () => {
-    const store = loadVideo(30)
-    const [c] = store.addAppendClips([clip('a.mp4')])
-    store.setAppendDuration(c.id, 10)
-    const get = () => store.appendClips[0]
-
-    store.setAppendStart(c.id, 2)
-    store.setAppendEnd(c.id, 6)
-    expect([get().start, get().end]).toEqual([2, 6])
-    expect(appendClipLength(get())).toBe(4)
-    expect(isAppendTrimmed(get())).toBe(true)
-
-    // Ende über die Dauer -> bis zum Ende (null).
-    store.setAppendEnd(c.id, 99)
-    expect(get().end).toBeNull()
-    expect(appendClipLength(get())).toBe(8)
-
-    // Start hinter das Ende zieht das Ende nicht mit, sondern setzt es zurück.
-    store.setAppendEnd(c.id, 5)
-    store.setAppendStart(c.id, 7)
-    expect(get().start).toBe(7)
-    expect(get().end).toBeNull()
-
-    // Start nie hinter die Dauer.
-    store.setAppendStart(c.id, 50)
-    expect(get().start).toBeCloseTo(9.95, 5)
-
-    store.resetAppendRange(c.id)
-    expect(isAppendTrimmed(get())).toBe(false)
-  })
-
-  it('Position: Gruppen davor/danach; ▲▼ verschiebt auch über die Ausschnitte hinweg', () => {
-    const store = loadVideo(30)
-    const [a, b, c] = store.addAppendClips([clip('a.mp4'), clip('b.mp4'), clip('c.mp4')])
-    store.setAppendPosition(b.id, 'before')
-    expect(store.appendsBefore.map((x) => x.file.name)).toEqual(['b.mp4'])
-    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['a.mp4', 'c.mp4'])
-
-    // c nach oben: tauscht mit a (innerhalb „danach").
-    store.moveAppendClip(c.id, -1)
-    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['c.mp4', 'a.mp4'])
-    // b nach unten: an den Ausschnitten vorbei -> wird zum ersten Outro.
-    store.moveAppendClip(b.id, 1)
-    expect(store.appendsBefore).toHaveLength(0)
-    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['b.mp4', 'c.mp4', 'a.mp4'])
-    expect(store.appendClips.find((x) => x.id === a.id)?.position).toBe('after')
-  })
-
-  /** Ausschnitt [s, e] festhalten (Ende zuerst: Start darf das Ende nicht überholen). */
-  const seg = (store: ReturnType<typeof loadVideo>, s: number, e: number) => {
-    store.setEnd(e)
-    store.setStart(s)
-    store.addSegment()
-  }
-
-  const names = (store: ReturnType<typeof loadVideo>) =>
-    store.mergeItems.map((it) =>
-      it.kind === 'main' ? `M${it.index + 1}` : it.clip.file.name.replace('.mp4', ''),
-    )
-
-  it('mergeItems: Platzhalter ohne Ausschnitt, Teile in Zeitreihenfolge', () => {
-    const store = loadVideo(30)
-    // Ausschnitt anlegen und wieder entfernen -> keine Auswahl mehr übrig.
-    seg(store, 1, 2)
-    store.removeSegment(0)
-    store.addAppendClips([clip('a.mp4')])
-    expect(names(store)).toEqual(['M1', 'a'])
-    expect(store.mergeItems[0]).toMatchObject({ kind: 'main', range: null })
-
-    seg(store, 10, 12)
-    seg(store, 2, 4)
-    expect(store.mainParts).toEqual([
-      { start: 2, duration: 2 },
-      { start: 10, duration: 2 },
-    ])
-    expect(names(store)).toEqual(['M1', 'M2', 'a'])
-  })
-
-  it('Drag & Drop: Video zwischen zwei Ausschnitte setzen (slot) und zurück', () => {
-    const store = loadVideo(30)
-    for (const [s, e] of [
-      [1, 2],
-      [5, 6],
-      [9, 10],
-    ])
-      seg(store, s, e)
-    const [a, b] = store.addAppendClips([clip('a.mp4'), clip('b.mp4')])
-    expect(names(store)).toEqual(['M1', 'M2', 'M3', 'a', 'b'])
-
-    // a hinter Teil 1 ziehen (Index 1 in der Liste ohne a).
-    store.moveMergeItem(a.id, 1)
-    expect(names(store)).toEqual(['M1', 'a', 'M2', 'M3', 'b'])
-    expect(store.appendClips.find((x) => x.id === a.id)).toMatchObject({
-      position: 'after',
-      slot: 1,
-    })
-
-    // b ganz nach vorne -> Intro.
-    store.moveMergeItem(b.id, 0)
-    expect(names(store)).toEqual(['b', 'M1', 'a', 'M2', 'M3'])
-    expect(store.appendClips.find((x) => x.id === b.id)).toMatchObject({
-      position: 'before',
-      slot: null,
-    })
-
-    // ▲ von a über Teil 1 -> davor (hinter b).
-    store.moveAppendClip(a.id, -1)
-    expect(names(store)).toEqual(['b', 'a', 'M1', 'M2', 'M3'])
-
-    // Davor/Danach-Umschalter setzt die Einfügestelle zurück.
-    store.moveMergeItem(a.id, 3)
-    expect(names(store)).toEqual(['b', 'M1', 'M2', 'a', 'M3'])
-    store.setAppendPosition(a.id, 'after')
-    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
-
-    // Ungültige Ziele werden begrenzt / ignoriert.
-    store.moveMergeItem(a.id, 99)
-    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
-    store.moveMergeItem(12345, 0)
-    expect(names(store)).toEqual(['b', 'M1', 'M2', 'M3', 'a'])
-  })
-
-  it('Einfügestelle hinter dem letzten Teil fällt ans Ende, wenn Ausschnitte wegfallen', () => {
-    const store = loadVideo(30)
-    for (const [s, e] of [
-      [1, 2],
-      [5, 6],
-    ])
-      seg(store, s, e)
-    const [a] = store.addAppendClips([clip('a.mp4')])
-    store.moveMergeItem(a.id, 1)
-    expect(names(store)).toEqual(['M1', 'a', 'M2'])
-    store.removeSegment(1)
-    expect(names(store)).toEqual(['M1', 'a'])
-  })
-
-  it('Lautstärke angleichen ist eine Einstellung (bleibt bei Reset der Liste)', () => {
-    const store = loadVideo(30)
-    expect(store.normalizeAudio).toBe(false)
-    store.setNormalizeAudio(true)
-    store.addAppendClips([clip('a.mp4')])
-    store.clearAppendClips()
-    expect(store.normalizeAudio).toBe(true)
-  })
-
+describe('videoEditor store – Ausgabe-Einstellungen', () => {
   it('Ausgabeformat: Standard Original/Balken, Setter', () => {
     const store = loadVideo(30)
     expect([store.outputAspect, store.outputFill]).toEqual(['auto', 'pad'])
@@ -627,34 +392,13 @@ describe('videoEditor store – Videos anhängen', () => {
     expect(store.music).toMatchObject({ volume: 1, originalVolume: 0, fade: false })
     expect(store.music?.file.name).toBe('b.mp3')
 
-    store.applyCutResult(new Blob(['x'], { type: 'video/mp4' }), 'clip_cut.mp4')
+    // Wechsel des markierten Videos behält die Musik (gilt fürs nächste Ergebnis).
+    store.setFile(new File([new Uint8Array([1])], 'other.mp4', { type: 'video/mp4' }))
+    expect(store.music?.file.name).toBe('b.mp3')
+    store.clearMusic()
     expect(store.music).toBeNull()
     store.setMusicFile(new File([new Uint8Array([1])], 'c.mp3', { type: 'audio/mpeg' }))
     store.reset()
     expect(store.music).toBeNull()
-  })
-
-  it('Übergang je Nahtstelle: an Nachbarn gebunden, Umsortieren setzt auf Standard', () => {
-    const store = loadVideo(30)
-    const [a, b] = store.addAppendClips([clip('a.mp4'), clip('b.mp4')])
-    // Reihenfolge: Ausschnitte, a, b -> zwei Nahtstellen.
-    expect(store.seamPresets).toEqual([null, null])
-    const items = store.mergeItems
-    store.setSeamTransition(seamKey(items[1], items[2]), 'slide')
-    expect(store.seamPresets).toEqual([null, 'slide'])
-
-    // a und b tauschen: neues Paar (b > a) -> wieder Standard.
-    store.moveAppendClip(b.id, -1)
-    expect(store.seamPresets).toEqual([null, null])
-    // Zurück: altes Paar greift wieder.
-    store.moveAppendClip(a.id, -1)
-    expect(store.seamPresets).toEqual([null, 'slide'])
-
-    store.setSeamTransition(seamKey(store.mergeItems[1], store.mergeItems[2]), null)
-    expect(store.seamPresets).toEqual([null, null])
-
-    store.setSeamTransition('x>y', 'fade')
-    store.reset()
-    expect(store.seamTransitions).toEqual({})
   })
 })

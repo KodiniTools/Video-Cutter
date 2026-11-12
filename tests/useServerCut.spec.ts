@@ -6,6 +6,7 @@ import {
   APPEND_UNSUPPORTED,
   FORMAT_UNSUPPORTED,
   MUSIC_UNSUPPORTED,
+  MEDIA_UNSUPPORTED,
 } from '@/composables/useServerCut'
 
 describe('parseJobStart', () => {
@@ -20,6 +21,7 @@ describe('parseJobStart', () => {
       outputFormat: false,
       music: false,
       seamTransitions: false,
+      storeResult: false,
     })
   })
 
@@ -34,6 +36,7 @@ describe('parseJobStart', () => {
       outputFormat: false,
       music: false,
       seamTransitions: false,
+      storeResult: false,
     })
   })
 
@@ -321,5 +324,97 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
       ),
     ).rejects.toThrow(APPEND_UNSUPPORTED)
     expect(instances[0].sentForm?.has('seamTransitions')).toBe(false)
+  })
+})
+
+describe('useServerCut – Video-Bibliothek (cutMedia)', () => {
+  const A = '00000000-0000-4000-8000-00000000000a'
+  const B = '00000000-0000-4000-8000-00000000000b'
+  const R = '00000000-0000-4000-8000-0000000000ee'
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  /** SSE liefert sofort "done" – optional mit der Bibliotheks-ID des Ergebnisses. */
+  function fakeEventSource(mediaId?: string) {
+    return class {
+      onmessage: null | ((ev: { data: string }) => void) = null
+      onerror: null | (() => void) = null
+      constructor() {
+        queueMicrotask(() =>
+          this.onmessage?.({
+            data: JSON.stringify({ state: 'done', progress: 100, error: null, mediaId }),
+          }),
+        )
+      }
+      close(): void {}
+    }
+  }
+
+  beforeEach(() => {
+    fetchMock = vi.fn(async (url: string) => {
+      if (url === `/api/media/${R}`)
+        return new Response(
+          JSON.stringify({
+            id: R,
+            name: 'a_cut.mp4',
+            size: 3,
+            duration: 4,
+            width: 640,
+            height: 360,
+            hasAudio: true,
+          }),
+          { status: 200 },
+        )
+      if (url === `/api/media/${R}/file`) return new Response('xyz', { status: 200 })
+      return new Response('{}', { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('schickt IDs statt Dateien, fordert Speichern an und lädt das Ergebnis', async () => {
+    const { FakeXhr, instances } = fakeXhr(
+      `{"jobId":"job-m1","append":1,"appendTrim":true,"appendSlots":true,"storeResult":true}`,
+    )
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    vi.stubGlobal('EventSource', fakeEventSource(R))
+    const { cutMedia, isProcessing } = useServerCut()
+
+    const res = await cutMedia({
+      mediaId: A,
+      segments: [{ start: 0, duration: 5 }],
+      mode: 'reencode',
+      appends: [{ mediaId: B, start: 1, duration: 2, position: 'after' }],
+    })
+    const form = instances[0].sentForm
+    expect(form?.get('mediaId')).toBe(A)
+    expect(form?.get('appendMediaIds')).toBe(JSON.stringify([B]))
+    expect(form?.get('storeResult')).toBe('1')
+    expect(form?.has('video')).toBe(false)
+    expect(form?.has('append')).toBe(false)
+    expect(res.media).toMatchObject({ id: R, name: 'a_cut.mp4', duration: 4 })
+    expect(res.blob.size).toBe(3)
+    expect(isProcessing.value).toBe(false)
+  })
+
+  it('altes Backend ohne storeResult-Bestätigung -> MEDIA_UNSUPPORTED, Job wird gelöscht', async () => {
+    const { FakeXhr } = fakeXhr('{"jobId":"job-m2"}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const { cutMedia } = useServerCut()
+    await expect(
+      cutMedia({ mediaId: A, segments: [{ start: 0, duration: 5 }], mode: 'copy' }),
+    ).rejects.toThrow(MEDIA_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-m2', { method: 'DELETE' })
+  })
+
+  it('fertig ohne Ergebnis-ID -> MEDIA_UNSUPPORTED', async () => {
+    const { FakeXhr } = fakeXhr('{"jobId":"job-m3","storeResult":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    vi.stubGlobal('EventSource', fakeEventSource())
+    const { cutMedia } = useServerCut()
+    await expect(
+      cutMedia({ mediaId: A, segments: [{ start: 0, duration: 5 }], mode: 'copy' }),
+    ).rejects.toThrow(MEDIA_UNSUPPORTED)
   })
 })
