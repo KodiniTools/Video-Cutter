@@ -16,7 +16,8 @@ import {
   type AppendClip,
   type MusicTrack,
 } from '../lib/args'
-import { probeMedia } from '../lib/probe'
+import { probeMedia, type MediaInfo } from '../lib/probe'
+import { isMediaId, mediaStore } from '../lib/media'
 import {
   parseAppendMeta,
   parseCutParams,
@@ -77,7 +78,35 @@ export const SERVER_FEATURES = [
   'outputFormat',
   'music',
   'seamTransitions',
+  'media',
 ] as const
+
+/** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
+interface Source {
+  path: string
+  originalname: string
+  owned: boolean
+  info?: MediaInfo
+  mediaId?: string
+}
+
+/** Liest `appendMediaIds` (JSON-Array von Bibliotheks-IDs). */
+function parseMediaIdList(raw: unknown, max: number): string[] {
+  if (raw === undefined || raw === null || raw === '') return []
+  let v: unknown = raw
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v)
+    } catch {
+      throw new ValidationError('Ungültige Liste gespeicherter Videos.')
+    }
+  }
+  if (!Array.isArray(v) || !v.every(isMediaId)) {
+    throw new ValidationError('Ungültige Liste gespeicherter Videos.')
+  }
+  if (v.length > max) throw new ValidationError(`Maximal ${max} angehängte Videos.`)
+  return v
+}
 
 /**
  * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
@@ -108,33 +137,64 @@ cutRouter.post(
       ...(musicFile ? [musicFile.path] : []),
     ]
 
-    if (!main) {
-      await removeFiles(allPaths)
-      throw new ValidationError('Keine Videodatei empfangen.')
+    // Bibliotheks-Videos sofort sperren, damit sie während des Jobs nicht
+    // gelöscht werden; bei Fehlern wieder freigeben.
+    const acquired: string[] = []
+    const fromLibrary = (id: string): Source => {
+      const item = mediaStore.get(id)
+      if (!item) throw new ValidationError('Video nicht (mehr) auf dem Server vorhanden.')
+      mediaStore.acquire([id])
+      acquired.push(id)
+      return {
+        path: item.path,
+        originalname: item.name,
+        owned: false,
+        info: item.info,
+        mediaId: id,
+      }
     }
 
     // Ab hier existieren Dateien auf der Platte -> bei Fehlern löschen.
     try {
+      const body = (req.body ?? {}) as Record<string, unknown>
+      let mainSrc: Source
+      if (main) {
+        mainSrc = { path: main.path, originalname: main.originalname, owned: true }
+      } else if (isMediaId(body.mediaId)) {
+        mainSrc = fromLibrary(body.mediaId)
+      } else {
+        throw new ValidationError('Keine Videodatei empfangen.')
+      }
+      const appendIds = parseMediaIdList(body.appendMediaIds, config.maxAppendFiles)
+      if (appendIds.length && appendFiles.length) {
+        throw new ValidationError('Angehängte Videos entweder hochladen oder per ID angeben.')
+      }
+      const appendSrcs: Source[] = appendFiles.length
+        ? appendFiles.map((f) => ({ path: f.path, originalname: f.originalname, owned: true }))
+        : appendIds.map(fromLibrary)
+      const storeResult = body.storeResult === '1' || body.storeResult === 'true'
+
       const params = parseCutParams(req.body ?? {}, config.maxDurationSec)
-      const appendMeta = parseAppendMeta(req.body ?? {}, appendFiles.length)
+      const appendMeta = parseAppendMeta(req.body ?? {}, appendSrcs.length)
       // Lautstärke-Angleichung wirkt nur beim Zusammenfügen mit angehängten Videos.
-      const normalizeAudio = appendFiles.length > 0 && parseNormalizeAudio(req.body ?? {})
+      const normalizeAudio = appendSrcs.length > 0 && parseNormalizeAudio(req.body ?? {})
       const output = parseOutputFormat(req.body ?? {})
       // Zusammenfügen ODER anderes Seitenverhältnis -> Normierungs-Pipeline.
       const musicParams = musicFile ? parseMusicParams(req.body ?? {}) : null
       // Übergänge je Nahtstelle gelten nur beim Zusammenfügen mit angehängten Videos.
-      const seamInput = appendFiles.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
-      const useMerge = appendFiles.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
+      const seamInput = appendSrcs.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
+      const useMerge = appendSrcs.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
+        if (acquired.length) await mediaStore.release(acquired.splice(0))
         res.setHeader('Retry-After', '30')
         res.status(429).json({ error: 'Server ausgelastet. Bitte gleich erneut versuchen.' })
         return
       }
 
       const id = randomUUID()
-      const inExt = safeExt(main.originalname)
+      const inExt = safeExt(mainSrc.originalname)
       const isWebm = inExt === 'webm'
 
       // Tatsächlich zu behaltende Bereiche (nach Zusammenführen/Komplement).
@@ -153,9 +213,9 @@ cutRouter.post(
         // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
         // die Clips auf ein gemeinsames Format normiert werden können.
         const [mainInfo, musicInfo, ...appendInfos] = await Promise.all([
-          probeMedia(main.path),
+          mainSrc.info ? Promise.resolve(mainSrc.info) : probeMedia(mainSrc.path),
           musicFile ? probeMedia(musicFile.path) : Promise.resolve(null),
-          ...appendFiles.map((f) => probeMedia(f.path)),
+          ...appendSrcs.map((s) => (s.info ? Promise.resolve(s.info) : probeMedia(s.path))),
         ])
         let music: MusicTrack | undefined
         if (musicFile && musicParams) {
@@ -167,7 +227,7 @@ cutRouter.post(
         const appends: AppendClip[] = appendInfos.map((info, i) => {
           if (!(info.duration > 0)) {
             throw new ValidationError(
-              `Dauer des angehängten Videos „${safeBaseName(appendFiles[i].originalname)}" unbekannt.`,
+              `Dauer des angehängten Videos „${safeBaseName(appendSrcs[i].originalname)}" unbekannt.`,
             )
           }
           const range = resolveAppendRange(appendMeta[i], info.duration)
@@ -177,7 +237,7 @@ cutRouter.post(
             )
           }
           return {
-            path: appendFiles[i].path,
+            path: appendSrcs[i].path,
             start: range.start,
             duration: range.duration,
             hasAudio: info.hasAudio,
@@ -202,7 +262,7 @@ cutRouter.post(
         outExt = isWebm ? 'webm' : 'mp4'
         outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
         args = buildMergeArgs({
-          inputPath: main.path,
+          inputPath: mainSrc.path,
           outputPath,
           keep,
           mainHasAudio: mainInfo.hasAudio,
@@ -233,7 +293,7 @@ cutRouter.post(
         outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
         outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
         args = buildServerArgs({
-          inputPath: main.path,
+          inputPath: mainSrc.path,
           outputPath,
           mode: params.mode,
           operation: params.operation,
@@ -247,15 +307,21 @@ cutRouter.post(
         outputDuration = outputDurationFor(keep, params.transition)
       }
 
-      const outputName = `${safeBaseName(main.originalname)}_cut.${outExt}`
+      // Wiederholtes Schneiden stapelt kein „_cut_cut".
+      const baseName = safeBaseName(mainSrc.originalname).replace(/_cut$/, '')
+      const outputName = `${baseName}_cut.${outExt}`
 
       const job = jobManager.create({
         id,
-        inputPath: main.path,
+        inputPath: mainSrc.path,
+        ownsInput: mainSrc.owned,
         extraInputPaths: [
-          ...appendFiles.map((f) => f.path),
+          ...appendSrcs.filter((s) => s.owned).map((s) => s.path),
           ...(musicFile ? [musicFile.path] : []),
         ],
+        // Sperren gehen an den Job über und werden nach dem Lauf freigegeben.
+        mediaRefs: acquired.splice(0),
+        storeResult,
         outputPath,
         outputName,
       })
@@ -266,16 +332,18 @@ cutRouter.post(
       res.status(202).json({
         jobId: id,
         crop: params.crop !== undefined,
-        append: appendFiles.length,
-        appendTrim: appendFiles.length > 0,
-        appendSlots: appendFiles.length > 0,
+        append: appendSrcs.length,
+        appendTrim: appendSrcs.length > 0,
+        appendSlots: appendSrcs.length > 0,
         normalizeAudio,
         outputFormat: true,
         music: musicFile !== undefined,
         seamTransitions: seamInput !== undefined,
+        storeResult,
       })
     } catch (err) {
       await removeFiles(allPaths)
+      if (acquired.length) await mediaStore.release(acquired.splice(0))
       throw err
     }
   }),

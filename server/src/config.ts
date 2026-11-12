@@ -44,6 +44,11 @@ export const config = {
   /** Lebensdauer eines Jobs (danach werden Dateien gelöscht). */
   jobTtlMs: num('JOB_TTL_SEC', 30 * 60) * 1000,
 
+  /** Gespeicherte Videos (Bibliothek) werden nach so langer Nichtbenutzung gelöscht. */
+  mediaTtlMs: num('MEDIA_TTL_SEC', 2 * 60 * 60) * 1000,
+  /** Obergrenze für alle gespeicherten Videos zusammen. */
+  maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
+
   /** Erlaubte Origins für CORS. */
   allowedOrigins: list('ALLOWED_ORIGINS', [
     'https://kodinitools.com',
