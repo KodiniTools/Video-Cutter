@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useVideoEditorStore, MAX_APPEND_CLIPS } from '@/stores/videoEditor'
+import {
+  useVideoEditorStore,
+  MAX_APPEND_CLIPS,
+  appendClipLength,
+  isAppendTrimmed,
+} from '@/stores/videoEditor'
 
 // jsdom kennt createObjectURL nicht -> stubben.
 beforeEach(() => {
@@ -448,5 +453,52 @@ describe('videoEditor store – Videos anhängen', () => {
     store.undo()
     expect(store.startTime).toBe(0)
     expect(store.appendClips).toHaveLength(1)
+  })
+
+  it('Kürzung: Start/Ende werden auf die Dauer begrenzt, Ende = Dateiende -> ungekürzt', () => {
+    const store = loadVideo(30)
+    const [c] = store.addAppendClips([clip('a.mp4')])
+    store.setAppendDuration(c.id, 10)
+    const get = () => store.appendClips[0]
+
+    store.setAppendStart(c.id, 2)
+    store.setAppendEnd(c.id, 6)
+    expect([get().start, get().end]).toEqual([2, 6])
+    expect(appendClipLength(get())).toBe(4)
+    expect(isAppendTrimmed(get())).toBe(true)
+
+    // Ende über die Dauer -> bis zum Ende (null).
+    store.setAppendEnd(c.id, 99)
+    expect(get().end).toBeNull()
+    expect(appendClipLength(get())).toBe(8)
+
+    // Start hinter das Ende zieht das Ende nicht mit, sondern setzt es zurück.
+    store.setAppendEnd(c.id, 5)
+    store.setAppendStart(c.id, 7)
+    expect(get().start).toBe(7)
+    expect(get().end).toBeNull()
+
+    // Start nie hinter die Dauer.
+    store.setAppendStart(c.id, 50)
+    expect(get().start).toBeCloseTo(9.95, 5)
+
+    store.resetAppendRange(c.id)
+    expect(isAppendTrimmed(get())).toBe(false)
+  })
+
+  it('Position: Gruppen davor/danach, Verschieben nur innerhalb der Gruppe', () => {
+    const store = loadVideo(30)
+    const [a, b, c] = store.addAppendClips([clip('a.mp4'), clip('b.mp4'), clip('c.mp4')])
+    store.setAppendPosition(b.id, 'before')
+    expect(store.appendsBefore.map((x) => x.file.name)).toEqual(['b.mp4'])
+    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['a.mp4', 'c.mp4'])
+
+    // c nach oben: überspringt b (andere Gruppe) und tauscht mit a.
+    store.moveAppendClip(c.id, -1)
+    expect(store.appendsAfter.map((x) => x.file.name)).toEqual(['c.mp4', 'a.mp4'])
+    // b ist allein in seiner Gruppe -> keine Bewegung.
+    store.moveAppendClip(b.id, 1)
+    expect(store.appendsBefore.map((x) => x.file.name)).toEqual(['b.mp4'])
+    expect(a.position).toBe('after')
   })
 })

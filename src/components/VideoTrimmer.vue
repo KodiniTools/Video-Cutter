@@ -17,6 +17,7 @@ import { readVideoDuration } from '@/lib/videoMeta'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
+import AppendClipRow from './AppendClipRow.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -36,6 +37,8 @@ const {
   appendClips,
   hasAppends,
   canAppend,
+  appendsBefore,
+  appendsAfter,
   hasVideo,
   canExport,
   canAddSegment,
@@ -387,7 +390,13 @@ async function onExport(): Promise<void> {
       duration.value,
       { preset: animation.value, duration: animDuration.value },
       crop.value ?? undefined,
-      appendClips.value.map((c) => c.file),
+      appendClips.value.map((c) => ({
+        file: c.file,
+        start: c.start,
+        // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende (Server prüft die Dauer).
+        duration: c.end !== null ? Math.max(0, c.end - c.start) : undefined,
+        position: c.position,
+      })),
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -797,7 +806,7 @@ async function downloadResult(): Promise<void> {
             <p class="segments-hint">{{ t('segments.hint') }}</p>
           </section>
 
-          <!-- Weitere Videos hochladen und hinter die Ausschnitte hängen -->
+          <!-- Weitere Videos hochladen und vor/hinter die Ausschnitte setzen -->
           <section class="card segments append">
             <div class="card-head">
               <h3 class="panel-title">{{ t('append.title') }}</h3>
@@ -817,50 +826,43 @@ async function downloadResult(): Promise<void> {
             </label>
 
             <ol v-if="appendClips.length" class="segments-list">
+              <AppendClipRow
+                v-for="(clip, i) in appendsBefore"
+                :key="clip.id"
+                :clip="clip"
+                :index="i + 1"
+                :can-up="i > 0"
+                :can-down="i < appendsBefore.length - 1"
+                :disabled="busy"
+                @start="store.setAppendStart(clip.id, $event)"
+                @end="store.setAppendEnd(clip.id, $event)"
+                @reset="store.resetAppendRange(clip.id)"
+                @position="store.setAppendPosition(clip.id, $event)"
+                @move="store.moveAppendClip(clip.id, $event)"
+                @remove="store.removeAppendClip(clip.id)"
+              />
               <li class="segment-row main">
-                <span class="segment-index">1</span>
+                <span class="segment-index">{{ appendsBefore.length + 1 }}</span>
                 <span class="segment-time">
                   {{ t('append.main') }}
                   <small v-if="segmentsTotal > 0">({{ formatTimeMs(segmentsTotal) }})</small>
                 </span>
               </li>
-              <li v-for="(clip, i) in appendClips" :key="clip.id" class="segment-row">
-                <span class="segment-index">{{ i + 2 }}</span>
-                <span class="segment-time append-info" :title="clip.file.name">
-                  <span class="append-name">{{ clip.file.name }}</span>
-                  <small v-if="clip.duration > 0">{{ formatTimeMs(clip.duration) }}</small>
-                </span>
-                <button
-                  class="btn tiny remove"
-                  type="button"
-                  :disabled="i === 0 || busy"
-                  :aria-label="t('append.up')"
-                  :title="t('append.up')"
-                  @click="store.moveAppendClip(clip.id, -1)"
-                >
-                  ↑
-                </button>
-                <button
-                  class="btn tiny remove"
-                  type="button"
-                  :disabled="i === appendClips.length - 1 || busy"
-                  :aria-label="t('append.down')"
-                  :title="t('append.down')"
-                  @click="store.moveAppendClip(clip.id, 1)"
-                >
-                  ↓
-                </button>
-                <button
-                  class="btn tiny remove"
-                  type="button"
-                  :disabled="busy"
-                  :aria-label="t('append.remove')"
-                  :title="t('append.remove')"
-                  @click="store.removeAppendClip(clip.id)"
-                >
-                  ✕
-                </button>
-              </li>
+              <AppendClipRow
+                v-for="(clip, i) in appendsAfter"
+                :key="clip.id"
+                :clip="clip"
+                :index="appendsBefore.length + i + 2"
+                :can-up="i > 0"
+                :can-down="i < appendsAfter.length - 1"
+                :disabled="busy"
+                @start="store.setAppendStart(clip.id, $event)"
+                @end="store.setAppendEnd(clip.id, $event)"
+                @reset="store.resetAppendRange(clip.id)"
+                @position="store.setAppendPosition(clip.id, $event)"
+                @move="store.moveAppendClip(clip.id, $event)"
+                @remove="store.removeAppendClip(clip.id)"
+              />
             </ol>
             <p v-else class="segments-empty">{{ t('append.empty') }}</p>
 
@@ -1655,16 +1657,6 @@ label.btn.block {
 }
 .segment-row.main {
   border-style: dashed;
-}
-.append-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.append-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .segments-empty {
   margin: 0;

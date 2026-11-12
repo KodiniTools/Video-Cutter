@@ -6,6 +6,7 @@ import {
   type Transition,
   type TransitionPreset,
   type CropRect,
+  type AppendPosition,
 } from './args'
 
 export class ValidationError extends Error {
@@ -174,4 +175,77 @@ export function safeBaseName(filename: string): string {
     .trim()
     .slice(0, 80)
   return cleaned || 'video'
+}
+
+/** Kürzung + Position eines angehängten Videos, wie vom Client gesendet. */
+export interface AppendMeta {
+  /** Startpunkt in Sekunden (≥ 0). */
+  start: number
+  /** Gewünschte Länge in Sekunden; `undefined` = bis zum Ende. */
+  duration?: number
+  position: AppendPosition
+}
+
+const DEFAULT_APPEND_META: AppendMeta = { start: 0, position: 'after' }
+
+/**
+ * Liest `appendMeta` (JSON-Array, ein Eintrag je angehängter Datei, gleiche
+ * Reihenfolge). Fehlt das Feld, gelten die Standardwerte (vollständig, danach).
+ */
+export function parseAppendMeta(body: Record<string, unknown>, count: number): AppendMeta[] {
+  let raw: unknown = body.appendMeta
+  if (raw === undefined || raw === null || raw === '') {
+    return Array.from({ length: count }, () => ({ ...DEFAULT_APPEND_META }))
+  }
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      throw new ValidationError('Ungültige Angaben zu den angehängten Videos.')
+    }
+  }
+  if (!Array.isArray(raw) || raw.length !== count) {
+    throw new ValidationError('Angaben passen nicht zu den angehängten Videos.')
+  }
+  return raw.map((item) => {
+    const m = (item ?? {}) as Record<string, unknown>
+    const start = m.start === undefined ? 0 : Number(m.start)
+    if (!Number.isFinite(start) || start < 0) {
+      throw new ValidationError('Ungültiger Startwert eines angehängten Videos.')
+    }
+    let duration: number | undefined
+    if (m.duration !== undefined && m.duration !== null) {
+      duration = Number(m.duration)
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new ValidationError('Ungültige Länge eines angehängten Videos.')
+      }
+    }
+    const position: AppendPosition = m.position === 'before' ? 'before' : 'after'
+    if (m.position !== undefined && m.position !== 'before' && m.position !== 'after') {
+      throw new ValidationError('Ungültige Position eines angehängten Videos.')
+    }
+    return { start, duration, position }
+  })
+}
+
+/** Mindestlänge eines gekürzten angehängten Videos (Sekunden). */
+const MIN_APPEND_SEC = 0.05
+
+/**
+ * Wendet die Kürzung auf die (per ffprobe ermittelte) echte Dauer an.
+ * Liefert Start + tatsächlich verwendete Länge oder wirft, wenn nichts übrig bleibt.
+ */
+export function resolveAppendRange(
+  meta: AppendMeta,
+  realDuration: number,
+): { start: number; duration: number } {
+  const rest = realDuration - meta.start
+  if (!(rest >= MIN_APPEND_SEC)) {
+    throw new ValidationError('Startwert liegt hinter dem Ende des angehängten Videos.')
+  }
+  const duration = Math.min(meta.duration ?? rest, rest)
+  if (!(duration >= MIN_APPEND_SEC)) {
+    throw new ValidationError('Gekürztes angehängtes Video ist zu kurz.')
+  }
+  return { start: meta.start, duration }
 }

@@ -468,13 +468,31 @@ export function outputDurationFor(keep: Segment[], transition?: Transition): num
 // Zusammenfügen mit weiteren (hochgeladenen) Videos
 // ---------------------------------------------------------------------------
 
-/** Ein angehängtes Video (wird vollständig hinter die Ausschnitte gesetzt). */
+/** Wo ein angehängtes Video landet: vor oder hinter den Ausschnitten. */
+export type AppendPosition = 'before' | 'after'
+
+/** Ein angehängtes Video (ggf. auf [start, start+duration] gekürzt). */
 export interface AppendClip {
   path: string
-  /** Dauer in Sekunden (per ffprobe ermittelt, > 0). */
+  /** Startpunkt im angehängten Video (Sekunden). Standard 0. */
+  start?: number
+  /** Verwendete Länge in Sekunden (> 0, bereits auf die echte Dauer begrenzt). */
   duration: number
   /** Hat das Video eine Tonspur? Sonst wird Stille eingesetzt. */
   hasAudio: boolean
+  /** Standard 'after'. */
+  position?: AppendPosition
+}
+
+/** Reihenfolge beim Zusammenfügen: alle 'before'-Clips, dann die Ausschnitte, dann 'after'. */
+export function splitAppends(appends: AppendClip[]): {
+  before: AppendClip[]
+  after: AppendClip[]
+} {
+  return {
+    before: appends.filter((a) => a.position === 'before'),
+    after: appends.filter((a) => a.position !== 'before'),
+  }
 }
 
 export interface MergeArgsInput {
@@ -484,7 +502,7 @@ export interface MergeArgsInput {
   keep: Segment[]
   /** Hat das Hauptvideo eine Tonspur? */
   mainHasAudio: boolean
-  /** Angehängte Videos in Reihenfolge. */
+  /** Angehängte Videos in Reihenfolge (Position je Clip: davor/danach). */
   appends: AppendClip[]
   /** Zielauflösung (gerade Pixelzahlen); alle Clips werden darauf skaliert/gepolstert. */
   width: number
@@ -539,7 +557,22 @@ export function buildMergeArgs({
   const W = evenPx(width)
   const H = evenPx(height)
 
+  const appendClip = (a: AppendClip) => ({
+    inputArgs: [
+      ...(a.start && a.start > 0 ? ['-ss', formatFfmpegTime(a.start)] : []),
+      '-t',
+      formatFfmpegTime(Math.max(0, a.duration)),
+      '-i',
+      a.path,
+    ],
+    duration: a.duration,
+    hasAudio: a.hasAudio,
+    crop: undefined as CropRect | undefined,
+  })
+  const { before, after } = splitAppends(appends)
+
   const clips = [
+    ...before.map(appendClip),
     ...keep.map((r) => ({
       inputArgs: [
         '-ss',
@@ -553,12 +586,7 @@ export function buildMergeArgs({
       hasAudio: mainHasAudio,
       crop,
     })),
-    ...appends.map((a) => ({
-      inputArgs: ['-i', a.path],
-      duration: a.duration,
-      hasAudio: a.hasAudio,
-      crop: undefined as CropRect | undefined,
-    })),
+    ...after.map(appendClip),
   ]
 
   const ranges: Segment[] = clips.map((c) => ({ start: 0, duration: c.duration }))

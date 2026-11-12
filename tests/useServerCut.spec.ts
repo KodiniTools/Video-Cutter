@@ -12,6 +12,7 @@ describe('parseJobStart', () => {
       jobId: 'abc',
       crop: true,
       append: 0,
+      appendTrim: false,
     })
   })
 
@@ -20,6 +21,7 @@ describe('parseJobStart', () => {
       jobId: 'abc',
       crop: false,
       append: 0,
+      appendTrim: false,
     })
   })
 
@@ -122,11 +124,33 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
     const { cut, isProcessing } = useServerCut()
 
     await expect(
-      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [extra, extra]),
+      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [
+        { file: extra },
+        { file: extra },
+      ]),
     ).rejects.toThrow(APPEND_UNSUPPORTED)
 
     expect(instances[0].sentForm?.getAll('append')).toHaveLength(2)
     expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-3', { method: 'DELETE' })
     expect(isProcessing.value).toBe(false)
+  })
+
+  it('sendet Kürzung/Position als appendMeta und bricht ab, wenn der Server sie nicht bestätigt', async () => {
+    // Server kennt "append", aber noch nicht "appendTrim".
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-4","append":1}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const extra = new File([new Uint8Array([1])], 'intro.mp4', { type: 'video/mp4' })
+    const { cut } = useServerCut()
+
+    await expect(
+      cut(file, segments, 'reencode', 'keep', 10, undefined, undefined, [
+        { file: extra, start: 1, duration: 2, position: 'before' },
+      ]),
+    ).rejects.toThrow(APPEND_UNSUPPORTED)
+
+    expect(JSON.parse(String(instances[0].sentForm?.get('appendMeta')))).toEqual([
+      { start: 1, duration: 2, position: 'before' },
+    ])
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-4', { method: 'DELETE' })
   })
 })

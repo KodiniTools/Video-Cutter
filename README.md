@@ -52,14 +52,19 @@ Der Video Cutter nutzt dasselbe Design-System wie der
 ## Videos anhängen (Zusammenfügen)
 
 In der Karte **„Videos anhängen"** lassen sich bis zu 5 weitere Videos
-hochladen. Sie werden vollständig und in der angezeigten Reihenfolge (↑/↓)
-hinter die Ausschnitte des Hauptvideos gesetzt und serverseitig zu einer Datei
-zusammengefügt. Dabei wird immer neu kodiert: Alle Clips werden auf die
-(ggf. zugeschnittene) Auflösung des Hauptvideos skaliert (Letterbox statt
-Verzerrung), auf 30 fps und 48 kHz Stereo normiert; Clips ohne Tonspur erhalten
-Stille. Die gewählte Animation gilt auch zwischen den angehängten Videos.
-Backend: zusätzliche Multipart-Dateien `append`, Analyse per `ffprobe`
-(`FFPROBE_PATH`, Limit `MAX_APPEND_FILES`). Health meldet `"features":["crop","append"]`.
+hochladen. Jedes Video kann **vor** (Intro) oder **hinter** (Outro) die
+Ausschnitte des Hauptvideos gesetzt und mit **Von/Bis** gekürzt werden (Bis leer
+= bis zum Ende). Innerhalb von „davor" bzw. „danach" bestimmt ↑/↓ die
+Reihenfolge. Alles wird serverseitig zu einer Datei zusammengefügt. Dabei wird
+immer neu kodiert: Alle Clips werden auf die (ggf. zugeschnittene) Auflösung des
+Hauptvideos skaliert (Letterbox statt Verzerrung), auf 30 fps und 48 kHz Stereo
+normiert; Clips ohne Tonspur erhalten Stille. Die gewählte Animation gilt auch
+zwischen den angehängten Videos.
+
+Backend: zusätzliche Multipart-Dateien `append` plus `appendMeta` (JSON, je
+Datei `{ start, duration?, position }`), Analyse per `ffprobe` (`FFPROBE_PATH`,
+Limit `MAX_APPEND_FILES`). Health meldet
+`"features":["crop","append","appendTrim"]`.
 
 ## Deployment auf den VPS
 

@@ -27,12 +27,30 @@ export interface CropRect {
  * Ein weiteres Video, das beim Schneiden vollständig HINTER die Ausschnitte
  * gehängt (zusammengefügt) wird.
  */
+/** Wo ein angehängtes Video landet: vor (Intro) oder hinter (Outro) den Ausschnitten. */
+export type AppendPosition = 'before' | 'after'
+
 export interface AppendClip {
   /** Stabile ID für Liste/Reihenfolge. */
   id: number
   file: File
-  /** Dauer in Sekunden; 0 = (noch) unbekannt. Nur für die Anzeige. */
+  /** Gesamtdauer der Datei in Sekunden; 0 = (noch) unbekannt. */
   duration: number
+  /** Verwendeter Bereich: Start (s) … Ende (s); `end: null` = bis zum Dateiende. */
+  start: number
+  end: number | null
+  position: AppendPosition
+}
+
+/** Verwendete Länge eines angehängten Videos (0, solange die Dauer unbekannt ist). */
+export function appendClipLength(c: AppendClip): number {
+  const end = c.end ?? c.duration
+  return end > 0 ? Math.max(0, end - c.start) : 0
+}
+
+/** Ist das angehängte Video gekürzt? */
+export function isAppendTrimmed(c: AppendClip): boolean {
+  return c.start > 0 || c.end !== null
 }
 
 /** Höchstzahl angehängter Videos (muss zu MAX_APPEND_FILES im Backend passen). */
@@ -116,6 +134,9 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   /** Werden weitere Videos angehängt? (erzwingt Re-Encode.) */
   const hasAppends = computed(() => appendClips.value.length > 0)
   const canAppend = computed(() => appendClips.value.length < MAX_APPEND_CLIPS)
+  /** Angehängte Videos getrennt nach Position (je Gruppe in Listenreihenfolge). */
+  const appendsBefore = computed(() => appendClips.value.filter((c) => c.position === 'before'))
+  const appendsAfter = computed(() => appendClips.value.filter((c) => c.position === 'after'))
   /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
   const cropPixelSize = computed(() => {
     if (!crop.value || !videoWidth.value || !videoHeight.value) return null
@@ -391,28 +412,81 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
       id: nextAppendId++,
       file,
       duration: 0,
+      start: 0,
+      end: null,
+      position: 'after' as AppendPosition,
     }))
     if (added.length) appendClips.value = [...appendClips.value, ...added]
     return added
   }
 
+  function updateAppend(id: number, fn: (c: AppendClip) => AppendClip): void {
+    appendClips.value = appendClips.value.map((c) => (c.id === id ? fn(c) : c))
+  }
+
+  /** Begrenzt Start/Ende auf die (bekannte) Dauer mit Mindestlänge. */
+  function clampAppendRange(c: AppendClip): AppendClip {
+    const dur = c.duration
+    let start = Math.max(0, Number.isFinite(c.start) ? c.start : 0)
+    let end = c.end
+    if (dur > 0) {
+      start = Math.min(start, Math.max(0, dur - MIN_SELECTION))
+      if (end !== null) end = clamp(end, Math.min(start + MIN_SELECTION, dur), dur)
+      // Ende = Dateiende -> wieder „bis zum Ende" (ungekürzt).
+      if (end !== null && dur - end < 1e-3) end = null
+    } else if (end !== null) {
+      end = Math.max(end, start + MIN_SELECTION)
+    }
+    return { ...c, start, end }
+  }
+
   function setAppendDuration(id: number, d: number): void {
     const dur = Number.isFinite(d) && d > 0 ? d : 0
-    appendClips.value = appendClips.value.map((c) => (c.id === id ? { ...c, duration: dur } : c))
+    updateAppend(id, (c) => clampAppendRange({ ...c, duration: dur }))
+  }
+
+  /** Setzt den Start des verwendeten Bereichs; zieht das Ende bei Bedarf mit. */
+  function setAppendStart(id: number, t: number): void {
+    updateAppend(id, (c) => {
+      const start = Number.isFinite(t) ? Math.max(0, t) : 0
+      const end = c.end !== null && c.end < start + MIN_SELECTION ? null : c.end
+      return clampAppendRange({ ...c, start, end })
+    })
+  }
+
+  /** Setzt das Ende des verwendeten Bereichs; `null` = bis zum Dateiende. */
+  function setAppendEnd(id: number, t: number | null): void {
+    updateAppend(id, (c) =>
+      clampAppendRange({ ...c, end: t === null || !Number.isFinite(t) ? null : t }),
+    )
+  }
+
+  /** Kürzung aufheben (ganzes Video verwenden). */
+  function resetAppendRange(id: number): void {
+    updateAppend(id, (c) => ({ ...c, start: 0, end: null }))
+  }
+
+  function setAppendPosition(id: number, position: AppendPosition): void {
+    updateAppend(id, (c) => ({ ...c, position }))
   }
 
   function removeAppendClip(id: number): void {
     appendClips.value = appendClips.value.filter((c) => c.id !== id)
   }
 
-  /** Verschiebt ein angehängtes Video um `delta` Plätze (−1 = nach oben). */
+  /**
+   * Verschiebt ein angehängtes Video innerhalb seiner Gruppe (davor/danach)
+   * um einen Platz: tauscht mit dem nächsten Video gleicher Position.
+   */
   function moveAppendClip(id: number, delta: number): void {
     const list = [...appendClips.value]
     const from = list.findIndex((c) => c.id === id)
-    const to = from + delta
-    if (from < 0 || to < 0 || to >= list.length) return
-    const [item] = list.splice(from, 1)
-    list.splice(to, 0, item)
+    if (from < 0 || delta === 0) return
+    const step = delta < 0 ? -1 : 1
+    let to = from + step
+    while (to >= 0 && to < list.length && list[to].position !== list[from].position) to += step
+    if (to < 0 || to >= list.length) return
+    ;[list[from], list[to]] = [list[to], list[from]]
     appendClips.value = list
   }
 
@@ -510,6 +584,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     cropPixelSize,
     hasAppends,
     canAppend,
+    appendsBefore,
+    appendsAfter,
     // actions
     setFile,
     setDuration,
@@ -526,6 +602,10 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     clearSegments,
     addAppendClips,
     setAppendDuration,
+    setAppendStart,
+    setAppendEnd,
+    resetAppendRange,
+    setAppendPosition,
     removeAppendClip,
     moveAppendClip,
     clearAppendClips,
