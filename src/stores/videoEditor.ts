@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { clamp, type TrimMode } from '@/lib/ffmpegCommand'
+import { computeKeepRanges, type KeepRange } from '@/lib/keepRanges'
 
 /** 'keep' = Auswahl behalten, 'remove' = Auswahl entfernen (Rest zusammenfügen). */
 export type CutOperation = 'keep' | 'remove'
@@ -40,6 +41,30 @@ export interface AppendClip {
   start: number
   end: number | null
   position: AppendPosition
+  /**
+   * Nur bei 'after': direkt hinter dem n-ten Teil des Hauptvideos einfügen
+   * (1-basiert, zwischen zwei Ausschnitten). `null` = ganz am Ende.
+   */
+  slot: number | null
+}
+
+/** Ein Eintrag der Gesamtreihenfolge beim Zusammenfügen. */
+export type MergeItem =
+  | {
+      kind: 'main'
+      /** 0-basierter Index des Teils des Hauptvideos. */
+      index: number
+      /** Bereich des Teils; `null`, solange noch kein Ausschnitt existiert (Platzhalter). */
+      range: KeepRange | null
+    }
+  | { kind: 'append'; clip: AppendClip }
+
+/** Effektive Einfügestelle: Anzahl der Teile des Hauptvideos VOR dem Clip (wie im Backend). */
+export function appendSlotOf(c: AppendClip, mainCount: number): number {
+  if (c.position === 'before') return 0
+  const s = c.slot
+  if (s === null || !Number.isInteger(s) || s < 1 || s >= mainCount) return mainCount
+  return s
 }
 
 /** Verwendete Länge eines angehängten Videos (0, solange die Dauer unbekannt ist). */
@@ -105,6 +130,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
    */
   const appendClips = ref<AppendClip[]>([])
   let nextAppendId = 1
+  /** Lautstärke aller Clips beim Zusammenfügen angleichen (Einstellung, kein Undo). */
+  const normalizeAudio = ref(false)
 
   // --- Ergebnis / Fehler ---
   const resultName = ref('')
@@ -137,6 +164,33 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   /** Angehängte Videos getrennt nach Position (je Gruppe in Listenreihenfolge). */
   const appendsBefore = computed(() => appendClips.value.filter((c) => c.position === 'before'))
   const appendsAfter = computed(() => appendClips.value.filter((c) => c.position === 'after'))
+  /**
+   * Teile des Hauptvideos, so wie das Backend sie zusammenfügt (sortiert,
+   * Überlappungen vereint; bei 'remove' der verbleibende Rest).
+   */
+  const mainParts = computed<KeepRange[]>(() =>
+    computeKeepRanges(
+      effectiveSegments.value.map((s) => ({ start: s.start, duration: s.end - s.start })),
+      operation.value,
+      operation.value === 'remove' ? duration.value : Number.POSITIVE_INFINITY,
+    ),
+  )
+  /**
+   * Gesamtreihenfolge: Teile des Hauptvideos in Zeitreihenfolge, angehängte
+   * Videos an ihrer Einfügestelle. Ohne Ausschnitt steht ein Platzhalter-Teil.
+   */
+  const mergeItems = computed<MergeItem[]>(() => {
+    const parts = mainParts.value
+    const n = Math.max(1, parts.length)
+    const items: MergeItem[] = []
+    for (let k = 0; k <= n; k++) {
+      if (k > 0) items.push({ kind: 'main', index: k - 1, range: parts[k - 1] ?? null })
+      for (const clip of appendClips.value) {
+        if (appendSlotOf(clip, n) === k) items.push({ kind: 'append', clip })
+      }
+    }
+    return items
+  })
   /** Ausgewählte Auflösung in Pixeln, falls die Quellauflösung bekannt ist. */
   const cropPixelSize = computed(() => {
     if (!crop.value || !videoWidth.value || !videoHeight.value) return null
@@ -415,6 +469,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
       start: 0,
       end: null,
       position: 'after' as AppendPosition,
+      slot: null,
     }))
     if (added.length) appendClips.value = [...appendClips.value, ...added]
     return added
@@ -466,8 +521,49 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     updateAppend(id, (c) => ({ ...c, start: 0, end: null }))
   }
 
+  /** Davor/Danach setzen – setzt eine Einfügestelle zwischen Ausschnitten zurück. */
   function setAppendPosition(id: number, position: AppendPosition): void {
-    updateAppend(id, (c) => ({ ...c, position }))
+    updateAppend(id, (c) => ({ ...c, position, slot: null }))
+  }
+
+  /**
+   * Übernimmt eine neue Gesamtreihenfolge: Position/Einfügestelle jedes
+   * angehängten Videos ergibt sich aus der Zahl der Hauptvideo-Teile davor.
+   */
+  function applyMergeOrder(items: MergeItem[]): void {
+    const n = items.filter((it) => it.kind === 'main').length
+    let k = 0
+    const next: AppendClip[] = []
+    for (const it of items) {
+      if (it.kind === 'main') {
+        k++
+        continue
+      }
+      const current = appendClips.value.find((c) => c.id === it.clip.id)
+      if (!current) continue
+      if (k === 0) next.push({ ...current, position: 'before', slot: null })
+      else if (k >= n) next.push({ ...current, position: 'after', slot: null })
+      else next.push({ ...current, position: 'after', slot: k })
+    }
+    // Sicherheitsnetz: nichts verlieren, falls ein Clip in `items` fehlt.
+    for (const c of appendClips.value) if (!next.some((x) => x.id === c.id)) next.push(c)
+    appendClips.value = next
+  }
+
+  /**
+   * Verschiebt ein angehängtes Video in der Gesamtreihenfolge an Stelle
+   * `toIndex` (Index in der Liste OHNE das verschobene Video). Teile des
+   * Hauptvideos bleiben in Zeitreihenfolge; das Video kann davor, dazwischen
+   * oder dahinter landen (Drag & Drop).
+   */
+  function moveMergeItem(id: number, toIndex: number): void {
+    const items = [...mergeItems.value]
+    const from = items.findIndex((it) => it.kind === 'append' && it.clip.id === id)
+    if (from < 0 || !Number.isFinite(toIndex)) return
+    const [moved] = items.splice(from, 1)
+    const to = Math.min(Math.max(0, Math.trunc(toIndex)), items.length)
+    items.splice(to, 0, moved)
+    applyMergeOrder(items)
   }
 
   function removeAppendClip(id: number): void {
@@ -475,19 +571,21 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
   }
 
   /**
-   * Verschiebt ein angehängtes Video innerhalb seiner Gruppe (davor/danach)
-   * um einen Platz: tauscht mit dem nächsten Video gleicher Position.
+   * Verschiebt ein angehängtes Video in der Gesamtreihenfolge um einen Platz
+   * (▲▼): an anderen Videos und an Teilen des Hauptvideos vorbei – so wird
+   * z. B. aus einem Outro ein Video zwischen zwei Ausschnitten.
    */
   function moveAppendClip(id: number, delta: number): void {
-    const list = [...appendClips.value]
-    const from = list.findIndex((c) => c.id === id)
-    if (from < 0 || delta === 0) return
-    const step = delta < 0 ? -1 : 1
-    let to = from + step
-    while (to >= 0 && to < list.length && list[to].position !== list[from].position) to += step
-    if (to < 0 || to >= list.length) return
-    ;[list[from], list[to]] = [list[to], list[from]]
-    appendClips.value = list
+    if (delta === 0) return
+    const from = mergeItems.value.findIndex((it) => it.kind === 'append' && it.clip.id === id)
+    if (from < 0) return
+    const to = from + (delta < 0 ? -1 : 1)
+    if (to < 0 || to >= mergeItems.value.length) return
+    moveMergeItem(id, to)
+  }
+
+  function setNormalizeAudio(on: boolean): void {
+    normalizeAudio.value = on
   }
 
   function clearAppendClips(): void {
@@ -568,6 +666,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments,
     crop,
     appendClips,
+    normalizeAudio,
     resultName,
     resultBlob,
     hasResult,
@@ -586,6 +685,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canAppend,
     appendsBefore,
     appendsAfter,
+    mainParts,
+    mergeItems,
     // actions
     setFile,
     setDuration,
@@ -608,6 +709,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setAppendPosition,
     removeAppendClip,
     moveAppendClip,
+    moveMergeItem,
+    setNormalizeAudio,
     clearAppendClips,
     setCrop,
     enableCrop,

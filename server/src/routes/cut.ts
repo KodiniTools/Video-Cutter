@@ -16,6 +16,7 @@ import { probeMedia } from '../lib/probe'
 import {
   parseAppendMeta,
   parseCutParams,
+  parseNormalizeAudio,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -57,15 +58,24 @@ export const cutRouter = Router()
  * ob der laufende Server neue Felder wie `crop` überhaupt kennt – ein altes
  * Backend würde sie sonst stillschweigend ignorieren und ungeschnitten liefern.
  */
-export const SERVER_FEATURES = ['crop', 'append', 'appendTrim'] as const
+export const SERVER_FEATURES = [
+  'crop',
+  'append',
+  'appendTrim',
+  'appendSlots',
+  'normalizeAudio',
+] as const
 
 /**
  * POST /api/cut  (multipart: video, append[], appendMeta, segments|start+duration, mode,
- *                 operation, total, crop, transitionPreset, transitionDuration)
+ *                 operation, total, crop, transitionPreset, transitionDuration,
+ *                 normalizeAudio)
  * Legt einen Job an und startet die Verarbeitung.
- * Antwort: { jobId, crop, append, appendTrim } – `crop` bestätigt den
- * Bildausschnitt, `append` die Anzahl der angehängten Videos, `appendTrim`
- * die Übernahme von Kürzung/Position (`appendMeta`) je angehängtem Video.
+ * Antwort: { jobId, crop, append, appendTrim, appendSlots, normalizeAudio } –
+ * `crop` bestätigt den Bildausschnitt, `append` die Anzahl der angehängten
+ * Videos, `appendTrim` die Übernahme von Kürzung/Position (`appendMeta`),
+ * `appendSlots` freie Einfügestellen zwischen den Ausschnitten und
+ * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen).
  */
 cutRouter.post(
   '/cut',
@@ -85,6 +95,8 @@ cutRouter.post(
     try {
       const params = parseCutParams(req.body ?? {}, config.maxDurationSec)
       const appendMeta = parseAppendMeta(req.body ?? {}, appendFiles.length)
+      // Lautstärke-Angleichung wirkt nur beim Zusammenfügen mit angehängten Videos.
+      const normalizeAudio = appendFiles.length > 0 && parseNormalizeAudio(req.body ?? {})
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -134,6 +146,7 @@ cutRouter.post(
             duration: range.duration,
             hasAudio: info.hasAudio,
             position: appendMeta[i].position,
+            slot: appendMeta[i].slot,
           }
         })
         const size = mergeTargetSize(mainInfo.width, mainInfo.height, params.crop)
@@ -149,6 +162,7 @@ cutRouter.post(
           height: size.height,
           transition: params.transition,
           crop: params.crop,
+          normalizeAudio,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = outputDurationFor(
@@ -198,6 +212,8 @@ cutRouter.post(
         crop: params.crop !== undefined,
         append: appendFiles.length,
         appendTrim: appendFiles.length > 0,
+        appendSlots: appendFiles.length > 0,
+        normalizeAudio,
       })
     } catch (err) {
       await removeFiles(allPaths)

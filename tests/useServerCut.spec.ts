@@ -13,6 +13,8 @@ describe('parseJobStart', () => {
       crop: true,
       append: 0,
       appendTrim: false,
+      appendSlots: false,
+      normalizeAudio: false,
     })
   })
 
@@ -22,6 +24,8 @@ describe('parseJobStart', () => {
       crop: false,
       append: 0,
       appendTrim: false,
+      appendSlots: false,
+      normalizeAudio: false,
     })
   })
 
@@ -152,5 +156,43 @@ describe('useServerCut – Crop-Bestätigung des Backends', () => {
       { start: 1, duration: 2, position: 'before' },
     ])
     expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-4', { method: 'DELETE' })
+  })
+  it('sendet slot + normalizeAudio und bricht ab, wenn der Server sie nicht bestätigt', async () => {
+    // Server kennt append/appendTrim, aber weder appendSlots noch normalizeAudio.
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-5","append":1,"appendTrim":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const extra = new File([new Uint8Array([1])], 'mitte.mp4', { type: 'video/mp4' })
+    const { cut } = useServerCut()
+
+    await expect(
+      cut(
+        file,
+        segments,
+        'reencode',
+        'keep',
+        10,
+        undefined,
+        undefined,
+        [{ file: extra, position: 'after', slot: 1 }],
+        true,
+      ),
+    ).rejects.toThrow(APPEND_UNSUPPORTED)
+
+    const form = instances[0].sentForm
+    expect(JSON.parse(String(form?.get('appendMeta')))).toEqual([
+      { start: 0, position: 'after', slot: 1 },
+    ])
+    expect(form?.get('normalizeAudio')).toBe('1')
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-5', { method: 'DELETE' })
+  })
+
+  it('parseJobStart liest appendSlots/normalizeAudio', () => {
+    expect(
+      parseJobStart('{"jobId":"j","append":1,"appendSlots":true,"normalizeAudio":true}'),
+    ).toMatchObject({ appendSlots: true, normalizeAudio: true })
+    expect(parseJobStart('{"jobId":"j"}')).toMatchObject({
+      appendSlots: false,
+      normalizeAudio: false,
+    })
   })
 })

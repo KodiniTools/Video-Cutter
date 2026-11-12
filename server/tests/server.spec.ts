@@ -6,11 +6,14 @@ import {
   outputDurationFor,
   buildMergeArgs,
   mergeTargetSize,
+  mergeSequence,
+  LOUDNORM_FILTER,
 } from '../src/lib/args'
 import { parseProbeOutput } from '../src/lib/probe'
 import {
   parseAppendMeta,
   parseCutParams,
+  parseNormalizeAudio,
   resolveAppendRange,
   safeExt,
   safeBaseName,
@@ -694,5 +697,132 @@ describe('Angehängte Videos: Kürzung und Position', () => {
       duration: 6,
     })
     expect(() => resolveAppendRange({ start: 10, position: 'after' }, 10)).toThrow(ValidationError)
+  })
+})
+
+describe('Angehängte Videos: freie Einfügestelle (slot)', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [
+      { start: 0, duration: 2 },
+      { start: 5, duration: 3 },
+      { start: 10, duration: 1 },
+    ],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+  }
+  const inputsOf = (args: string[]) => args.filter((_, k) => args[k - 1] === '-i')
+
+  it('mergeSequence: davor, zwischen den Bereichen, danach (Listenreihenfolge je Stelle)', () => {
+    const seq = mergeSequence(3, [
+      { path: 'a', duration: 1, hasAudio: true, position: 'after' },
+      { path: 'b', duration: 1, hasAudio: true, position: 'after', slot: 1 },
+      { path: 'c', duration: 1, hasAudio: true, position: 'before', slot: 2 },
+      { path: 'd', duration: 1, hasAudio: true, position: 'after', slot: 1 },
+      { path: 'e', duration: 1, hasAudio: true, position: 'after', slot: 2 },
+    ])
+    expect(seq.map((x) => `${x.kind[0]}${x.index}`)).toEqual([
+      'a2', // c (before, slot ignoriert)
+      'm0',
+      'a1',
+      'a3',
+      'm1',
+      'a4',
+      'm2',
+      'a0',
+    ])
+  })
+
+  it('Slot außerhalb (≥ Anzahl Bereiche) landet am Ende', () => {
+    const seq = mergeSequence(1, [
+      { path: 'a', duration: 1, hasAudio: true, position: 'after', slot: 1 },
+      { path: 'b', duration: 1, hasAudio: true, position: 'after', slot: 7 },
+    ])
+    expect(seq.map((x) => `${x.kind[0]}${x.index}`)).toEqual(['m0', 'a0', 'a1'])
+  })
+
+  it('buildMergeArgs fügt ein Video zwischen zwei Ausschnitte ein', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/x.mp4', duration: 4, hasAudio: true, position: 'after', slot: 2 }],
+    })
+    expect(inputsOf(args)).toEqual(['/tmp/in.mp4', '/tmp/in.mp4', '/tmp/x.mp4', '/tmp/in.mp4'])
+    const ss = args.filter((_, k) => args[k - 1] === '-ss')
+    expect(ss).toEqual(['00:00:00.000', '00:00:05.000', '00:00:10.000'])
+    expect(args[args.indexOf('-filter_complex') + 1]).toContain('concat=n=4:v=1:a=1')
+  })
+
+  it('ohne slot bleibt das bisherige Verhalten (davor/danach) unverändert', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [
+        { path: '/tmp/out1.mp4', duration: 4, hasAudio: true },
+        { path: '/tmp/intro.mp4', duration: 2, hasAudio: true, position: 'before' },
+      ],
+    })
+    expect(inputsOf(args)).toEqual([
+      '/tmp/intro.mp4',
+      '/tmp/in.mp4',
+      '/tmp/in.mp4',
+      '/tmp/in.mp4',
+      '/tmp/out1.mp4',
+    ])
+  })
+
+  it('parseAppendMeta liest slot, verwirft ihn bei "before" und prüft den Wert', () => {
+    expect(
+      parseAppendMeta({ appendMeta: JSON.stringify([{ position: 'after', slot: 2 }]) }, 1),
+    ).toEqual([{ start: 0, position: 'after', slot: 2 }])
+    expect(
+      parseAppendMeta({ appendMeta: JSON.stringify([{ position: 'before', slot: 2 }]) }, 1)[0],
+    ).not.toHaveProperty('slot')
+    expect(() => parseAppendMeta({ appendMeta: '[{"slot":0}]' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: '[{"slot":1.5}]' }, 1)).toThrow(ValidationError)
+    expect(() => parseAppendMeta({ appendMeta: '[{"slot":"x"}]' }, 1)).toThrow(ValidationError)
+  })
+})
+
+describe('Lautstärke angleichen (loudnorm)', () => {
+  const base = {
+    inputPath: '/tmp/in.mp4',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 2, duration: 3 }],
+    mainHasAudio: true,
+    width: 1280,
+    height: 720,
+  }
+
+  it('ohne Schalter kein loudnorm', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
+    })
+    expect(args[args.indexOf('-filter_complex') + 1]).not.toContain('loudnorm')
+  })
+
+  it('mit Schalter loudnorm je Clip mit Ton, vor dem Resampling auf 48 kHz', () => {
+    const args = buildMergeArgs({
+      ...base,
+      appends: [
+        { path: '/tmp/b.mp4', duration: 4, hasAudio: true },
+        { path: '/tmp/stumm.mp4', duration: 2, hasAudio: false },
+      ],
+      normalizeAudio: true,
+    })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter.match(/loudnorm=/g)).toHaveLength(2)
+    expect(filter).toContain(`[0:a]${LOUDNORM_FILTER},aresample=48000`)
+    expect(filter).toContain(`[1:a]${LOUDNORM_FILTER},aresample=48000`)
+    // Stille wird nicht normalisiert.
+    expect(filter).toContain('anullsrc=r=48000:cl=stereo:d=2.000,aresample=48000')
+  })
+
+  it('parseNormalizeAudio', () => {
+    expect(parseNormalizeAudio({})).toBe(false)
+    expect(parseNormalizeAudio({ normalizeAudio: '1' })).toBe(true)
+    expect(parseNormalizeAudio({ normalizeAudio: 'true' })).toBe(true)
+    expect(parseNormalizeAudio({ normalizeAudio: '0' })).toBe(false)
   })
 })

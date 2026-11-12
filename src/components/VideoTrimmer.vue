@@ -17,7 +17,7 @@ import { readVideoDuration } from '@/lib/videoMeta'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
-import AppendClipRow from './AppendClipRow.vue'
+import MergeOrderList from './MergeOrderList.vue'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -37,8 +37,7 @@ const {
   appendClips,
   hasAppends,
   canAppend,
-  appendsBefore,
-  appendsAfter,
+  normalizeAudio,
   hasVideo,
   canExport,
   canAddSegment,
@@ -145,13 +144,6 @@ const uploadDetail = computed(() => {
 })
 
 // --- Videos anhängen (Zusammenfügen) -----------------------------------------
-/** Gesamtlänge der Ausschnitte des Hauptvideos (für die Reihenfolge-Anzeige). */
-const segmentsTotal = computed(() =>
-  operation.value === 'keep'
-    ? effectiveSegments.value.reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0)
-    : 0,
-)
-
 function onAppendInput(e: Event): void {
   const target = e.target as HTMLInputElement
   const files = Array.from(target.files ?? [])
@@ -396,7 +388,10 @@ async function onExport(): Promise<void> {
         // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende (Server prüft die Dauer).
         duration: c.end !== null ? Math.max(0, c.end - c.start) : undefined,
         position: c.position,
+        // Einfügestelle zwischen zwei Ausschnitten (nur bei „danach").
+        slot: c.position === 'after' && c.slot !== null ? c.slot : undefined,
       })),
+      normalizeAudio.value,
     )
 
     store.applyCutResult(blob, `${base}_cut.${ext}`)
@@ -825,46 +820,21 @@ async function downloadResult(): Promise<void> {
               {{ t('append.add') }}
             </label>
 
-            <ol v-if="appendClips.length" class="segments-list">
-              <AppendClipRow
-                v-for="(clip, i) in appendsBefore"
-                :key="clip.id"
-                :clip="clip"
-                :index="i + 1"
-                :can-up="i > 0"
-                :can-down="i < appendsBefore.length - 1"
-                :disabled="busy"
-                @start="store.setAppendStart(clip.id, $event)"
-                @end="store.setAppendEnd(clip.id, $event)"
-                @reset="store.resetAppendRange(clip.id)"
-                @position="store.setAppendPosition(clip.id, $event)"
-                @move="store.moveAppendClip(clip.id, $event)"
-                @remove="store.removeAppendClip(clip.id)"
-              />
-              <li class="segment-row main">
-                <span class="segment-index">{{ appendsBefore.length + 1 }}</span>
-                <span class="segment-time">
-                  {{ t('append.main') }}
-                  <small v-if="segmentsTotal > 0">({{ formatTimeMs(segmentsTotal) }})</small>
-                </span>
-              </li>
-              <AppendClipRow
-                v-for="(clip, i) in appendsAfter"
-                :key="clip.id"
-                :clip="clip"
-                :index="appendsBefore.length + i + 2"
-                :can-up="i > 0"
-                :can-down="i < appendsAfter.length - 1"
-                :disabled="busy"
-                @start="store.setAppendStart(clip.id, $event)"
-                @end="store.setAppendEnd(clip.id, $event)"
-                @reset="store.resetAppendRange(clip.id)"
-                @position="store.setAppendPosition(clip.id, $event)"
-                @move="store.moveAppendClip(clip.id, $event)"
-                @remove="store.removeAppendClip(clip.id)"
-              />
-            </ol>
+            <MergeOrderList v-if="appendClips.length" :disabled="busy" />
             <p v-else class="segments-empty">{{ t('append.empty') }}</p>
+
+            <label v-if="appendClips.length" class="check-row">
+              <input
+                type="checkbox"
+                :checked="normalizeAudio"
+                :disabled="busy"
+                @change="store.setNormalizeAudio(($event.target as HTMLInputElement).checked)"
+              />
+              <span>
+                {{ t('append.normalize') }}
+                <small>{{ t('append.normalizeHint') }}</small>
+              </span>
+            </label>
 
             <p class="segments-hint">{{ t('append.hint') }}</p>
           </section>
@@ -1657,6 +1627,22 @@ label.btn.block {
 }
 .segment-row.main {
   border-style: dashed;
+}
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--ds-text-md);
+  cursor: pointer;
+}
+.check-row input {
+  margin-top: 3px;
+  accent-color: var(--ds-accent);
+}
+.check-row small {
+  display: block;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
 }
 .segments-empty {
   margin: 0;

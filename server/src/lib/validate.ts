@@ -184,6 +184,17 @@ export interface AppendMeta {
   /** Gewünschte Länge in Sekunden; `undefined` = bis zum Ende. */
   duration?: number
   position: AppendPosition
+  /** Nur bei 'after': hinter dem n-ten Bereich des Hauptvideos (1-basiert); fehlt = am Ende. */
+  slot?: number
+}
+
+/** Höchster sinnvoller Slot-Wert (größere Werte bedeuten ohnehin „am Ende"). */
+const MAX_APPEND_SLOT = 10_000
+
+/** Liest den Schalter „Lautstärke angleichen" (`normalizeAudio`: '1'/'true'). */
+export function parseNormalizeAudio(body: Record<string, unknown>): boolean {
+  const v = body.normalizeAudio
+  return v === true || v === '1' || v === 'true'
 }
 
 const DEFAULT_APPEND_META: AppendMeta = { start: 0, position: 'after' }
@@ -224,7 +235,15 @@ export function parseAppendMeta(body: Record<string, unknown>, count: number): A
     if (m.position !== undefined && m.position !== 'before' && m.position !== 'after') {
       throw new ValidationError('Ungültige Position eines angehängten Videos.')
     }
-    return { start, duration, position }
+    let slot: number | undefined
+    if (m.slot !== undefined && m.slot !== null) {
+      slot = Number(m.slot)
+      if (!Number.isInteger(slot) || slot < 1 || slot > MAX_APPEND_SLOT) {
+        throw new ValidationError('Ungültige Einfügestelle eines angehängten Videos.')
+      }
+      if (position === 'before') slot = undefined
+    }
+    return slot === undefined ? { start, duration, position } : { start, duration, position, slot }
   })
 }
 
