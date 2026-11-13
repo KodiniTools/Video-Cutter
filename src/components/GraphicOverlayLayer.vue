@@ -138,9 +138,11 @@ const rendered = computed<Rendered[]>(() => {
   return props.overlays.flatMap((o) => {
     const isSel = o.id === props.selectedId
     const animated = graphicFrame(o, t)
-    // Angehalten + gewählt: ruhende Ansicht (wie bei Texten).
+    // Angehalten: ruhende Ansicht für alle Grafiken im Zeitbereich (wie bei Texten).
     const frame: GraphicFrame =
-      isSel && paused.value ? { visible: animated.visible, opacity: 1, dy: 0 } : animated
+      paused.value && (isSel || animated.visible)
+        ? { visible: animated.visible, opacity: 1, dy: 0 }
+        : animated
     if (!frame.visible && !isSel) return []
     const img = imageFor(o, H)
     return [

@@ -136,11 +136,12 @@ const rendered = computed<Rendered[]>(() => {
   const t = time.value
   return props.overlays.flatMap((o) => {
     const isSel = o.id === props.selectedId
-    // Angehalten + gewählt: ruhende Ansicht ohne Animation, damit Design und
-    // Position beim Bearbeiten sichtbar sind. Außerhalb des Zeitbereichs blass.
+    // Angehalten: ruhende Ansicht ohne Animation für alle Texte im Zeitbereich
+    // (sonst wären sie z. B. genau am Start wegen des Einblendens unsichtbar),
+    // damit beim Bearbeiten alles sichtbar ist. Gewählter Text außerhalb blass.
     const animated = overlayFrame(o, t)
     const frame: OverlayFrame =
-      isSel && paused.value
+      paused.value && (isSel || animated.visible)
         ? { visible: animated.visible, opacity: 1, dy: 0, scale: 1, chars: Infinity }
         : animated
     if (!frame.visible && !isSel) return []
