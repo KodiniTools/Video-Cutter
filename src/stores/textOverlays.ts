@@ -11,6 +11,8 @@ import {
   type TextOverlayData,
 } from '@/lib/textOverlay'
 
+const EMPTY: TextOverlay[] = []
+
 /**
  * Text-Einblendungen je Bibliotheks-Video (Schlüssel = lokale Listen-ID).
  * Beim Wechsel des Videos bleiben die Texte erhalten; nach dem Einbrennen
@@ -131,6 +133,22 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     selectedId.value = id !== null && overlays.value.some((o) => o.id === id) ? id : null
   }
 
+  /** Texte eines bestimmten Videos (für Rückgängig/Wiederholen). */
+  function listFor(id: number): TextOverlay[] {
+    return byItem.value[id] ?? EMPTY
+  }
+
+  /** Ersetzt die Texte eines bestimmten Videos (Rückgängig/Wiederholen). */
+  function setListFor(id: number, list: TextOverlay[]): void {
+    const next = { ...byItem.value }
+    if (list.length) next[id] = list
+    else delete next[id]
+    byItem.value = next
+    if (itemId.value === id && !list.some((o) => o.id === selectedId.value)) {
+      selectedId.value = null
+    }
+  }
+
   /** Alle Texte eines Videos verwerfen (z. B. nach dem Einbrennen oder Löschen). */
   function clearItem(id: number): void {
     if (!(id in byItem.value)) return
@@ -153,5 +171,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     remove,
     select,
     clearItem,
+    listFor,
+    setListFor,
   }
 })

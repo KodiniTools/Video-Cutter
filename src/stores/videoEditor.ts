@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { clamp, type TrimMode } from '@/lib/ffmpegCommand'
 
 /** 'keep' = Auswahl behalten, 'remove' = Auswahl entfernen (Rest zusammenfügen). */
@@ -44,8 +44,8 @@ export interface MusicSettings {
 /** Standardwerte für neu gewählte Musik. */
 export const DEFAULT_MUSIC_VOLUME = 0.3
 
-/** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands. */
-interface EditorSnapshot {
+/** Der rückgängig-/wiederherstellbare Teil des Editor-Zustands (siehe history-Store). */
+export interface EditorSnapshot {
   startTime: number
   endTime: number
   mode: TrimMode
@@ -62,9 +62,6 @@ export const MIN_CROP_RATIO = 0.1
 
 /** Voreingestellter Ausschnitt beim Aktivieren (zentriert, 80 %). */
 const DEFAULT_CROP: CropRect = { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }
-
-/** Verzögerung, bis eine Änderungsserie (z. B. Ziehen) als ein Schritt gilt. */
-const HISTORY_DEBOUNCE_MS = 350
 
 export const useVideoEditorStore = defineStore('videoEditor', () => {
   // --- Quellvideo ---
@@ -128,20 +125,14 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     }
   })
 
-  // --- Undo/Redo -----------------------------------------------------------
-  // Rückgängig/Wiederherstellen deckt Auswahl (Start/Ende), Ausschnitt-Liste,
-  // Modus und Aktion ab – nicht das geladene Video oder die Wiedergabeposition.
-  // Änderungsserien (Ziehen, mehrfaches Tippen) werden per Debounce zu einem
-  // Schritt zusammengefasst.
-  const undoStack = ref<EditorSnapshot[]>([])
-  const redoStack = ref<EditorSnapshot[]>([])
-  let baseline: EditorSnapshot | null = null
-  let applyingHistory = false
-  let commitTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Zählt Ladevorgänge (neues Video, Dauer bekannt, Zurücksetzen). Der
+   * Rückgängig-Verlauf übernimmt die dabei gesetzten Werte stillschweigend,
+   * statt sie als Bearbeitungsschritt zu werten.
+   */
+  const loadSeq = ref(0)
 
-  const canUndo = computed(() => undoStack.value.length > 0)
-  const canRedo = computed(() => redoStack.value.length > 0)
-
+  /** Der rückgängig-/wiederherstellbare Teil des Zustands als Kopie. */
   function snapshot(): EditorSnapshot {
     return {
       startTime: startTime.value,
@@ -153,97 +144,15 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     }
   }
 
-  function sameSegments(a: Segment[], b: Segment[]): boolean {
-    if (a.length !== b.length) return false
-    return a.every((s, i) => s.start === b[i].start && s.end === b[i].end)
-  }
-
-  function sameCrop(a: CropRect | null, b: CropRect | null): boolean {
-    if (a === null || b === null) return a === b
-    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
-  }
-
-  function sameSnapshot(a: EditorSnapshot, b: EditorSnapshot): boolean {
-    return (
-      a.startTime === b.startTime &&
-      a.endTime === b.endTime &&
-      a.mode === b.mode &&
-      a.operation === b.operation &&
-      sameSegments(a.segments, b.segments) &&
-      sameCrop(a.crop, b.crop)
-    )
-  }
-
+  /** Stellt einen Zustand aus `snapshot()` wieder her (Rückgängig/Wiederholen). */
   function applySnapshot(s: EditorSnapshot): void {
-    applyingHistory = true
     startTime.value = s.startTime
     endTime.value = s.endTime
     mode.value = s.mode
     operation.value = s.operation
     segments.value = s.segments.map((seg) => ({ ...seg }))
     crop.value = s.crop ? { ...s.crop } : null
-    applyingHistory = false
   }
-
-  /** Übernimmt den aktuellen Zustand als neuen History-Schritt (falls geändert). */
-  function commitHistory(): void {
-    if (commitTimer) {
-      clearTimeout(commitTimer)
-      commitTimer = null
-    }
-    const cur = snapshot()
-    if (!baseline) {
-      baseline = cur
-      return
-    }
-    if (sameSnapshot(cur, baseline)) return
-    undoStack.value = [...undoStack.value, baseline]
-    redoStack.value = []
-    baseline = cur
-  }
-
-  /** Setzt die History auf den aktuellen Zustand als Ausgangspunkt zurück. */
-  function resetHistory(): void {
-    if (commitTimer) {
-      clearTimeout(commitTimer)
-      commitTimer = null
-    }
-    undoStack.value = []
-    redoStack.value = []
-    baseline = snapshot()
-  }
-
-  function undo(): void {
-    commitHistory() // eventuelle, noch nicht übernommene Änderung festschreiben
-    if (!undoStack.value.length) return
-    const prev = undoStack.value[undoStack.value.length - 1]
-    undoStack.value = undoStack.value.slice(0, -1)
-    if (baseline) redoStack.value = [...redoStack.value, baseline]
-    applySnapshot(prev)
-    baseline = snapshot()
-  }
-
-  function redo(): void {
-    commitHistory()
-    if (!redoStack.value.length) return
-    const next = redoStack.value[redoStack.value.length - 1]
-    redoStack.value = redoStack.value.slice(0, -1)
-    if (baseline) undoStack.value = [...undoStack.value, baseline]
-    applySnapshot(next)
-    baseline = snapshot()
-  }
-
-  // Änderungen am editierbaren Zustand beobachten und (verzögert) festschreiben.
-  // flush: 'sync', damit der applyingHistory-Schutz beim Anwenden greift.
-  watch(
-    [startTime, endTime, mode, operation, segments, crop],
-    () => {
-      if (applyingHistory) return
-      if (commitTimer) clearTimeout(commitTimer)
-      commitTimer = setTimeout(commitHistory, HISTORY_DEBOUNCE_MS)
-    },
-    { deep: true, flush: 'sync' },
-  )
 
   /**
    * Gibt die aktuelle Blob-URL frei – aber erst NACH dem nächsten DOM-Update.
@@ -274,14 +183,19 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     currentTime.value = 0
     segments.value = []
     crop.value = null
+    loadSeq.value++
   }
 
   function setDuration(d: number): void {
-    duration.value = Number.isFinite(d) && d > 0 ? d : 0
+    const next = Number.isFinite(d) && d > 0 ? d : 0
+    // `durationchange` + `loadedmetadata` melden dieselbe Dauer doppelt; ein
+    // zweiter Aufruf darf die (evtl. schon wiederhergestellte) Auswahl nicht
+    // erneut zurücksetzen.
+    if (next === duration.value && next > 0) return
+    duration.value = next
     startTime.value = 0
     endTime.value = duration.value
-    // Frisch geladenes Video = Ausgangspunkt der History (kein Undo darüber).
-    resetHistory()
+    loadSeq.value++
   }
 
   function setStart(t: number): void {
@@ -452,7 +366,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     segments.value = []
     crop.value = null
     music.value = null
-    resetHistory()
+    loadSeq.value++
   }
 
   return {
@@ -480,8 +394,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     canAddSegment,
     effectiveSegments,
     canExport,
-    canUndo,
-    canRedo,
+    loadSeq,
     hasCrop,
     cropPixelSize,
     hasMusic,
@@ -511,10 +424,8 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     toggleCrop,
     setError,
     reset,
-    // history
-    undo,
-    redo,
-    commitHistory,
-    resetHistory,
+    // Rückgängig/Wiederholen (history-Store)
+    snapshot,
+    applySnapshot,
   }
 })

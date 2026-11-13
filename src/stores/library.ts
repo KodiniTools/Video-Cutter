@@ -4,6 +4,7 @@ import { clamp } from '@/lib/ffmpegCommand'
 import {
   uploadMedia,
   deleteMedia,
+  fetchMediaInfo,
   UPLOAD_ABORTED,
   type MediaUpload,
   type MediaView,
@@ -85,6 +86,30 @@ function clampRange(it: LibraryItem): LibraryItem {
     end = Math.max(end, start + MIN_LENGTH)
   }
   return { ...it, start, end }
+}
+
+/**
+ * Eine Fassung eines Videos (Datei + Server-Video). Schneiden/Einbrennen
+ * erzeugen eine neue Fassung; der Verlauf kann zur vorherigen zurückkehren.
+ */
+export interface ItemVersion {
+  file: File
+  mediaId: string | null
+  name: string
+  size: number
+  duration: number
+  width: number
+  height: number
+  hasAudio: boolean
+  fps: number
+}
+
+/** Zusammenfügen-Einstellungen (Reihenfolge, Von/Bis, Auswahl, Übergänge). */
+export interface MergeState {
+  order: number[]
+  ranges: Record<number, { start: number; end: number | null; include: boolean }>
+  seams: Record<string, SeamPreset>
+  normalizeAudio: boolean
 }
 
 function messageOf(e: unknown): string {
@@ -240,13 +265,89 @@ export const useLibraryStore = defineStore('library', () => {
    * bisherige Video wird vom Server gelöscht (Fehler dabei sind unkritisch –
    * das Auto-Aufräumen entfernt es später).
    */
-  function replaceWithResult(id: number, media: MediaView, file: File): void {
+  function replaceWithResult(
+    id: number,
+    media: MediaView,
+    file: File,
+    opts: { keepOld?: boolean } = {},
+  ): void {
     const old = find(id)
     if (!old) return
     update(id, (it) =>
       applyMedia({ ...it, file, name: file.name, size: file.size, start: 0, end: null }, media),
     )
-    if (old.mediaId && old.mediaId !== media.id) void deleteMedia(old.mediaId).catch(() => {})
+    // keepOld: Der Rückgängig-Verlauf behält die alte Fassung und gibt sie frei.
+    if (!opts.keepOld && old.mediaId && old.mediaId !== media.id) {
+      void deleteMedia(old.mediaId).catch(() => {})
+    }
+  }
+
+  /** Aktuelle Fassung eines Videos (`null`, falls es nicht mehr existiert). */
+  function versionOf(id: number): ItemVersion | null {
+    const it = find(id)
+    if (!it) return null
+    const { file, mediaId, name, size, duration, width, height, hasAudio, fps } = it
+    return { file, mediaId, name, size, duration, width, height, hasAudio, fps }
+  }
+
+  /**
+   * Stellt eine frühere Fassung wieder her (Rückgängig von Schneiden/
+   * Einbrennen). Fehlt sie inzwischen auf dem Server (Auto-Aufräumen), wird
+   * die lokale Datei neu hochgeladen.
+   */
+  function restoreVersion(id: number, v: ItemVersion): void {
+    if (!find(id)) return
+    update(id, (it) =>
+      clampRange({
+        ...it,
+        ...v,
+        start: 0,
+        end: null,
+        status: v.mediaId ? 'ready' : 'uploading',
+        progress: v.mediaId ? 1 : 0,
+        error: '',
+      }),
+    )
+    if (!v.mediaId) {
+      queue = queue.then(() => runUpload(id))
+      return
+    }
+    const mediaId = v.mediaId
+    void fetchMediaInfo(mediaId).catch(() => {
+      const cur = find(id)
+      // Inzwischen weiter bearbeitet/gewechselt -> nichts tun.
+      if (!cur || cur.mediaId !== mediaId || cur.file !== v.file) return
+      update(id, (it) => ({ ...it, mediaId: null, status: 'uploading', progress: 0 }))
+      queue = queue.then(() => runUpload(id))
+    })
+  }
+
+  /** Zusammenfügen-Einstellungen als unabhängige Kopie. */
+  function mergeState(): MergeState {
+    const ranges: MergeState['ranges'] = {}
+    for (const it of items.value) {
+      ranges[it.id] = { start: it.start, end: it.end, include: it.include }
+    }
+    return {
+      order: items.value.map((it) => it.id),
+      ranges,
+      seams: { ...seamTransitions.value },
+      normalizeAudio: normalizeAudio.value,
+    }
+  }
+
+  /** Stellt Zusammenfügen-Einstellungen wieder her (nur für noch vorhandene Videos). */
+  function applyMergeState(s: MergeState): void {
+    const rank = new Map(s.order.map((id, i) => [id, i]))
+    const known = items.value.filter((it) => rank.has(it.id))
+    const unknown = items.value.filter((it) => !rank.has(it.id))
+    known.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
+    items.value = [...known, ...unknown].map((it) => {
+      const r = s.ranges[it.id]
+      return r ? clampRange({ ...it, start: r.start, end: r.end, include: r.include }) : it
+    })
+    seamTransitions.value = { ...s.seams }
+    normalizeAudio.value = s.normalizeAudio
   }
 
   /**
@@ -340,6 +441,10 @@ export const useLibraryStore = defineStore('library', () => {
     select,
     remove,
     replaceWithResult,
+    versionOf,
+    restoreVersion,
+    mergeState,
+    applyMergeState,
     addResult,
     setDuration,
     setStart,

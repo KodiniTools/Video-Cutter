@@ -269,7 +269,7 @@ const messages = {
       translate: 'Texte übersetzen',
       translateCount: 'Alle {n} Texte übersetzen',
       translateHint:
-        'Ersetzt deine Texte (auch von Hand eingefügte) durch die Übersetzung. Zeit, Position und Design bleiben gleich. Lässt sich nicht rückgängig machen.',
+        'Ersetzt deine Texte (auch von Hand eingefügte) durch die Übersetzung. Zeit, Position und Design bleiben gleich. Mit ↶ Rückgängig zurückholbar.',
       translated: '{n} Texte übersetzt.',
       translatedPartly: '{n} Texte übersetzt, {m} unverändert (keine Übersetzung erhalten).',
       cancel: 'Abbrechen',
@@ -667,7 +667,7 @@ const messages = {
       translate: 'Translate texts',
       translateCount: 'Translate all {n} texts',
       translateHint:
-        'Replaces your texts (including manually added ones) with the translation. Timing, position and design stay the same. This cannot be undone.',
+        'Replaces your texts (including manually added ones) with the translation. Timing, position and design stay the same. Undo (↶) brings the originals back.',
       translated: '{n} texts translated.',
       translatedPartly: '{n} texts translated, {m} unchanged (no translation received).',
       cancel: 'Cancel',

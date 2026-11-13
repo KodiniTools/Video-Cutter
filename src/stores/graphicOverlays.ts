@@ -13,6 +13,8 @@ import {
 } from '@/lib/graphicOverlay'
 import { pruneImageAssets } from '@/lib/imageAssets'
 
+const EMPTY: GraphicOverlay[] = []
+
 /**
  * Grafik-Einblendungen (Formen, Linien, Symbole, Emojis) je Bibliotheks-Video
  * – aufgebaut wie der Text-Store: bleiben beim Videowechsel erhalten und
@@ -23,6 +25,8 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
   const itemId = ref<number | null>(null)
   const selectedId = ref<number | null>(null)
   let nextId = 1
+  /** Bilder, die (z. B. der Rückgängig-Verlauf) noch braucht, obwohl keine Grafik sie nutzt. */
+  let retainedImages: ReadonlySet<string> = new Set()
 
   const overlays = computed<GraphicOverlay[]>(() =>
     itemId.value === null ? [] : (byItem.value[itemId.value] ?? []),
@@ -45,7 +49,7 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
 
   /** Bilder freigeben, die keine Grafik (in keinem Video) mehr nutzt. */
   function pruneUnusedImages(): void {
-    const used: string[] = []
+    const used: string[] = [...retainedImages]
     for (const list of Object.values(byItem.value)) {
       for (const o of list) if (o.kind === 'image') used.push(o.image)
     }
@@ -109,6 +113,32 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     selectedId.value = id !== null && overlays.value.some((o) => o.id === id) ? id : null
   }
 
+  /** Grafiken eines bestimmten Videos (für Rückgängig/Wiederholen). */
+  function listFor(id: number): GraphicOverlay[] {
+    return byItem.value[id] ?? EMPTY
+  }
+
+  /** Ersetzt die Grafiken eines bestimmten Videos (Rückgängig/Wiederholen). */
+  function setListFor(id: number, list: GraphicOverlay[]): void {
+    const next = { ...byItem.value }
+    if (list.length) next[id] = list
+    else delete next[id]
+    byItem.value = next
+    if (itemId.value === id && !list.some((o) => o.id === selectedId.value)) {
+      selectedId.value = null
+    }
+    pruneUnusedImages()
+  }
+
+  /**
+   * Hält Bilder vor, die der Verlauf noch braucht (gelöschte Bild-Grafik
+   * wiederherstellen). Nicht mehr benötigte werden dabei freigegeben.
+   */
+  function setRetainedImages(ids: Iterable<string>): void {
+    retainedImages = new Set(ids)
+    pruneUnusedImages()
+  }
+
   function clearItem(id: number): void {
     if (!(id in byItem.value)) return
     const next = { ...byItem.value }
@@ -131,5 +161,8 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     remove,
     select,
     clearItem,
+    listFor,
+    setListFor,
+    setRetainedImages,
   }
 })

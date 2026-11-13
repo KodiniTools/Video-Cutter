@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import { useLibraryStore, itemLength, MAX_MERGE_ITEMS } from '@/stores/library'
+import { useHistoryStore } from '@/stores/history'
 import {
   useServerCut,
   CUT_CANCELLED,
@@ -71,8 +72,6 @@ const {
   hasVideo,
   canExport,
   canAddSegment,
-  canUndo,
-  canRedo,
   effectiveSegments,
   selectionDuration,
   error,
@@ -81,6 +80,10 @@ const {
 // Video-Bibliothek: markiertes Video = Arbeitsvideo im Editor.
 const library = useLibraryStore()
 const { items, selected, mergeItems, canMerge, normalizeAudio } = storeToRefs(library)
+
+// Rückgängig/Wiederholen für alle Bearbeitungen (je Video ein Verlauf).
+const history = useHistoryStore()
+const { canUndo, canRedo } = storeToRefs(history)
 
 // Ton ein-/ausblenden: wirkt nur bei Videos mit Ton.
 const audioFade = useAudioFadeStore()
@@ -541,7 +544,8 @@ async function onExport(): Promise<void> {
       audioFade: fadeForCut.value,
     })
     // Name vom Server: „…_cut.<ext>" (Container passend zum Modus).
-    library.replaceWithResult(item.id, media, resultFile(blob, media.name))
+    // Alte Fassung behalten: Schneiden lässt sich rückgängig machen.
+    library.replaceWithResult(item.id, media, resultFile(blob, media.name), { keepOld: true })
     store.clearMusic() // ist jetzt Teil des Ergebnisses
     lastResultId.value = item.id
   } catch (e) {
@@ -649,7 +653,8 @@ async function onBurnText(): Promise<void> {
       throw new Error(t('errors.imageTooLarge'))
     }
     const { media, blob } = await burnText(item.mediaId, list.map(toServerOverlay), serverGraphics)
-    library.replaceWithResult(item.id, media, resultFile(blob, media.name))
+    // Alte Fassung behalten: Einbrennen lässt sich rückgängig machen.
+    library.replaceWithResult(item.id, media, resultFile(blob, media.name), { keepOld: true })
     // Texte und Grafiken sind jetzt Teil des Bildes.
     texts.clearItem(item.id)
     graphics.clearItem(item.id)
@@ -688,29 +693,53 @@ function onDeleteVideo(): void {
 }
 
 // --- Undo/Redo -----------------------------------------------------------
+function afterHistory(changed: string[]): void {
+  // Andere Fassung (Schnitt/Einbrennen rückgängig) -> kein „Fertig"-Hinweis mehr.
+  if (changed.includes('version')) lastResultId.value = null
+}
 function onUndo(): void {
-  if (canUndo.value) store.undo()
+  if (canUndo.value && !busy.value) afterHistory(history.undo())
 }
 function onRedo(): void {
-  if (canRedo.value) store.redo()
+  if (canRedo.value && !busy.value) afterHistory(history.redo())
+}
+
+/** Felder mit eigener Texteingabe behalten ihr natives Strg+Z. */
+const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'password', 'tel', 'number'])
+function isTextEntry(el: HTMLElement | null): boolean {
+  if (!el) return false
+  if (el.isContentEditable || el.tagName === 'TEXTAREA') return true
+  if (el.tagName !== 'INPUT') return false
+  return TEXT_INPUT_TYPES.has((el as HTMLInputElement).type)
 }
 
 // Tastatur: Strg/Cmd+Z = rückgängig, Strg/Cmd+Shift+Z bzw. Strg+Y = wieder.
+// Regler, Kontrollkästchen, Auswahllisten und Knöpfe lösen den Editor-Verlauf
+// aus; nur echte Texteingaben behalten ihr eigenes Rückgängig.
 function onKeydown(e: KeyboardEvent): void {
   if (!hasVideo.value || busy.value) return
   const meta = e.ctrlKey || e.metaKey
-  if (!meta) return
+  if (!meta || e.altKey) return
   const key = e.key.toLowerCase()
-  // In Textfeldern die native Bearbeitung nicht überschreiben.
-  const target = e.target as HTMLElement | null
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
-  if (key === 'z' && !e.shiftKey) {
-    e.preventDefault()
-    onUndo()
-  } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-    e.preventDefault()
-    onRedo()
-  }
+  if (key !== 'z' && key !== 'y') return
+  if (isTextEntry(e.target as HTMLElement | null)) return
+  e.preventDefault()
+  if (key === 'z' && !e.shiftKey) onUndo()
+  else onRedo()
+}
+
+// Ziehen / Gedrückthalten (Timeline, Texte, Formen, Zuschnitt, Spinner,
+// Regler) = ein Verlaufsschritt, auch wenn es zwischendurch pausiert.
+let gestureActive = false
+function onPointerDownCapture(): void {
+  if (gestureActive) return
+  gestureActive = true
+  history.beginGesture()
+}
+function onPointerEnd(): void {
+  if (!gestureActive) return
+  gestureActive = false
+  history.endGesture()
 }
 
 // --- Animations-Menü -----------------------------------------------------
@@ -725,9 +754,20 @@ function pickAnimation(id: (typeof animations)[number]['id'], close: () => void)
 // Höhe der fixierten Website-Navigation -> --site-nav-offset (Sticky-Editor).
 useSiteNavOffset()
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pointerdown', onPointerDownCapture, true)
+  window.addEventListener('pointerup', onPointerEnd, true)
+  window.addEventListener('pointercancel', onPointerEnd, true)
+  window.addEventListener('blur', onPointerEnd)
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pointerdown', onPointerDownCapture, true)
+  window.removeEventListener('pointerup', onPointerEnd, true)
+  window.removeEventListener('pointercancel', onPointerEnd, true)
+  window.removeEventListener('blur', onPointerEnd)
+  onPointerEnd()
   holdStop()
   store.reset()
 })
@@ -781,7 +821,7 @@ async function downloadResult(): Promise<void> {
             <button
               class="btn tiny"
               type="button"
-              :disabled="!canUndo"
+              :disabled="!canUndo || busy"
               :title="`${t('actions.undo')} (Ctrl+Z)`"
               :aria-label="t('actions.undo')"
               @click="onUndo"
@@ -791,8 +831,8 @@ async function downloadResult(): Promise<void> {
             <button
               class="btn tiny"
               type="button"
-              :disabled="!canRedo"
-              :title="`${t('actions.redo')} (Ctrl+Shift+Z)`"
+              :disabled="!canRedo || busy"
+              :title="`${t('actions.redo')} (Ctrl+Y / Ctrl+Shift+Z)`"
               :aria-label="t('actions.redo')"
               @click="onRedo"
             >
