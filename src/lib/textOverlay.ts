@@ -91,6 +91,28 @@ export const DEFAULT_TEXT_DURATION = 3
 export const POSITION_PRESETS = { top: 0.12, center: 0.5, bottom: 0.88 } as const
 export type PositionPreset = keyof typeof POSITION_PRESETS
 
+/**
+ * Pfeiltasten-Feinschritt für die Position: 0,1 % pro Druck, mit
+ * Umschalttaste 1 %. `null` = keine Pfeiltaste. Ergebnis in [0,1], gerundet.
+ */
+export function nudgePosition(
+  pos: { x: number; y: number },
+  key: string,
+  coarse: boolean,
+): { x: number; y: number } | null {
+  const step = coarse ? 0.01 : 0.001
+  const d: Record<string, [number, number]> = {
+    ArrowLeft: [-step, 0],
+    ArrowRight: [step, 0],
+    ArrowUp: [0, -step],
+    ArrowDown: [0, step],
+  }
+  const move = d[key]
+  if (!move) return null
+  const r = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10000
+  return { x: r(pos.x + move[0]), y: r(pos.y + move[1]) }
+}
+
 export const DEFAULT_TEXT_STYLE: Omit<TextOverlayData, 'text' | 'start' | 'end'> = {
   x: 0.5,
   y: POSITION_PRESETS.bottom,

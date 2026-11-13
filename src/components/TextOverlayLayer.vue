@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { containedVideoBox } from '@/lib/cropGeometry'
 import {
   fontPreview,
+  nudgePosition,
   overlayFrame,
   type OverlayFrame,
   type TextOverlay,
@@ -178,25 +179,45 @@ const rendered = computed<Rendered[]>(() => {
 })
 
 // --- Verschieben -------------------------------------------------------------
-let drag: { id: number; startX: number; startY: number; x: number; y: number } | null = null
+// Schritt für Schritt aufsummiert, damit ein Wechsel der Umschalttaste
+// (Feinmodus: 1/5 der Mausbewegung) mitten im Ziehen nicht springt.
+let drag: { id: number; lastX: number; lastY: number; x: number; y: number } | null = null
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+/** Faktor der Mausbewegung mit gedrückter Umschalttaste. */
+const FINE_DRAG = 0.2
 
 function onPointerDown(o: TextOverlay, ev: PointerEvent): void {
   emit('select', o.id)
   if (props.disabled) return
   ev.preventDefault()
-  drag = { id: o.id, startX: ev.clientX, startY: ev.clientY, x: o.x, y: o.y }
-  ;(ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId)
+  const el = ev.currentTarget as HTMLElement
+  // Fokus für die Pfeiltasten (preventDefault verhindert den Standard-Fokus).
+  el.focus({ preventScroll: true })
+  drag = { id: o.id, lastX: ev.clientX, lastY: ev.clientY, x: o.x, y: o.y }
+  el.setPointerCapture(ev.pointerId)
 }
 
 function onPointerMove(ev: PointerEvent): void {
   if (!drag) return
   const { width, height } = box.value
   if (!(width > 0 && height > 0)) return
-  const clamp = (v: number) => Math.min(1, Math.max(0, v))
-  emit('move', drag.id, {
-    x: clamp(drag.x + (ev.clientX - drag.startX) / width),
-    y: clamp(drag.y + (ev.clientY - drag.startY) / height),
-  })
+  const f = ev.shiftKey ? FINE_DRAG : 1
+  drag.x = clamp01(drag.x + ((ev.clientX - drag.lastX) * f) / width)
+  drag.y = clamp01(drag.y + ((ev.clientY - drag.lastY) * f) / height)
+  drag.lastX = ev.clientX
+  drag.lastY = ev.clientY
+  emit('move', drag.id, { x: drag.x, y: drag.y })
+}
+
+/** Pfeiltasten: 0,1 % pro Druck, mit Umschalttaste 1 %. */
+function onKeydown(o: TextOverlay, ev: KeyboardEvent): void {
+  if (props.disabled) return
+  const next = nudgePosition(o, ev.key, ev.shiftKey)
+  if (!next) return
+  ev.preventDefault()
+  ev.stopPropagation()
+  emit('move', o.id, next)
 }
 
 function onPointerUp(): void {
@@ -220,7 +241,9 @@ function onPointerUp(): void {
       class="text-item"
       :class="{ selected: r.o.id === selectedId, disabled }"
       :style="r.style"
+      tabindex="0"
       @pointerdown="onPointerDown(r.o, $event)"
+      @keydown="onKeydown(r.o, $event)"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
@@ -289,9 +312,17 @@ function onPointerUp(): void {
   cursor: default;
 }
 
+.text-item:focus {
+  outline: none;
+}
 .text-item.selected {
   outline: 2px dashed var(--ds-accent);
   outline-offset: 4px;
+}
+/* Tastatur-Fokus (Pfeiltasten aktiv): durchgezogene statt gestrichelte Linie. */
+.text-item.selected:focus-visible,
+.text-item.selected:focus {
+  outline-style: solid;
 }
 
 .text-body {

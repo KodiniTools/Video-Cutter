@@ -108,6 +108,37 @@ const activePreset = computed<PositionPreset | null>(() => {
   return hit ?? null
 })
 
+// --- Exakte Position (X/Y in % des Bildes, Mittelpunkt des Textes) ----------
+const AXES = ['x', 'y'] as const
+type Axis = (typeof AXES)[number]
+
+/** Prozent mit einer Nachkommastelle (Anzeige/Eingabe). */
+function percent(axis: Axis): number {
+  return selected.value ? Math.round(selected.value[axis] * 1000) / 10 : 0
+}
+
+function setPercent(axis: Axis, value: number): void {
+  if (!Number.isFinite(value)) return
+  const v = Math.min(100, Math.max(0, value)) / 100
+  patch(axis === 'x' ? { x: v } : { y: v })
+}
+
+/** Zahlenfeld: übernehmen bei Enter/Verlassen; Unsinn -> alter Wert. */
+function commitPercent(axis: Axis, ev: Event): void {
+  const el = ev.target as HTMLInputElement
+  const v = Number(el.value.replace(',', '.'))
+  if (el.value.trim() === '' || !Number.isFinite(v)) {
+    el.value = String(percent(axis))
+    return
+  }
+  setPercent(axis, v)
+  el.value = String(percent(axis))
+}
+
+function nudge(axis: Axis, delta: number): void {
+  setPercent(axis, percent(axis) + delta)
+}
+
 const sizePercent = computed(() =>
   selected.value ? Math.round(selected.value.size * 1000) / 10 : 0,
 )
@@ -246,6 +277,52 @@ function preview(text: string): string {
             @click="placeAt(p)"
           >
             {{ t(`text.positions.${p}`) }}
+          </button>
+        </div>
+        <div v-for="axis in AXES" :key="axis" class="pos-row">
+          <span class="pos-axis">{{ axis.toUpperCase() }}</span>
+          <input
+            class="range"
+            type="range"
+            min="0"
+            max="100"
+            step="0.1"
+            :value="percent(axis)"
+            :disabled="busy"
+            :aria-label="t(`text.pos.${axis}`)"
+            @input="setPercent(axis, Number(($event.target as HTMLInputElement).value))"
+          />
+          <button
+            class="btn tiny step"
+            type="button"
+            :disabled="busy"
+            :title="t('text.pos.minus')"
+            :aria-label="`${t(`text.pos.${axis}`)} ${t('text.pos.minus')}`"
+            @click="nudge(axis, -0.5)"
+          >
+            −
+          </button>
+          <input
+            class="input pos-num"
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            :value="percent(axis)"
+            :disabled="busy"
+            :aria-label="`${t(`text.pos.${axis}`)} (%)`"
+            @change="commitPercent(axis, $event)"
+            @keydown.enter.prevent="commitPercent(axis, $event)"
+          />
+          <button
+            class="btn tiny step"
+            type="button"
+            :disabled="busy"
+            :title="t('text.pos.plus')"
+            :aria-label="`${t(`text.pos.${axis}`)} ${t('text.pos.plus')}`"
+            @click="nudge(axis, 0.5)"
+          >
+            +
           </button>
         </div>
         <p class="hint">{{ t('text.dragHint') }}</p>
@@ -590,6 +667,32 @@ function preview(text: string): string {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+.pos-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pos-axis {
+  width: 14px;
+  flex: none;
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-semibold);
+  color: var(--ds-text-2);
+}
+.pos-row .range {
+  flex: 1;
+  min-width: 0;
+}
+.input.pos-num {
+  width: 64px;
+  flex: none;
+  padding: 4px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.btn.tiny.step {
+  flex: none;
+  padding: 2px 7px;
 }
 .range {
   width: 100%;
