@@ -70,3 +70,17 @@ export function frameCount(start: number, end: number, fps: number): number {
   if (!validFps(fps)) return 0
   return Math.max(0, frameIndex(end, fps) - frameIndex(start, fps))
 }
+
+/**
+ * Seek-Ziel für das LETZTE Bild vor `end` (Regel `start <= t < end`): So bleibt
+ * die Auswahl-Vorschau am Ende auf ihrem letzten Bild stehen statt auf dem
+ * ersten Bild danach. Nie vor `start`. Ohne Bildrate: 10 ms vor `end`.
+ */
+export function lastFrameSeekTime(start: number, end: number, fps: number): number {
+  const lo = Math.max(0, start)
+  if (!validFps(fps)) return Math.max(lo, end - FALLBACK_STEP_MS / 1000)
+  let k = frameIndex(end, fps)
+  // Liegt `end` (ms-gerundet) auf einem Bildanfang, gehört dieses Bild nicht mehr dazu.
+  if (Math.abs(snapToFrame(end, fps) - roundMs(end)) < 0.0015) k -= 1
+  return Math.max(lo, (Math.max(0, k) + 0.5) / fps)
+}

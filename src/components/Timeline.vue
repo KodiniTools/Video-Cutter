@@ -19,6 +19,10 @@ const emit = defineEmits<{
   (e: 'update:start', v: number): void
   (e: 'update:end', v: number): void
   (e: 'seek', v: number): void
+  /** Ein Regler wird gegriffen (Zeiger) – z. B. um die Auswahl-Vorschau anzuhalten. */
+  (e: 'grab', target: 'start' | 'end'): void
+  /** Regler losgelassen bzw. per Pfeiltaste verschoben: neuer Bereich steht fest. */
+  (e: 'release', target: 'start' | 'end'): void
 }>()
 
 const track = ref<HTMLDivElement | null>(null)
@@ -53,6 +57,7 @@ function onHandleDown(target: 'start' | 'end', ev: PointerEvent): void {
   ev.preventDefault()
   ev.stopPropagation()
   dragging.value = target
+  emit('grab', target)
   ;(ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId)
 }
 
@@ -66,7 +71,9 @@ function onPointerMove(ev: PointerEvent): void {
 }
 
 function onPointerUp(): void {
+  const target = dragging.value
   dragging.value = null
+  if (target) emit('release', target)
 }
 
 function onTrackDown(ev: PointerEvent): void {
@@ -82,6 +89,7 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   else emit('update:end', v)
   // Vorschau live mitführen.
   emit('seek', v)
+  emit('release', target)
 }
 </script>
 
