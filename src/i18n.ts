@@ -137,7 +137,14 @@ const messages = {
       },
       position: 'Position',
       positions: { top: 'Oben', center: 'Mitte', bottom: 'Untertitel' },
-      dragHint: 'Text im Video ziehen, um ihn frei zu platzieren.',
+      dragHint:
+        'Text im Video ziehen (mit gedrückter Umschalttaste fein). Angeklickten Text mit den Pfeiltasten verschieben: 0,1 % pro Druck, mit Umschalttaste 1 %. X/Y = Mitte des Textes in % der Bildbreite/-höhe.',
+      pos: {
+        x: 'Position X (horizontal)',
+        y: 'Position Y (vertikal)',
+        minus: '−0,5 %',
+        plus: '+0,5 %',
+      },
       remove: 'Text entfernen',
       invalid: 'Text leer oder Zeitbereich ungültig.',
       limit: 'Höchstens {max} Texte pro Video.',
@@ -399,7 +406,14 @@ const messages = {
       },
       position: 'Position',
       positions: { top: 'Top', center: 'Centre', bottom: 'Subtitle' },
-      dragHint: 'Drag the text in the video to place it freely.',
+      dragHint:
+        'Drag the text in the video (hold Shift for fine moves). Move the clicked text with the arrow keys: 0.1 % per press, 1 % with Shift. X/Y = centre of the text in % of the frame width/height.',
+      pos: {
+        x: 'Position X (horizontal)',
+        y: 'Position Y (vertical)',
+        minus: '−0.5 %',
+        plus: '+0.5 %',
+      },
       remove: 'Remove text',
       invalid: 'Text empty or time range invalid.',
       limit: 'At most {max} texts per video.',
