@@ -129,6 +129,9 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
   })
 }
 
+/** Ausgleich der ms-Rundung von Bildzeiten im Client (Sekunden). */
+const FRAME_TOLERANCE = 0.001
+
 /** Zahl für Filter-Ausdrücke: höchstens 3 Nachkommastellen, ohne Exponent. */
 function f3(v: number): string {
   return String(Math.round(v * 1000) / 1000)
@@ -189,10 +192,15 @@ export function graphicFilter(
     if (f > 0) src.push(`fade=t=out:st=${f3(g.end - f)}:d=${f3(f)}:alpha=1`)
   }
   const gLabel = `[g${inputIndex}]`
+  // Bildgenau wie die Vorschau (start <= t < end): Der Client rundet Bildzeiten
+  // auf ganze ms (29,97 fps: 3,2032 s -> 3,203 s, aber auch 3,2366 -> 3,237).
+  // 1 ms Toleranz gleicht das aus und ist viel kleiner als ein Bildabstand.
+  const from = f3(g.start - FRAME_TOLERANCE)
+  const to = f3(g.end - FRAME_TOLERANCE)
   return (
     `${src.join(',')}${gLabel};` +
     `${inLabel}${gLabel}overlay=x=${left}:y=${y}` +
-    `:enable='gte(t,${f3(g.start)})*lt(t,${f3(g.end)})':shortest=1${outLabel}`
+    `:enable='gte(t,${from})*lt(t,${to})':shortest=1${outLabel}`
   )
 }
 

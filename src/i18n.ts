@@ -171,6 +171,8 @@ const messages = {
         'Brennt alle Texte ins markierte Video ein; das Ergebnis ersetzt es in der Liste. Tipp: erst schneiden, dann Text einfügen – sonst verschieben sich die Zeiten.',
     },
     graphics: {
+      frameHint:
+        '▲▼ = 1 Bild ({fps} fps). Von/Bis rasten auf Bildanfänge ein; die Grafik erscheint ab dem Bild bei „Von“ und ist ab dem Bild bei „Bis“ wieder weg – genau so wird sie eingebrannt.',
       title: 'Formen & Emojis',
       addHint:
         'Video an der gewünschten Stelle anhalten und eine Form, ein Symbol oder ein Emoji anklicken – es erscheint in der Bildmitte und lässt sich wie Text verschieben.',
@@ -540,6 +542,8 @@ const messages = {
         'Burns all texts into the selected video; the result replaces it in the list. Tip: cut first, then add text – otherwise the times shift.',
     },
     graphics: {
+      frameHint:
+        '▲▼ = 1 frame ({fps} fps). From/To snap to frame starts; the graphic appears on the frame at “From” and is gone again on the frame at “To” – exactly as it will be burned in.',
       title: 'Shapes & emojis',
       addHint:
         'Pause the video at the desired spot and click a shape, symbol or emoji – it appears in the centre and can be dragged like text.',

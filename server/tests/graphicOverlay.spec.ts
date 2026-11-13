@@ -124,7 +124,7 @@ describe('Grafik-Filter', () => {
     const f = graphicFilter(g!, 1, '[0:v]', '[v1]', 640, 360)
     expect(f).toBe(
       '[1:v]format=rgba,fade=t=in:st=1:d=0.4:alpha=1,fade=t=out:st=2.6:d=0.4:alpha=1[g1];' +
-        "[0:v][g1]overlay=x=300:y=170:enable='gte(t,1)*lt(t,3)':shortest=1[v1]",
+        "[0:v][g1]overlay=x=300:y=170:enable='gte(t,0.999)*lt(t,2.999)':shortest=1[v1]",
     )
   })
 

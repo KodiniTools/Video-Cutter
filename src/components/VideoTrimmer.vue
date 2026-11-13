@@ -599,7 +599,9 @@ function onAddGraphic(
   if (el && !el.paused) el.pause()
   const at = el?.currentTime ?? currentTime.value
   texts.select(null)
-  graphics.add(kind, at, duration.value, extra)
+  // Von/Bis auf Bildanfänge legen (wie bei Texten).
+  const g = graphics.add(kind, snapToFrame(at, fps.value), duration.value, extra)
+  if (g) graphics.update(g.id, { end: snapToFrame(g.end, fps.value) })
 }
 
 /** Auswahl im Video: immer nur ein Element (Text ODER Grafik) markiert. */
@@ -1416,8 +1418,10 @@ async function downloadResult(): Promise<void> {
             :can-burn="selected?.status === 'ready' && !!selected?.mediaId"
             :text-count="texts.overlays.length"
             :texts-valid="textsValid"
+            :fps="fps"
             @add="onAddGraphic"
             @seek="seekTo"
+            @scrub="scrubTo"
             @burn="onBurnText"
           />
 
