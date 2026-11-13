@@ -42,6 +42,7 @@ describe('MediaStore', () => {
       width: 640,
       height: 360,
       hasAudio: true,
+      fps: 0,
     })
     expect(store.get(item.id)?.path).toBe(p)
     expect(await store.remove(item.id)).toBe(true)

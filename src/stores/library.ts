@@ -32,6 +32,8 @@ export interface LibraryItem {
   width: number
   height: number
   hasAudio: boolean
+  /** Bildrate (Bilder/s) laut Server, 0 = unbekannt. */
+  fps: number
   /** Verwendeter Bereich beim Zusammenfügen: Start (s) … Ende (s); `null` = bis zum Ende. */
   start: number
   end: number | null
@@ -138,6 +140,7 @@ export const useLibraryStore = defineStore('library', () => {
       width: m.width,
       height: m.height,
       hasAudio: m.hasAudio,
+      fps: m.fps,
       status: 'ready',
       progress: 1,
       error: '',
@@ -177,6 +180,7 @@ export const useLibraryStore = defineStore('library', () => {
       width: 0,
       height: 0,
       hasAudio: false,
+      fps: 0,
       start: 0,
       end: null,
       include: true,

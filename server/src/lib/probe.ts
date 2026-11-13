@@ -10,14 +10,30 @@ export interface MediaInfo {
   hasAudio: boolean
   /** Dauer in Sekunden, 0 = unbekannt. */
   duration: number
+  /** Bildrate (Bilder/s) des Videostreams, 0 = unbekannt. Optional für ältere Datensätze. */
+  fps?: number
 }
 
 interface ProbeStream {
   codec_type?: string
   width?: number
   height?: number
+  avg_frame_rate?: string
+  r_frame_rate?: string
   tags?: { rotate?: string }
   side_data_list?: Array<{ rotation?: number | string }>
+}
+
+/** Sinnvoller Bereich für Bildraten; außerhalb = unbekannt (z. B. 90000/1 bei VFR). */
+const MIN_FPS = 1
+const MAX_FPS = 240
+
+/** ffprobe-Bruch wie `30000/1001` -> 29.97…; ungültig/außerhalb des Bereichs -> 0. */
+export function parseFrameRate(v: string | undefined): number {
+  if (typeof v !== 'string') return 0
+  const [num, den = '1'] = v.split('/')
+  const r = Number(num) / Number(den)
+  return Number.isFinite(r) && r >= MIN_FPS && r <= MAX_FPS ? r : 0
 }
 
 /**
@@ -48,7 +64,9 @@ export function parseProbeOutput(json: string): MediaInfo {
   }
 
   const d = Number(data.format?.duration)
-  return { width, height, hasAudio, duration: Number.isFinite(d) && d > 0 ? d : 0 }
+  // Mittlere Bildrate bevorzugt (r_frame_rate ist bei VFR oft ein Zeitbasis-Wert).
+  const fps = parseFrameRate(video?.avg_frame_rate) || parseFrameRate(video?.r_frame_rate)
+  return { width, height, hasAudio, duration: Number.isFinite(d) && d > 0 ? d : 0, fps }
 }
 
 /** Liest Auflösung, Tonspur und Dauer per ffprobe (spawn ohne Shell). */
@@ -60,7 +78,7 @@ export function probeMedia(filePath: string): Promise<MediaInfo> {
         '-v',
         'error',
         '-show_entries',
-        'stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation:format=duration',
+        'stream=codec_type,width,height,avg_frame_rate,r_frame_rate:stream_tags=rotate:stream_side_data=rotation:format=duration',
         '-of',
         'json',
         filePath,

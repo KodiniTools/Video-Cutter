@@ -13,7 +13,9 @@ describe('mediaApi', () => {
       width: 0,
       height: 0,
       hasAudio: false,
+      fps: 0,
     })
+    expect(parseMediaView({ id: 'x', fps: 29.97 }).fps).toBe(29.97)
     expect(() => parseMediaView({})).toThrow()
   })
 

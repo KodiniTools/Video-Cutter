@@ -13,7 +13,7 @@ import {
   resolveSeams,
   mergeOutputDuration,
 } from '../src/lib/args'
-import { parseProbeOutput } from '../src/lib/probe'
+import { parseFrameRate, parseProbeOutput } from '../src/lib/probe'
 import {
   parseAppendMeta,
   parseCutParams,
@@ -503,7 +503,19 @@ describe('parseProbeOutput', () => {
       height: 1080,
       hasAudio: true,
       duration: 12.5,
+      fps: 0,
     })
+  })
+
+  it('liest die Bildrate (avg_frame_rate bevorzugt, Unsinn -> 0)', () => {
+    const probe = (s: Record<string, unknown>) =>
+      parseProbeOutput(JSON.stringify({ streams: [{ codec_type: 'video', ...s }] })).fps
+    expect(probe({ avg_frame_rate: '25/1', r_frame_rate: '50/1' })).toBe(25)
+    expect(probe({ avg_frame_rate: '30000/1001' })).toBeCloseTo(29.97, 2)
+    expect(probe({ avg_frame_rate: '0/0', r_frame_rate: '24/1' })).toBe(24)
+    expect(probe({ avg_frame_rate: '0/0', r_frame_rate: '90000/1' })).toBe(0)
+    expect(parseFrameRate(undefined)).toBe(0)
+    expect(parseFrameRate('abc')).toBe(0)
   })
 
   it('tauscht Breite/Höhe bei 90°-Rotation (Hochkant-Handyvideo)', () => {
@@ -517,7 +529,13 @@ describe('parseProbeOutput', () => {
   })
 
   it('unbekannte Werte -> 0, ungültiges JSON wirft', () => {
-    expect(parseProbeOutput('{}')).toEqual({ width: 0, height: 0, hasAudio: false, duration: 0 })
+    expect(parseProbeOutput('{}')).toEqual({
+      width: 0,
+      height: 0,
+      hasAudio: false,
+      duration: 0,
+      fps: 0,
+    })
     expect(() => parseProbeOutput('kein json')).toThrow()
   })
 })
