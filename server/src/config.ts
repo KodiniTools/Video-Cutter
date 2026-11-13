@@ -74,6 +74,20 @@ export const config = {
 
   /** Requests pro IP je 15 Minuten. */
   rateLimitMax: num('RATE_LIMIT_MAX', 60),
+
+  // --- KI (Untertitel, Schnittvorschläge) ---
+  /** whisper.cpp-CLI (Pfad oder Name im PATH). */
+  whisperPath: process.env.WHISPER_CLI ?? 'whisper-cli',
+  /** GGML-Modell für whisper.cpp; leer = Transkription aus. */
+  whisperModel: process.env.WHISPER_MODEL ?? '',
+  /** CPU-Threads für whisper.cpp. */
+  whisperThreads: num('WHISPER_THREADS', 6),
+  /** Harte Zeitgrenze pro Transkription. */
+  whisperTimeoutMs: num('WHISPER_TIMEOUT_SEC', 60 * 60) * 1000,
+  /** Claude-Modell; der API-Key kommt aus ANTHROPIC_API_KEY. */
+  claudeModel: process.env.CLAUDE_MODEL ?? 'claude-opus-5-5',
+  /** Denktiefe (low | medium | high | xhigh | max). */
+  claudeEffort: process.env.CLAUDE_EFFORT ?? 'medium',
 } as const
 
 export type AppConfig = typeof config

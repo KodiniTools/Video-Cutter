@@ -78,7 +78,8 @@ export interface TextOverlay extends TextOverlayData {
   id: number
 }
 
-export const MAX_TEXT_OVERLAYS = 20
+/** Gleich wie im Server; hoch genug für automatisch erzeugte Untertitel. */
+export const MAX_TEXT_OVERLAYS = 500
 export const MAX_TEXT_LENGTH = 300
 export const MIN_TEXT_SIZE = 0.02
 export const MAX_TEXT_SIZE = 0.3

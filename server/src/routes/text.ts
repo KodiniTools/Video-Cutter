@@ -53,7 +53,7 @@ textRouter.get('/fonts', (_req: Request, res: Response) => {
  */
 textRouter.post(
   '/text',
-  express.json({ limit: '256kb' }),
+  express.json({ limit: '2mb' }),
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>
     if (!isMediaId(body.mediaId)) throw new ValidationError('Kein Video angegeben.')

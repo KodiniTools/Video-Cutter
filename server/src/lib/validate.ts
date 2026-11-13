@@ -14,10 +14,11 @@ import {
 } from './args'
 
 export class ValidationError extends Error {
-  statusCode = 400
-  constructor(message: string) {
+  statusCode: number
+  constructor(message: string, statusCode = 400) {
     super(message)
     this.name = 'ValidationError'
+    this.statusCode = statusCode
   }
 }
 

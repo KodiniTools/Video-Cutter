@@ -146,6 +146,58 @@ const messages = {
       burnHint:
         'Brennt alle Texte ins markierte Video ein; das Ergebnis ersetzt es in der Liste. Tipp: erst schneiden, dann Text einfügen – sonst verschieben sich die Zeiten.',
     },
+    ai: {
+      title: 'KI-Assistent',
+      intro:
+        'Erkennt die Sprache im markierten Video. Danach: Untertitel erzeugen oder Schnittvorschläge (Füllwörter, Versprecher, Pausen) holen.',
+      language: 'Sprache im Video',
+      lang: { auto: 'Automatisch erkennen', de: 'Deutsch', en: 'Englisch' },
+      transcribe: 'Sprache erkennen',
+      retranscribe: 'Neu erkennen',
+      transcribeHint:
+        'Die Tonspur wird auf dem Server mit Whisper transkribiert. Das dauert je nach Länge einige Minuten.',
+      transcriptInfo: 'Transkript: {n} Wörter ({lang})',
+      running: {
+        transcribe: 'Sprache wird erkannt …',
+        subtitles: 'Claude schreibt Untertitel …',
+        cuts: 'Claude sucht Schnittstellen …',
+      },
+      cancel: 'Abbrechen',
+      subtitles: 'Untertitel',
+      target: {
+        original: 'Wie gesprochen',
+        de: 'Deutsch (übersetzen)',
+        en: 'Englisch (übersetzen)',
+      },
+      replaceTexts: 'Vorhandene Texte ersetzen ({n})',
+      makeSubtitles: 'Untertitel erzeugen',
+      subtitlesHint:
+        'Die Untertitel landen im Bereich „Text“: dort Design anpassen und einbrennen. Tipp: erst schneiden, dann Untertitel erzeugen.',
+      subtitlesAdded: '{n} Untertitel eingefügt.',
+      subtitlesLimited: '{n} Untertitel eingefügt – das Limit pro Video ist erreicht.',
+      noSpeech: 'Keine Sprache gefunden.',
+      cuts: 'Schnittvorschläge',
+      minPause: 'Pausen ab',
+      suggest: 'Vorschläge erstellen',
+      resuggest: 'Neue Vorschläge',
+      noSuggestions: 'Keine Schnittvorschläge – das Video ist schon gut geschnitten.',
+      all: 'Alle',
+      none: 'Keine',
+      selected: '{n} gewählt · {s} s',
+      toggle: 'Vorschlag übernehmen',
+      kind: { filler: 'Füllwort', slip: 'Versprecher', repeat: 'Wiederholung', pause: 'Pause' },
+      apply: 'Als Schnittmarken übernehmen ({n})',
+      applyHint:
+        'Stellt die Aktion auf „Entfernen“ und fügt die Bereiche zur Ausschnitt-Liste hinzu (rückgängig möglich). Danach „Schneiden“.',
+      applied: '{n} Bereiche übernommen. Mit „Schneiden“ anwenden.',
+      noAudio: 'Dieses Video hat keine Tonspur.',
+      noWhisper:
+        'Die Spracherkennung ist auf dem Server noch nicht eingerichtet (whisper.cpp / WHISPER_MODEL).',
+      noClaude:
+        'Claude ist auf dem Server noch nicht eingerichtet (ANTHROPIC_API_KEY in der Backend-.env).',
+      outdated:
+        'Das Server-Backend ist veraltet und kennt die KI-Funktionen noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+    },
     music: {
       title: 'Hintergrundmusik',
       add: '+ Musik hochladen',
@@ -355,6 +407,53 @@ const messages = {
       burnCount: 'Burn in text ({n})',
       burnHint:
         'Burns all texts into the selected video; the result replaces it in the list. Tip: cut first, then add text – otherwise the times shift.',
+    },
+    ai: {
+      title: 'AI assistant',
+      intro:
+        'Recognises the speech in the selected video. Then create subtitles or get cut suggestions (filler words, slips, pauses).',
+      language: 'Language in the video',
+      lang: { auto: 'Detect automatically', de: 'German', en: 'English' },
+      transcribe: 'Recognise speech',
+      retranscribe: 'Recognise again',
+      transcribeHint:
+        'The audio is transcribed on the server with Whisper. Depending on the length this takes a few minutes.',
+      transcriptInfo: 'Transcript: {n} words ({lang})',
+      running: {
+        transcribe: 'Recognising speech …',
+        subtitles: 'Claude is writing subtitles …',
+        cuts: 'Claude is looking for cuts …',
+      },
+      cancel: 'Cancel',
+      subtitles: 'Subtitles',
+      target: { original: 'As spoken', de: 'German (translate)', en: 'English (translate)' },
+      replaceTexts: 'Replace existing texts ({n})',
+      makeSubtitles: 'Create subtitles',
+      subtitlesHint:
+        'The subtitles go to the “Text” section: adjust the design there and burn them in. Tip: cut first, then create subtitles.',
+      subtitlesAdded: '{n} subtitles added.',
+      subtitlesLimited: '{n} subtitles added – the limit per video has been reached.',
+      noSpeech: 'No speech found.',
+      cuts: 'Cut suggestions',
+      minPause: 'Pauses from',
+      suggest: 'Get suggestions',
+      resuggest: 'New suggestions',
+      noSuggestions: 'No cut suggestions – the video is already tight.',
+      all: 'All',
+      none: 'None',
+      selected: '{n} selected · {s} s',
+      toggle: 'Use suggestion',
+      kind: { filler: 'Filler', slip: 'Slip', repeat: 'Repeat', pause: 'Pause' },
+      apply: 'Use as cut marks ({n})',
+      applyHint:
+        'Switches the action to “Remove” and adds the ranges to the segment list (can be undone). Then “Cut”.',
+      applied: '{n} ranges added. Apply them with “Cut”.',
+      noAudio: 'This video has no audio track.',
+      noWhisper:
+        'Speech recognition is not set up on the server yet (whisper.cpp / WHISPER_MODEL).',
+      noClaude: 'Claude is not set up on the server yet (ANTHROPIC_API_KEY in the backend .env).',
+      outdated:
+        'The server backend is outdated and does not know the AI features yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
     },
     music: {
       title: 'Background music',

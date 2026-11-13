@@ -26,6 +26,8 @@ import CropOverlay from './CropOverlay.vue'
 import LibraryList from './LibraryList.vue'
 import TextOverlayLayer from './TextOverlayLayer.vue'
 import TextPanel from './TextPanel.vue'
+import AiPanel from './AiPanel.vue'
+import { useAiStore } from '@/stores/ai'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -74,6 +76,8 @@ const {
 
 // Text-Einblendungen des markierten Videos.
 const texts = useTextOverlayStore()
+// KI-Assistent (Transkript, Schnittvorschläge je Video).
+const ai = useAiStore()
 watch(
   () => selected.value?.id ?? null,
   (id) => texts.setItem(id),
@@ -549,6 +553,7 @@ async function onBurnText(): Promise<void> {
 async function onRemoveItem(id: number): Promise<void> {
   if (lastResultId.value === id) lastResultId.value = null
   texts.clearItem(id)
+  ai.clearItem(id)
   try {
     await library.remove(id)
   } catch {
@@ -1258,6 +1263,16 @@ async function downloadResult(): Promise<void> {
 
             <p class="segments-hint">{{ t('segments.hint') }}</p>
           </section>
+
+          <!-- KI: Sprache erkennen, Untertitel, Schnittvorschläge -->
+          <AiPanel
+            :item-id="selected?.id ?? null"
+            :media-id="selected?.mediaId ?? null"
+            :ready="selected?.status === 'ready'"
+            :has-audio="selected?.hasAudio ?? false"
+            :busy="busy"
+            @seek="seekTo"
+          />
 
           <!-- Text / Untertitel einblenden -->
           <TextPanel

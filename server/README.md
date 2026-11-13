@@ -60,6 +60,30 @@ Danach einmalig das Nginx-Snippet `deploy/nginx-video-cutter-api.conf` in den
 Alle Werte in `.env` (siehe `.env.example`). Wichtig für Produktion:
 `ALLOWED_ORIGINS`, `MAX_FILE_SIZE_MB`, `MAX_CONCURRENT`.
 
+## KI-Funktionen (Untertitel, Schnittvorschläge)
+
+Optional. Die Tonspur wird lokal mit [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+transkribiert (Wort-Zeitstempel); Claude korrigiert/übersetzt daraus Untertitel und
+schlägt Schnitte vor (Füllwörter, Versprecher, Wiederholungen; Pausen erkennt der
+Server selbst). Zeiten berechnet der Server aus den Wort-Indizes.
+
+```bash
+sudo apt-get install -y build-essential cmake git
+sudo git clone --depth 1 https://github.com/ggml-org/whisper.cpp /opt/whisper.cpp
+cd /opt/whisper.cpp
+sudo cmake -B build -DCMAKE_BUILD_TYPE=Release
+sudo cmake --build build -j8 --config Release
+sudo bash ./models/download-ggml-model.sh large-v3-turbo-q5_0
+```
+
+Dann in der Backend-`.env`: `WHISPER_CLI`, `WHISPER_MODEL`, `ANTHROPIC_API_KEY`
+(siehe `.env.example`) und `pm2 restart video-cutter-api --update-env`.
+`GET /api/health` meldet unter `ai` beides als `true`, wenn alles bereit ist.
+
+Endpunkte: `POST /api/ai/transcribe | subtitles | cuts` (JSON mit `mediaId`) → `202 { jobId }`,
+Fortschritt/Ergebnis per SSE `GET /api/ai/jobs/:id/events`, Abbruch `DELETE /api/ai/jobs/:id`.
+Höchstens eine Transkription gleichzeitig (belegt `WHISPER_THREADS` Kerne).
+
 ## Frontend anbinden
 
 Beim Build der SPA `VITE_API_BASE=/video-cutter` setzen; dann nutzt der

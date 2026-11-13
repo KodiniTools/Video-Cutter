@@ -12,11 +12,17 @@ import { mediaStore } from './lib/media'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
 import { initCustomFonts } from './lib/customFonts'
+import { aiRouter, aiStatus } from './routes/ai'
+import { aiJobs } from './lib/aiJobs'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
   const fonts = await initCustomFonts(config.customFontsDir, config.tmpDir)
   console.log(`Eigene Schriften: ${fonts.length} aus ${config.customFontsDir}`)
+  const ai = aiStatus()
+  console.log(
+    `KI: Transkription ${ai.transcribe ? 'bereit' : 'aus'}, Claude ${ai.claude ? 'bereit' : 'aus'}`,
+  )
 
   const app = express()
   app.disable('x-powered-by')
@@ -50,12 +56,14 @@ async function bootstrap(): Promise<void> {
       active: jobManager.activeCount,
       maxConcurrent: config.maxConcurrent,
       features: SERVER_FEATURES,
+      ai: aiStatus(),
     })
   })
 
   app.use('/api', cutRouter)
   app.use('/api', mediaRouter)
   app.use('/api', textRouter)
+  app.use('/api', aiRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))
@@ -103,6 +111,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = (signal: string) => {
     console.log(`${signal} empfangen – fahre herunter …`)
+    aiJobs.shutdown()
     server.close(() => {
       void jobManager
         .shutdown()
