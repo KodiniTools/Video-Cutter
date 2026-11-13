@@ -29,6 +29,8 @@ import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useA
 import { formatTimeMs, formatNudge, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import { readVideoDuration } from '@/lib/videoMeta'
+import { frameIndex, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
+import FrameSpinner from './FrameSpinner.vue'
 import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
@@ -341,6 +343,23 @@ function seekTo(sec: number): void {
   store.setCurrentTime(sec)
 }
 
+// --- Cursor bildgenau (für Text-Einblendungen, siehe lib/frameTime) ---------
+/** Bildrate des Arbeitsvideos laut Server; 0 = unbekannt (dann 10-ms-Schritte). */
+const fps = computed(() => selected.value?.fps ?? 0)
+/** Anfang des gerade sichtbaren Bildes – so wird der Cursor angezeigt. */
+const cursorFrameTime = computed(() => snapToFrame(currentTime.value, fps.value))
+
+/** Video anhalten und ein Bild zeigen (Spinner, Von/Bis-Eingabe der Texte). */
+function scrubTo(sec: number): void {
+  const el = videoEl.value
+  if (el && !el.paused) el.pause()
+  seekTo(sec)
+}
+
+function stepCursor(dir: 1 | -1): void {
+  scrubTo(frameSeekTime(stepFrames(currentTime.value, dir, fps.value, duration.value), fps.value))
+}
+
 // Start/Ende des (neuen) Ausschnitts auf die aktuelle Wiedergabeposition
 // setzen. markStart/markEnd ziehen die Gegenseite bei Bedarf mit, damit sich
 // ein Ausschnitt an beliebiger Stelle aufziehen lässt.
@@ -566,7 +585,9 @@ function onAddText(): void {
   if (el && !el.paused) el.pause()
   const at = el?.currentTime ?? currentTime.value
   graphics.select(null)
-  texts.add(at, duration.value, t('text.defaultText'))
+  // Von/Bis auf Bildanfänge legen (Text erscheint genau ab dem sichtbaren Bild).
+  const o = texts.add(snapToFrame(at, fps.value), duration.value, t('text.defaultText'))
+  if (o) texts.update(o.id, { end: snapToFrame(o.end, fps.value) })
 }
 
 /** Neue Form/Linie/Symbol/Emoji an der aktuellen Stelle (Video wird angehalten). */
@@ -1040,7 +1061,7 @@ async function downloadResult(): Promise<void> {
             </div>
             <div class="live-cell center">
               <span class="live-label">{{ t('live.cursor') }}</span>
-              <span class="live-value">{{ msLabel(currentTime) }}</span>
+              <span class="live-value">{{ msLabel(cursorFrameTime) }}</span>
             </div>
             <div class="live-cell right">
               <span class="live-label">{{ t('live.remaining') }}</span>
@@ -1051,8 +1072,17 @@ async function downloadResult(): Promise<void> {
           <!-- Cursor: aktuelle Wiedergabeposition als Anfang/Ende übernehmen -->
           <div class="cursor-row">
             <span class="cursor-at">
-              {{ t('player.cursorAt') }} <b>{{ formatTimeMs(currentTime) }}</b>
+              {{ t('player.cursorAt') }} <b>{{ formatTimeMs(cursorFrameTime) }}</b>
+              <small v-if="fps > 0" class="cursor-frame">
+                {{ t('player.frame', { n: frameIndex(currentTime, fps) }) }}
+              </small>
             </span>
+            <FrameSpinner
+              :up-label="fps > 0 ? t('player.stepUp') : t('player.stepUpMs')"
+              :down-label="fps > 0 ? t('player.stepDown') : t('player.stepDownMs')"
+              :disabled="!objectUrl"
+              @step="stepCursor"
+            />
             <button class="btn tiny" type="button" @click="setStartHere">
               {{ t('player.setStart') }}
             </button>
@@ -1369,8 +1399,10 @@ async function downloadResult(): Promise<void> {
             :can-burn="selected?.status === 'ready' && !!selected?.mediaId"
             :graphic-count="graphics.overlays.length"
             :graphics-invalid="!graphicsValid"
+            :fps="fps"
             @add="onAddText"
             @seek="seekTo"
+            @scrub="scrubTo"
             @burn="onBurnText"
           />
 
@@ -2007,6 +2039,11 @@ async function downloadResult(): Promise<void> {
 .cursor-at b {
   color: var(--ds-text);
   font-family: var(--ds-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.cursor-frame {
+  margin-left: 4px;
+  font-size: var(--ds-text-xs);
   font-variant-numeric: tabular-nums;
 }
 

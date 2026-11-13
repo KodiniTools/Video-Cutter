@@ -43,6 +43,7 @@ const media = (over: Partial<MediaView> = {}): MediaView => ({
   width: 640,
   height: 360,
   hasAudio: true,
+  fps: 25,
   ...over,
 })
 /** Lässt die Upload-Warteschlange einen Schritt laufen. */

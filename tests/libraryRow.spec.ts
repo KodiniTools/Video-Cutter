@@ -16,6 +16,7 @@ const clip = (over: Partial<LibraryItem> = {}): LibraryItem => ({
   width: 640,
   height: 360,
   hasAudio: true,
+  fps: 25,
   start: 2,
   end: 6,
   include: true,

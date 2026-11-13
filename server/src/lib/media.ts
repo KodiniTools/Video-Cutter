@@ -25,6 +25,8 @@ export interface MediaView {
   width: number
   height: number
   hasAudio: boolean
+  /** Bildrate, 0 = unbekannt (Frontend schaltet dann auf ms-Schritte zurück). */
+  fps: number
 }
 
 export function mediaView(m: MediaItem): MediaView {
@@ -36,6 +38,7 @@ export function mediaView(m: MediaItem): MediaView {
     width: m.info.width,
     height: m.info.height,
     hasAudio: m.info.hasAudio,
+    fps: m.info.fps ?? 0,
   }
 }
 

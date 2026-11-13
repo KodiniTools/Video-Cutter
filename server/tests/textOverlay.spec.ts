@@ -82,6 +82,24 @@ describe('Text-Hilfsfunktionen', () => {
     expect(assTime(3661.234)).toBe('1:01:01.23')
   })
 
+  it('assTime trifft bildgenau dieselben Bilder wie die Vorschau (start <= t < end)', () => {
+    // libass vergleicht in ms mit dem (abgeschnittenen) Bild-Zeitstempel.
+    const ms = (ass: string) => {
+      const [h, m, s] = ass.split(':').map(Number)
+      return Math.round(((h * 60 + m) * 60 + s) * 1000)
+    }
+    for (const fps of [24, 25, 30000 / 1001, 30, 50, 60]) {
+      for (let k = 1; k < 2000; k++) {
+        const startPts = k / fps
+        const startClient = Math.round(startPts * 1000) / 1000 // wie snapToFrame
+        const a = ms(assTime(startClient))
+        // Bild k (Zeitstempel startPts) sichtbar, Bild k-1 nicht.
+        expect(a).toBeLessThanOrEqual(Math.floor(startPts * 1000))
+        expect(a).toBeGreaterThan(Math.floor(((k - 1) / fps) * 1000))
+      }
+    }
+  })
+
   it('Animationszeiten sind begrenzt', () => {
     expect(fadeMs(10)).toBe(400)
     expect(fadeMs(0.6)).toBe(200)
@@ -95,7 +113,7 @@ describe('Text-Hilfsfunktionen', () => {
 describe('buildAssEvent', () => {
   it('setzt Position, Schrift (libass-Größe) und Zeiten', () => {
     const line = buildAssEvent(overlay(), 1920, 1080)
-    expect(line.startsWith('Dialogue: 0,0:00:01.00,0:00:04.00,Text,,0,0,0,,{')).toBe(true)
+    expect(line.startsWith('Dialogue: 0,0:00:00.99,0:00:03.99,Text,,0,0,0,,{')).toBe(true)
     expect(line).toContain('\\an5')
     expect(line).toContain('\\pos(960,972)')
     expect(line).toContain('\\fnRoboto\\b1')

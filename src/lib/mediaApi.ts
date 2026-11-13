@@ -17,6 +17,8 @@ export interface MediaView {
   width: number
   height: number
   hasAudio: boolean
+  /** Bildrate (Bilder/s), 0 = unbekannt (älteres Backend). */
+  fps: number
 }
 
 /** Prüft und normalisiert eine Server-Antwort. Wirft bei fehlender ID. */
@@ -32,6 +34,7 @@ export function parseMediaView(data: unknown): MediaView {
     width: num(d.width),
     height: num(d.height),
     hasAudio: d.hasAudio === true,
+    fps: num(d.fps),
   }
 }
 

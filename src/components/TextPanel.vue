@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
+import { frameCount, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
+import FrameSpinner from './FrameSpinner.vue'
 import { groupFonts, useCustomFonts } from '@/lib/customFonts'
 import {
   FONT_OPTIONS,
@@ -36,11 +38,15 @@ const props = defineProps<{
   graphicCount?: number
   /** Ist mindestens eine dieser Grafiken ungültig? */
   graphicsInvalid?: boolean
+  /** Bildrate des Videos; 0/fehlend = unbekannt (Schritte dann 10 ms). */
+  fps?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'add'): void
   (e: 'seek', sec: number): void
+  /** Video anhalten und auf diese Zeit springen (Spinner/Eingabe von Von/Bis). */
+  (e: 'scrub', sec: number): void
   (e: 'burn'): void
 }>()
 
@@ -64,8 +70,53 @@ function patch(p: Partial<TextOverlayData>): void {
 function pick(id: number): void {
   texts.select(id)
   const o = overlays.value.find((x) => x.id === id)
-  if (o) emit('seek', o.start)
+  if (o) emit('seek', frameSeekTime(o.start, fps.value))
 }
+
+// --- Frame-genaue Zeiten ----------------------------------------------------
+// Von/Bis liegen immer auf Bildanfängen (siehe lib/frameTime): Vorschau und
+// Einbrennen zeigen dann dieselben Bilder mit Text (start <= Bild < end).
+const fps = computed(() => props.fps ?? 0)
+
+/** Begrenzen auf [0, Dauer] und auf den Anfang des dort sichtbaren Bildes legen. */
+function toFrame(sec: number): number {
+  return snapToFrame(clampTime(sec), fps.value)
+}
+
+function setStart(sec: number, scrub: boolean): void {
+  const v = toFrame(sec)
+  patch({ start: v })
+  if (scrub) emit('scrub', frameSeekTime(v, fps.value))
+}
+
+function setEnd(sec: number, scrub: boolean): void {
+  const v = toFrame(sec)
+  patch({ end: v })
+  // Cursor = Bis zeigt das erste Bild OHNE Text (Ende ist exklusiv).
+  if (scrub) emit('scrub', frameSeekTime(v, fps.value))
+}
+
+function stepStart(dir: 1 | -1): void {
+  if (selected.value)
+    setStart(stepFrames(selected.value.start, dir, fps.value, props.duration), true)
+}
+
+function stepEnd(dir: 1 | -1): void {
+  if (selected.value) setEnd(stepFrames(selected.value.end, dir, fps.value, props.duration), true)
+}
+
+const stepUnit = computed(() => (fps.value > 0 ? t('text.frame.one') : t('text.frame.ms')))
+
+/** „3,000 s · 75 Bilder" – Dauer des gewählten Textes. */
+const durationLabel = computed(() => {
+  const o = selected.value
+  if (!o) return ''
+  const sec = Math.max(0, o.end - o.start)
+  const base = formatTimeMs(sec)
+  return fps.value > 0
+    ? `${base} · ${t('text.frame.count', { n: frameCount(o.start, o.end, fps.value) })}`
+    : base
+})
 
 // Zeitfelder: Freitext (mm:ss.mmm) – übernommen bei Enter/Verlassen.
 const fromInput = ref('')
@@ -89,7 +140,9 @@ function commitFrom(): void {
     fromInput.value = selected.value ? formatTimeMs(selected.value.start) : ''
     return
   }
-  patch({ start: clampTime(v) })
+  setStart(v, true)
+  // Gleicher Wert nach dem Einrasten -> Watch feuert nicht, Feld trotzdem normalisieren.
+  fromInput.value = formatTimeMs(selected.value.start)
 }
 
 function commitTo(): void {
@@ -98,7 +151,8 @@ function commitTo(): void {
     toInput.value = selected.value ? formatTimeMs(selected.value.end) : ''
     return
   }
-  patch({ end: clampTime(v) })
+  setEnd(v, true)
+  toInput.value = formatTimeMs(selected.value.end)
 }
 
 function placeAt(preset: PositionPreset): void {
@@ -230,13 +284,19 @@ function preview(text: string): string {
               @change="commitFrom"
               @keydown.enter.prevent="commitFrom"
             />
+            <FrameSpinner
+              :disabled="busy"
+              :up-label="`${t('text.from')}: +1 ${stepUnit}`"
+              :down-label="`${t('text.from')}: −1 ${stepUnit}`"
+              @step="stepStart"
+            />
             <button
               class="btn tiny"
               type="button"
               :disabled="busy"
               :title="t('text.toPlayhead')"
               :aria-label="`${t('text.from')}: ${t('text.toPlayhead')}`"
-              @click="patch({ start: clampTime(currentTime) })"
+              @click="setStart(currentTime, false)"
             >
               ⏱
             </button>
@@ -254,19 +314,36 @@ function preview(text: string): string {
               @change="commitTo"
               @keydown.enter.prevent="commitTo"
             />
+            <FrameSpinner
+              :disabled="busy"
+              :up-label="`${t('text.to')}: +1 ${stepUnit}`"
+              :down-label="`${t('text.to')}: −1 ${stepUnit}`"
+              @step="stepEnd"
+            />
             <button
               class="btn tiny"
               type="button"
               :disabled="busy"
               :title="t('text.toPlayhead')"
               :aria-label="`${t('text.to')}: ${t('text.toPlayhead')}`"
-              @click="patch({ end: clampTime(currentTime) })"
+              @click="setEnd(currentTime, false)"
             >
               ⏱
             </button>
           </span>
         </label>
       </div>
+      <p class="field-row duration-row">
+        <span class="field-label">{{ t('text.frame.duration') }}</span>
+        <span class="field-value">{{ durationLabel }}</span>
+      </p>
+      <p class="hint">
+        {{
+          fps > 0
+            ? t('text.frame.hint', { fps: fps.toFixed(fps % 1 ? 2 : 0) })
+            : t('text.frame.hintMs')
+        }}
+      </p>
       <p v-if="!isValidOverlay(selected, duration)" class="hint warn">{{ t('text.invalid') }}</p>
 
       <div class="field-col">
@@ -659,7 +736,12 @@ function preview(text: string): string {
 .text-area {
   resize: vertical;
 }
-.time-grid,
+/* Von/Bis untereinander: Zeitfeld + ▲▼ + ⏱ brauchen die volle Breite. */
+.time-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -667,7 +749,11 @@ function preview(text: string): string {
 }
 .time-row {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+.duration-row {
+  margin: 0;
 }
 .input.time {
   font-variant-numeric: tabular-nums;

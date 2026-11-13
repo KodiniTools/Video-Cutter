@@ -208,9 +208,19 @@ export function assColor(hex: string): string {
   return `&H${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}&`.toUpperCase()
 }
 
-/** Sekunden -> ASS-Zeit `H:MM:SS.cc`. */
+/**
+ * Sekunden -> ASS-Zeit `H:MM:SS.cc`, frame-genau wie die Vorschau.
+ *
+ * libass zeigt eine Zeile für ein Bild mit Zeitstempel t, wenn start <= t < end.
+ * ASS kennt nur Hundertstel; Runden zur Mitte konnte die Zeit hinter das
+ * gemeinte Bild schieben (Text erschien ein Bild zu spät / verschwand zu
+ * spät). Deshalb abrunden – nach Abzug von 1 ms, weil der Client Bildzeiten
+ * auf ganze ms rundet (z. B. 29,97 fps: 3,2032 s -> 3,203 s). Der Versatz
+ * (1–11 ms) ist kleiner als ein Bildabstand (bis ~87 fps), trifft also exakt
+ * dasselbe erste/letzte Bild wie in der Vorschau.
+ */
 export function assTime(sec: number): string {
-  const cs = Math.max(0, Math.round(sec * 100))
+  const cs = Math.max(0, Math.floor(sec * 100 - 0.1))
   const h = Math.floor(cs / 360000)
   const m = Math.floor((cs % 360000) / 6000)
   const s = Math.floor((cs % 6000) / 100)
