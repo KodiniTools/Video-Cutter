@@ -11,6 +11,7 @@ import {
   APPEND_UNSUPPORTED,
   FORMAT_UNSUPPORTED,
   MUSIC_UNSUPPORTED,
+  AUDIO_FADE_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
   TEXT_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
@@ -37,6 +38,8 @@ import TextPanel from './TextPanel.vue'
 import GraphicOverlayLayer from './GraphicOverlayLayer.vue'
 import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
+import AudioFadePanel from './AudioFadePanel.vue'
+import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 
@@ -72,6 +75,11 @@ const {
 // Video-Bibliothek: markiertes Video = Arbeitsvideo im Editor.
 const library = useLibraryStore()
 const { items, selected, mergeItems, canMerge, normalizeAudio } = storeToRefs(library)
+
+// Ton ein-/ausblenden: wirkt nur bei Videos mit Ton.
+const audioFade = useAudioFadeStore()
+/** Blende für „Schneiden" (nur wenn das markierte Video Ton hat). */
+const fadeForCut = computed(() => (selected.value?.hasAudio ? audioFade.input : undefined))
 
 const {
   isProcessing,
@@ -154,7 +162,12 @@ function pickFill(f: (typeof FILL_OPTIONS)[number]['value'], close: () => void):
 // Beim Entfernen, bei aktivem Zuschnitt ODER angehängten Videos wird immer neu
 // kodiert -> Modus ist dann fest & deaktiviert (Decode+Encode nötig).
 const modeDisabled = computed(
-  () => operation.value === 'remove' || hasCrop.value || hasOutputFormat.value || hasMusic.value,
+  () =>
+    operation.value === 'remove' ||
+    hasCrop.value ||
+    hasOutputFormat.value ||
+    hasMusic.value ||
+    fadeForCut.value !== undefined,
 )
 const modeLabel = computed(() =>
   modeDisabled.value
@@ -456,6 +469,7 @@ function showJobError(e: unknown): void {
     [APPEND_UNSUPPORTED]: 'errors.appendUnsupported',
     [FORMAT_UNSUPPORTED]: 'errors.formatUnsupported',
     [MUSIC_UNSUPPORTED]: 'errors.musicUnsupported',
+    [AUDIO_FADE_UNSUPPORTED]: 'errors.audioFadeUnsupported',
     [MEDIA_UNSUPPORTED]: 'errors.mediaUnsupported',
     [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
     [GRAPHICS_UNSUPPORTED]: 'errors.graphicsUnsupported',
@@ -488,6 +502,7 @@ async function onExport(): Promise<void> {
       crop: crop.value ?? undefined,
       output: { aspect: outputAspect.value, fill: outputFill.value },
       music: music.value ?? undefined,
+      audioFade: fadeForCut.value,
     })
     // Name vom Server: „…_cut.<ext>" (Container passend zum Modus).
     library.replaceWithResult(item.id, media, resultFile(blob, media.name))
@@ -530,6 +545,8 @@ async function onMerge(): Promise<void> {
       output: { aspect: outputAspect.value, fill: outputFill.value },
       music: music.value ?? undefined,
       seams: library.seamPresets,
+      // Blende nur, wenn überhaupt Ton entsteht (Clip mit Ton oder Musik).
+      audioFade: list.some((it) => it.hasAudio) || music.value ? audioFade.input : undefined,
     })
     const base = first.name.replace(/\.[^.]+$/, '').replace(/_(cut|merged)$/, '') || 'video'
     const ext = media.name.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'mp4'
@@ -1371,6 +1388,9 @@ async function downloadResult(): Promise<void> {
             @seek="seekTo"
             @burn="onBurnText"
           />
+
+          <!-- Ton am Anfang/Ende ein- und ausblenden -->
+          <AudioFadePanel :busy="busy" :has-audio="selected ? selected.hasAudio : null" />
 
           <!-- Hintergrundmusik über das gesamte Ergebnis -->
           <section class="card segments music">

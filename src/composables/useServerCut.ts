@@ -5,6 +5,7 @@ import { API_BASE } from '@/lib/apiBase'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 import type { TextOverlayData } from '@/lib/textOverlay'
 import type { ServerGraphic } from '@/lib/graphicOverlay'
+import type { AudioFadeInput } from '@/lib/audioFade'
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
 export const CUT_CANCELLED = 'CUT_CANCELLED'
@@ -30,6 +31,9 @@ export const FORMAT_UNSUPPORTED = 'FORMAT_UNSUPPORTED'
 /** Fehler-Kennung: Hintergrundmusik verlangt, aber vom Backend nicht bestätigt. */
 export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
 
+/** Fehler-Kennung: Ton ein-/ausblenden verlangt, aber vom Backend nicht bestätigt. */
+export const AUDIO_FADE_UNSUPPORTED = 'AUDIO_FADE_UNSUPPORTED'
+
 /** Fehler-Kennung: Text einbrennen verlangt, aber das Backend kennt es nicht (veraltet). */
 export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
 /** Fehler-Kennung: Backend kann noch keine Grafiken (Formen/Emojis) einbrennen. */
@@ -53,6 +57,8 @@ export interface JobStartResponse {
   music?: boolean
   /** Hat der Server die Übergänge je Nahtstelle übernommen? */
   seamTransitions?: boolean
+  /** Hat der Server das Ein-/Ausblenden des Tons übernommen? */
+  audioFade?: boolean
   /** Wird das Ergebnis in der Video-Bibliothek gespeichert? */
   storeResult?: boolean
 }
@@ -72,6 +78,7 @@ export function parseJobStart(text: string): JobStartResponse {
     outputFormat?: unknown
     music?: unknown
     seamTransitions?: unknown
+    audioFade?: unknown
     storeResult?: unknown
   }
   let data: Raw
@@ -94,6 +101,7 @@ export function parseJobStart(text: string): JobStartResponse {
     outputFormat: data.outputFormat === true,
     music: data.music === true,
     seamTransitions: data.seamTransitions === true,
+    audioFade: data.audioFade === true,
     storeResult: data.storeResult === true,
   }
 }
@@ -315,6 +323,8 @@ interface JobRequest {
   output?: CutOutputFormat
   music?: MusicInput
   seams?: (string | null)[]
+  /** Ton am Anfang/Ende des Ergebnisses ein-/ausblenden. */
+  audioFade?: AudioFadeInput
   /** Ergebnis in der Bibliothek speichern (statt zum Download bereitzuhalten). */
   storeResult?: boolean
 }
@@ -332,7 +342,7 @@ async function abortJob(jobId: string, code: string): Promise<never> {
  */
 async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?: string }> {
   const { segments, mode, operation, total, transition, crop, appends, normalizeAudio } = req
-  const { output, music, seams } = req
+  const { output, music, seams, audioFade } = req
   const form = new FormData()
   // Textfelder vor den Dateien, damit der Server sie beim Upload schon kennt.
   if (!(req.source instanceof File)) form.append('mediaId', req.source.mediaId)
@@ -364,6 +374,12 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
     form.append('musicOriginalVolume', String(music.originalVolume))
     form.append('musicFade', music.fade ? '1' : '0')
     form.append('musicLoop', music.loop ? '1' : '0')
+  }
+  if (audioFade) {
+    form.append('audioFadeIn', String(audioFade.inDuration))
+    form.append('audioFadeInCurve', audioFade.inCurve)
+    form.append('audioFadeOut', String(audioFade.outDuration))
+    form.append('audioFadeOutCurve', audioFade.outCurve)
   }
   if (appends.length) {
     form.append(
@@ -439,6 +455,9 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
 
   // Musik verlangt, aber nicht bestätigt -> veralteter Server.
   if (music && !started.music) await abortJob(jobId, MUSIC_UNSUPPORTED)
+
+  // Ton-Blende verlangt, aber nicht bestätigt -> veralteter Server.
+  if (audioFade && !started.audioFade) await abortJob(jobId, AUDIO_FADE_UNSUPPORTED)
 
   // Speichern in der Bibliothek verlangt, aber nicht bestätigt -> veralteter Server.
   if (req.storeResult && !started.storeResult) await abortJob(jobId, MEDIA_UNSUPPORTED)
@@ -535,6 +554,8 @@ export interface MediaCutRequest {
   output?: CutOutputFormat
   music?: MusicInput
   seams?: (string | null)[]
+  /** Ton am Anfang/Ende ein-/ausblenden (nur bei Videos mit Ton übergeben). */
+  audioFade?: AudioFadeInput
 }
 
 /** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
@@ -562,6 +583,7 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
       output: req.output,
       music: req.music,
       seams: req.seams,
+      audioFade: req.audioFade,
       storeResult: true,
     })
     currentJobId = null

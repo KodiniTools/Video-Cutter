@@ -264,6 +264,26 @@ const messages = {
       outdated:
         'Das Server-Backend ist veraltet und kennt die KI-Funktionen noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
     },
+    audioFade: {
+      title: 'Ton ein- und ausblenden',
+      fadeIn: 'Am Anfang einblenden',
+      fadeOut: 'Am Ende ausblenden',
+      duration: 'Dauer',
+      curve: 'Kurve',
+      curves: {
+        tri: 'Linear',
+        exp: 'Exponentiell',
+        log: 'Logarithmisch',
+        qsin: 'Sinus (weich)',
+        hsin: 'S-Kurve',
+        esin: 'S-Kurve (steil)',
+        qua: 'Quadratisch',
+        cub: 'Kubisch',
+        squ: 'Wurzel',
+      },
+      noAudio: 'Das markierte Video hat keinen Ton – hier wirkt die Blende nicht.',
+      hint: 'Gilt für jedes Schneiden und Zusammenfügen von Videos mit Ton (bei Musik auch für die Musik). Bleibt eingestellt, bis du es abschaltest. Erzwingt Neu-Kodieren.',
+    },
     music: {
       title: 'Hintergrundmusik',
       add: '+ Musik hochladen',
@@ -323,6 +343,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kennt das gewählte Ausgabeformat noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder das Format auf „Original“ stellen.',
       musicUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Hintergrundmusik hinzufügen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder die Musik entfernen.',
+      audioFadeUnsupported:
+        'Das Server-Backend ist veraltet und kann den Ton noch nicht ein- und ausblenden. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder „Ton ein- und ausblenden“ abschalten.',
       mediaUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Videos speichern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       textUnsupported:
@@ -589,6 +611,26 @@ const messages = {
       outdated:
         'The server backend is outdated and does not know the AI features yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
     },
+    audioFade: {
+      title: 'Fade audio in and out',
+      fadeIn: 'Fade in at the start',
+      fadeOut: 'Fade out at the end',
+      duration: 'Duration',
+      curve: 'Curve',
+      curves: {
+        tri: 'Linear',
+        exp: 'Exponential',
+        log: 'Logarithmic',
+        qsin: 'Sine (soft)',
+        hsin: 'S-curve',
+        esin: 'S-curve (steep)',
+        qua: 'Quadratic',
+        cub: 'Cubic',
+        squ: 'Square root',
+      },
+      noAudio: 'The selected video has no sound – the fade has no effect here.',
+      hint: 'Applies to every cut and join of videos with sound (with music, to the music too). Stays on until you switch it off. Forces re-encoding.',
+    },
     music: {
       title: 'Background music',
       add: '+ Upload music',
@@ -647,6 +689,8 @@ const messages = {
         'The server backend is outdated and does not know the selected output format yet. Please update the backend (deploy/deploy.sh without SKIP_API) or set the format to “Original”.',
       musicUnsupported:
         'The server backend is outdated and cannot add background music yet. Please update the backend (deploy/deploy.sh without SKIP_API) or remove the music.',
+      audioFadeUnsupported:
+        'The server backend is outdated and cannot fade the audio yet. Please update the backend (deploy/deploy.sh without SKIP_API) or switch off “Fade audio in and out”.',
       mediaUnsupported:
         'The server backend is outdated and cannot store videos yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       textUnsupported:

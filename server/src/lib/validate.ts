@@ -9,6 +9,9 @@ import {
   type AppendPosition,
   type OutputAspect,
   type OutputFill,
+  type AudioFade,
+  type AudioFadeCurve,
+  AUDIO_FADE_CURVES,
   OUTPUT_ASPECTS,
   OUTPUT_FILLS,
 } from './args'
@@ -360,4 +363,37 @@ export function resolveAppendRange(
     throw new ValidationError('Gekürztes angehängtes Video ist zu kurz.')
   }
   return { start: meta.start, duration }
+}
+
+/** Höchste Ein-/Ausblenddauer des Tons (Sekunden). */
+export const MAX_AUDIO_FADE_SEC = 30
+
+function parseFadeSeconds(v: unknown, label: string): number {
+  if (v === undefined || v === null || v === '') return 0
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0 || n > MAX_AUDIO_FADE_SEC) {
+    throw new ValidationError(`Ungültige ${label} (erlaubt: 0–${MAX_AUDIO_FADE_SEC} s).`)
+  }
+  return n
+}
+
+function parseFadeCurve(v: unknown): AudioFadeCurve {
+  if (v === undefined || v === null || v === '') return 'tri'
+  if (typeof v === 'string' && (AUDIO_FADE_CURVES as readonly string[]).includes(v)) {
+    return v as AudioFadeCurve
+  }
+  throw new ValidationError('Unbekannte Kurve für das Ein-/Ausblenden.')
+}
+
+/**
+ * Ton ein-/ausblenden (`audioFadeIn`, `audioFadeInCurve`, `audioFadeOut`,
+ * `audioFadeOutCurve`). `undefined`, wenn nichts verlangt ist (beide Dauern 0).
+ */
+export function parseAudioFade(body: Record<string, unknown>): AudioFade | undefined {
+  const inDuration = parseFadeSeconds(body.audioFadeIn, 'Einblenddauer')
+  const outDuration = parseFadeSeconds(body.audioFadeOut, 'Ausblenddauer')
+  const inCurve = parseFadeCurve(body.audioFadeInCurve)
+  const outCurve = parseFadeCurve(body.audioFadeOutCurve)
+  if (inDuration <= 0 && outDuration <= 0) return undefined
+  return { inDuration, inCurve, outDuration, outCurve }
 }
