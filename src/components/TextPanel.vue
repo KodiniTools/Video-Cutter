@@ -687,6 +687,10 @@ function preview(text: string): string {
 .text-label small {
   color: var(--ds-text-2);
   font-size: var(--ds-text-xs);
+  /* Feste Ziffernbreite: Die Standardschrift hat keine Tabellenziffern, die
+     Zeile bräche sonst je nach Ziffern mal um, mal nicht – die Seitenleiste
+     spränge beim Verstellen der Zeit. */
+  font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
 }
 
