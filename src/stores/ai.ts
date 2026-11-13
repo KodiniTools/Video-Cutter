@@ -5,6 +5,7 @@ import {
   fetchAiStatus,
   parseSubtitles,
   parseSuggestions,
+  parseTranslation,
   parseTranscript,
   runAiJob,
   type AiRun,
@@ -13,6 +14,7 @@ import {
   type SubtitleCue,
   type SubtitleTarget,
   type TranscribeLanguage,
+  type TranslateTarget,
   type TranscriptInfo,
 } from '@/lib/aiApi'
 
@@ -29,7 +31,7 @@ interface ItemAi {
   suggestions: SuggestionItem[]
 }
 
-export type AiTask = 'transcribe' | 'subtitles' | 'cuts'
+export type AiTask = 'transcribe' | 'subtitles' | 'cuts' | 'translate'
 
 /**
  * KI-Assistent: Transkript und Schnittvorschläge je Bibliotheks-Video
@@ -113,6 +115,17 @@ export const useAiStore = defineStore('ai', () => {
     )
   }
 
+  /** Vorhandene Texte übersetzen (Reihenfolge bleibt, für die Zuordnung). */
+  function translate(
+    itemId: number,
+    texts: string[],
+    target: TranslateTarget,
+  ): Promise<{ texts: string[]; missing: number }> {
+    return exec(itemId, 'translate', (p) =>
+      runAiJob('translate', { texts, target }, (d) => parseTranslation(d, texts.length), p),
+    )
+  }
+
   let nextId = 1
   async function suggestCuts(itemId: number, mediaId: string, minPause: number): Promise<void> {
     const list = await exec(itemId, 'cuts', (p) =>
@@ -171,6 +184,7 @@ export const useAiStore = defineStore('ai', () => {
     dataFor,
     transcribe,
     subtitles,
+    translate,
     suggestCuts,
     setChecked,
     setAllChecked,
