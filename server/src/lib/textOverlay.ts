@@ -55,7 +55,8 @@ export interface TextOverlay {
   animation: TextAnimation
 }
 
-export const MAX_TEXT_OVERLAYS = 20
+/** Hoch genug für automatisch erzeugte Untertitel (ca. 30–40 Minuten Sprache). */
+export const MAX_TEXT_OVERLAYS = 500
 export const MAX_TEXT_LENGTH = 300
 export const MAX_TEXT_LINES = 6
 export const MIN_TEXT_SIZE = 0.02

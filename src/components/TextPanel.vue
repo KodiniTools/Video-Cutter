@@ -461,6 +461,9 @@ function preview(text: string): string {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Viele (KI-)Untertitel: Liste scrollt statt die Seitenleiste zu sprengen. */
+  max-height: 320px;
+  overflow-y: auto;
 }
 .text-row {
   display: flex;

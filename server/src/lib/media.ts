@@ -120,6 +120,11 @@ export class MediaStore {
     return m
   }
 
+  /** Existiert das Video noch? (ohne es als benutzt zu markieren) */
+  has(id: string): boolean {
+    return this.items.has(id) && !this.pendingDelete.has(id)
+  }
+
   /** Sperrt Videos für die Dauer eines Jobs gegen Löschen. */
   acquire(ids: string[]): void {
     for (const id of ids) this.inUse.set(id, (this.inUse.get(id) ?? 0) + 1)

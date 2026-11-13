@@ -72,6 +72,41 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     return o
   }
 
+  /**
+   * Fügt viele Texte auf einmal hinzu (z. B. KI-Untertitel). Design wie der
+   * zuletzt gewählte Text, sonst Untertitel-Standard (unten, ohne Animation).
+   * `replace` verwirft vorher alle Texte des Videos. Liefert die Anzahl.
+   */
+  function addMany(cues: { start: number; end: number; text: string }[], replace: boolean): number {
+    if (itemId.value === null) return 0
+    const base = replace ? [] : overlays.value
+    const template = replace
+      ? null
+      : (selected.value ?? overlays.value[overlays.value.length - 1] ?? null)
+    const { x, y, font, size, color, style, accent, animation } = template ?? {
+      ...DEFAULT_TEXT_STYLE,
+      animation: 'none' as const,
+    }
+    const room = Math.max(0, MAX_TEXT_OVERLAYS - base.length)
+    const added: TextOverlay[] = cues.slice(0, room).map((c) => ({
+      id: nextId++,
+      text: c.text,
+      start: Math.max(0, c.start),
+      end: c.end,
+      x,
+      y,
+      font,
+      size,
+      color,
+      style,
+      accent,
+      animation,
+    }))
+    write([...base, ...added].sort((a, b) => a.start - b.start))
+    selectedId.value = null
+    return added.length
+  }
+
   /** Ändert einen Text; Werte werden in gültige Bereiche gebracht. */
   function update(id: number, patch: Partial<TextOverlayData>): void {
     write(
@@ -113,6 +148,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     canAdd,
     setItem,
     add,
+    addMany,
     update,
     remove,
     select,

@@ -377,6 +377,26 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     endTime.value = currentTime.value
   }
 
+  /**
+   * Übernimmt Bereiche zum ENTFERNEN (z. B. KI-Schnittvorschläge): stellt auf
+   * „Entfernen" um und ergänzt die Ausschnitt-Liste. Waren bisher Bereiche zum
+   * Behalten festgehalten, werden sie ersetzt (Rückgängig möglich).
+   */
+  function addRemoveRanges(ranges: Segment[]): void {
+    const valid = ranges.filter((r) => r.end - r.start >= MIN_SELECTION)
+    if (!valid.length) return
+    const base = operation.value === 'remove' ? segments.value : []
+    const merged = [...base]
+    for (const r of valid) {
+      const dup = merged.some(
+        (s) => Math.abs(s.start - r.start) < 1e-3 && Math.abs(s.end - r.end) < 1e-3,
+      )
+      if (!dup) merged.push({ start: r.start, end: r.end })
+    }
+    operation.value = 'remove'
+    segments.value = merged.sort((a, b) => a.start - b.start)
+  }
+
   function setOutputAspect(a: OutputAspect): void {
     outputAspect.value = a
   }
@@ -477,6 +497,7 @@ export const useVideoEditorStore = defineStore('videoEditor', () => {
     setMode,
     setOperation,
     addSegment,
+    addRemoveRanges,
     removeSegment,
     clearSegments,
     setOutputAspect,
