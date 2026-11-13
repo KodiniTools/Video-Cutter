@@ -173,7 +173,7 @@ const messages = {
     graphics: {
       frameHint:
         '▲▼ = 1 Bild ({fps} fps). Von/Bis rasten auf Bildanfänge ein; die Grafik erscheint ab dem Bild bei „Von“ und ist ab dem Bild bei „Bis“ wieder weg – genau so wird sie eingebrannt.',
-      title: 'Formen & Emojis',
+      title: 'Formen, Emojis & Bilder',
       addHint:
         'Video an der gewünschten Stelle anhalten und eine Form, ein Symbol oder ein Emoji anklicken – es erscheint in der Bildmitte und lässt sich wie Text verschieben.',
       shapes: 'Formen & Linien',
@@ -188,6 +188,26 @@ const messages = {
         arrow: 'Pfeil',
         symbol: 'Symbol',
         emoji: 'Emoji',
+        image: 'Bild',
+      },
+      image: {
+        title: 'Bilder',
+        upload: 'Bild hochladen (JPEG, PNG, WebP)',
+        loading: 'Bild wird geladen …',
+        hint: 'Das Bild erscheint an der aktuellen Stelle in der Bildmitte. Transparenz von PNG/WebP bleibt erhalten; Bilder liegen unter Formen und Texten.',
+        border: 'Rahmen',
+        opacity: 'Deckkraft',
+        crop: 'Zuschneiden',
+        cropReset: 'Zuschnitt zurücksetzen',
+        sides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
+        flip: 'Spiegeln',
+        shadow: 'Schatten',
+        errors: {
+          type: '„{name}“: nur JPEG, PNG oder WebP möglich.',
+          size: '„{name}“ ist zu groß (höchstens 30 MB).',
+          dim: '„{name}“ ist zu groß (höchstens 12000 px Kantenlänge).',
+          decode: '„{name}“ konnte nicht gelesen werden.',
+        },
       },
       symbols: {
         check: 'Häkchen',
@@ -218,11 +238,11 @@ const messages = {
         'Im Video ziehen (mit Umschalttaste fein) oder angeklickt mit den Pfeiltasten verschieben. X/Y = Mittelpunkt in % der Bildbreite/-höhe.',
       duplicate: 'Duplizieren',
       remove: 'Entfernen',
-      invalid: 'Zeitbereich ungültig oder kein Emoji eingegeben.',
-      limit: 'Höchstens {max} Formen/Emojis pro Video.',
+      invalid: 'Zeitbereich ungültig, kein Emoji eingegeben oder Bild fehlt.',
+      limit: 'Höchstens {max} Formen/Emojis/Bilder pro Video.',
       burnCount: 'Alles einbrennen ({n})',
       burnHint:
-        'Brennt Formen, Emojis und Texte zusammen ins markierte Video ein (Texte liegen oben); das Ergebnis ersetzt es in der Liste.',
+        'Brennt Bilder, Formen, Emojis und Texte zusammen ins markierte Video ein (Bilder unten, Texte oben); das Ergebnis ersetzt es in der Liste.',
     },
     ai: {
       title: 'KI-Assistent',
@@ -370,6 +390,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keinen Text einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       graphicsUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Formen/Emojis einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      imageTooLarge:
+        'Ein Bild ist für das Einbrennen zu groß (höchstens 16 MB als PNG). Bitte das Bild kleiner einstellen oder zuschneiden.',
     },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
   },
@@ -544,7 +566,7 @@ const messages = {
     graphics: {
       frameHint:
         '▲▼ = 1 frame ({fps} fps). From/To snap to frame starts; the graphic appears on the frame at “From” and is gone again on the frame at “To” – exactly as it will be burned in.',
-      title: 'Shapes & emojis',
+      title: 'Shapes, emojis & images',
       addHint:
         'Pause the video at the desired spot and click a shape, symbol or emoji – it appears in the centre and can be dragged like text.',
       shapes: 'Shapes & lines',
@@ -559,6 +581,26 @@ const messages = {
         arrow: 'Arrow',
         symbol: 'Symbol',
         emoji: 'Emoji',
+        image: 'Image',
+      },
+      image: {
+        title: 'Images',
+        upload: 'Upload image (JPEG, PNG, WebP)',
+        loading: 'Loading image …',
+        hint: 'The image appears at the current position in the centre. PNG/WebP transparency is kept; images sit below shapes and texts.',
+        border: 'Border',
+        opacity: 'Opacity',
+        crop: 'Crop',
+        cropReset: 'Reset crop',
+        sides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
+        flip: 'Mirror',
+        shadow: 'Shadow',
+        errors: {
+          type: '“{name}”: only JPEG, PNG or WebP.',
+          size: '“{name}” is too large (max. 30 MB).',
+          dim: '“{name}” is too large (max. 12000 px per side).',
+          decode: '“{name}” could not be read.',
+        },
       },
       symbols: {
         check: 'Check mark',
@@ -589,11 +631,11 @@ const messages = {
         'Drag in the video (hold Shift for fine control) or move the selected item with the arrow keys. X/Y = centre in % of frame width/height.',
       duplicate: 'Duplicate',
       remove: 'Remove',
-      invalid: 'Invalid time range or no emoji entered.',
-      limit: 'At most {max} shapes/emojis per video.',
+      invalid: 'Invalid time range, no emoji entered or image missing.',
+      limit: 'At most {max} shapes/emojis/images per video.',
       burnCount: 'Burn in everything ({n})',
       burnHint:
-        'Burns shapes, emojis and texts into the selected video in one go (texts on top); the result replaces it in the list.',
+        'Burns images, shapes, emojis and texts into the selected video in one go (images at the bottom, texts on top); the result replaces it in the list.',
     },
     ai: {
       title: 'AI assistant',
@@ -735,6 +777,8 @@ const messages = {
         'The server backend is outdated and cannot burn in text yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       graphicsUnsupported:
         'The server backend is outdated and cannot burn in shapes/emojis yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      imageTooLarge:
+        'An image is too large to burn in (max. 16 MB as PNG). Please make it smaller or crop it.',
     },
     footer: 'Server-side processing with FFmpeg.',
   },

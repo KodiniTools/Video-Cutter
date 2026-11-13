@@ -6,10 +6,12 @@ import {
   MIN_GRAPHIC_DURATION,
   clampGraphic,
   defaultGraphic,
+  type GraphicAddExtra,
   type GraphicData,
   type GraphicKind,
   type GraphicOverlay,
 } from '@/lib/graphicOverlay'
+import { pruneImageAssets } from '@/lib/imageAssets'
 
 /**
  * Grafik-Einblendungen (Formen, Linien, Symbole, Emojis) je Bibliotheks-Video
@@ -36,7 +38,18 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
 
   function write(list: GraphicOverlay[]): void {
     if (itemId.value === null) return
+    const hadImages = overlays.value.some((o) => o.kind === 'image')
     byItem.value = { ...byItem.value, [itemId.value]: list }
+    if (hadImages) pruneUnusedImages()
+  }
+
+  /** Bilder freigeben, die keine Grafik (in keinem Video) mehr nutzt. */
+  function pruneUnusedImages(): void {
+    const used: string[] = []
+    for (const list of Object.values(byItem.value)) {
+      for (const o of list) if (o.kind === 'image') used.push(o.image)
+    }
+    pruneImageAssets(used)
   }
 
   /**
@@ -47,7 +60,7 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     kind: GraphicKind,
     at: number,
     duration: number,
-    extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>> = {},
+    extra: GraphicAddExtra = {},
   ): GraphicOverlay | null {
     if (!canAdd.value) return null
     const total = duration > 0 ? duration : Infinity
@@ -102,6 +115,7 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     delete next[id]
     byItem.value = next
     if (itemId.value === id) selectedId.value = null
+    pruneUnusedImages()
   }
 
   return {

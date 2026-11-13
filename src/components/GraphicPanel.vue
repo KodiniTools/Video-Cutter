@@ -10,6 +10,7 @@ import {
   EMOJI_PRESETS,
   GRAPHIC_ANIMATIONS,
   GRAPHIC_SYMBOLS,
+  MAX_CROP,
   MAX_EMOJI_LENGTH,
   MAX_GRAPHICS,
   MAX_GRAPHIC_H,
@@ -20,12 +21,15 @@ import {
   hasColors,
   hasFill,
   hasHeight,
+  imageHeight,
   isValidGraphic,
+  type GraphicAddExtra,
   type GraphicData,
   type GraphicKind,
   type GraphicOverlay,
   type GraphicSymbol,
 } from '@/lib/graphicOverlay'
+import { IMAGE_ACCEPT, ImageAssetError, addImageAsset, getImageAsset } from '@/lib/imageAssets'
 
 /**
  * Seitenleisten-Karte „Formen & Emojis": Formen, Linien/Pfeile, Symbole und
@@ -48,7 +52,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'add', kind: GraphicKind, extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>>): void
+  (e: 'add', kind: GraphicKind, extra: GraphicAddExtra): void
   (e: 'seek', sec: number): void
   /** Video anhalten und auf diese Zeit springen (Spinner/Eingabe von Von/Bis). */
   (e: 'scrub', sec: number): void
@@ -110,6 +114,46 @@ const durationLabel = computed(() => {
     ? `${base} · ${t('text.frame.count', { n: frameCount(o.start, o.end, fps.value) })}`
     : base
 })
+
+// --- Bilder hochladen (bleiben im Browser, siehe lib/imageAssets) -------------
+const fileInput = ref<HTMLInputElement | null>(null)
+const imageError = ref('')
+const loadingImages = ref(false)
+
+/** Startgröße: längere Seite = halbe Bildhöhe des Videos. */
+const IMAGE_START_SIZE = 0.5
+
+async function onImageFiles(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length) return
+  imageError.value = ''
+  loadingImages.value = true
+  try {
+    for (const file of files) {
+      if (!canAdd.value) break
+      try {
+        const a = await addImageAsset(file)
+        const ratio = a.width / a.height
+        const w = ratio >= 1 ? IMAGE_START_SIZE : IMAGE_START_SIZE * ratio
+        emit('add', 'image', { image: a.id, w, cropL: 0, cropT: 0, cropR: 0, cropB: 0 })
+      } catch (e) {
+        const code = e instanceof ImageAssetError ? e.code : 'decode'
+        imageError.value = t(`graphics.image.errors.${code}`, { name: file.name })
+      }
+    }
+  } finally {
+    loadingImages.value = false
+  }
+}
+
+const CROP_SIDES = [
+  { key: 'cropL', label: 'left' },
+  { key: 'cropR', label: 'right' },
+  { key: 'cropT', label: 'top' },
+  { key: 'cropB', label: 'bottom' },
+] as const
 
 // Eigenes Emoji (beliebiges Zeichen inkl. Kombinationen wie 👍🏽).
 const customEmoji = ref('')
@@ -179,13 +223,14 @@ const ROTATIONS = [0, 45, 90, 135, 180, -135, -90, -45] as const
 
 function sizeLabel(o: GraphicOverlay): string {
   if (o.kind === 'line' || o.kind === 'arrow') return t('graphics.length')
-  if (hasHeight(o.kind)) return t('graphics.width')
+  if (hasHeight(o.kind) || o.kind === 'image') return t('graphics.width')
   return t('graphics.size')
 }
 
 function rowLabel(o: GraphicOverlay): string {
   if (o.kind === 'emoji') return o.emoji || '—'
   if (o.kind === 'symbol') return t(`graphics.symbols.${o.symbol}`)
+  if (o.kind === 'image') return getImageAsset(o.image)?.name ?? t('graphics.kinds.image')
   return t(`graphics.kinds.${o.kind}`)
 }
 
@@ -203,6 +248,29 @@ function symbolPath(s: GraphicSymbol): string {
     <p class="hint">{{ t('graphics.addHint') }}</p>
 
     <!-- Hinzufügen -->
+    <div class="field-col">
+      <span class="field-label">{{ t('graphics.image.title') }}</span>
+      <input
+        ref="fileInput"
+        class="sr-only"
+        type="file"
+        :accept="IMAGE_ACCEPT"
+        multiple
+        tabindex="-1"
+        aria-hidden="true"
+        @change="onImageFiles"
+      />
+      <button
+        class="btn block"
+        type="button"
+        :disabled="!canAdd || busy || loadingImages"
+        @click="fileInput?.click()"
+      >
+        🖼 {{ loadingImages ? t('graphics.image.loading') : t('graphics.image.upload') }}
+      </button>
+      <p class="hint">{{ t('graphics.image.hint') }}</p>
+      <p v-if="imageError" class="hint warn" role="alert">{{ imageError }}</p>
+    </div>
     <div class="field-col">
       <span class="field-label">{{ t('graphics.shapes') }}</span>
       <div class="pick-grid">
@@ -476,7 +544,11 @@ function symbolPath(s: GraphicSymbol): string {
       <div class="field-col">
         <div class="field-row">
           <span class="field-label">{{ sizeLabel(selected) }}</span>
-          <span class="field-value">{{ pct(selected.w) }} %</span>
+          <span class="field-value">
+            {{ pct(selected.w) }} %<template v-if="selected.kind === 'image'">
+              × {{ pct(imageHeight(selected)) }} %</template
+            >
+          </span>
         </div>
         <input
           class="range"
@@ -565,7 +637,9 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-label grow">{{
               selected.kind === 'line' || selected.kind === 'arrow'
                 ? t('graphics.lineColor')
-                : t('graphics.strokeColor')
+                : selected.kind === 'image'
+                  ? t('graphics.image.border')
+                  : t('graphics.strokeColor')
             }}</span>
             <span class="field-value">{{ pct(selected.strokeWidth) }} %</span>
           </label>
@@ -577,7 +651,9 @@ function symbolPath(s: GraphicSymbol): string {
             step="1"
             :value="Math.round(selected.strokeWidth * 1000)"
             :disabled="busy"
-            :aria-label="t('graphics.strokeWidth')"
+            :aria-label="
+              selected.kind === 'image' ? t('graphics.image.border') : t('graphics.strokeWidth')
+            "
             @input="
               patch({ strokeWidth: Number(($event.target as HTMLInputElement).value) / 1000 })
             "
@@ -608,7 +684,7 @@ function symbolPath(s: GraphicSymbol): string {
             @input="patch({ fillOpacity: Number(($event.target as HTMLInputElement).value) / 100 })"
           />
         </div>
-        <div v-if="selected.kind === 'rect'" class="field-col">
+        <div v-if="selected.kind === 'rect' || selected.kind === 'image'" class="field-col">
           <div class="field-row">
             <span class="field-label">{{ t('graphics.radius') }}</span>
             <span class="field-value">{{ Math.round(selected.radius * 200) }} %</span>
@@ -624,6 +700,73 @@ function symbolPath(s: GraphicSymbol): string {
             :aria-label="t('graphics.radius')"
             @input="patch({ radius: Number(($event.target as HTMLInputElement).value) / 100 })"
           />
+        </div>
+      </template>
+
+      <template v-if="selected.kind === 'image'">
+        <div class="field-col">
+          <div class="field-row">
+            <span class="field-label">{{ t('graphics.image.opacity') }}</span>
+            <span class="field-value">{{ Math.round(selected.opacity * 100) }} %</span>
+          </div>
+          <input
+            class="range"
+            type="range"
+            min="5"
+            max="100"
+            step="1"
+            :value="Math.round(selected.opacity * 100)"
+            :disabled="busy"
+            :aria-label="t('graphics.image.opacity')"
+            @input="patch({ opacity: Number(($event.target as HTMLInputElement).value) / 100 })"
+          />
+        </div>
+        <div class="field-col">
+          <span class="field-label">{{ t('graphics.image.crop') }}</span>
+          <div v-for="c in CROP_SIDES" :key="c.key" class="pos-row">
+            <span class="pos-axis crop-side">{{ t(`graphics.image.sides.${c.label}`) }}</span>
+            <input
+              class="range"
+              type="range"
+              min="0"
+              :max="MAX_CROP * 100"
+              step="0.5"
+              :value="pct(selected[c.key])"
+              :disabled="busy"
+              :aria-label="`${t('graphics.image.crop')} ${t(`graphics.image.sides.${c.label}`)}`"
+              @input="patch({ [c.key]: Number(($event.target as HTMLInputElement).value) / 100 })"
+            />
+            <span class="field-value crop-val">{{ pct(selected[c.key]) }} %</span>
+          </div>
+          <button
+            v-if="selected.cropL || selected.cropR || selected.cropT || selected.cropB"
+            class="btn tiny"
+            type="button"
+            :disabled="busy"
+            @click="patch({ cropL: 0, cropR: 0, cropT: 0, cropB: 0 })"
+          >
+            {{ t('graphics.image.cropReset') }}
+          </button>
+        </div>
+        <div class="field-col">
+          <label class="check-row">
+            <input
+              type="checkbox"
+              :checked="selected.flipX"
+              :disabled="busy"
+              @change="patch({ flipX: ($event.target as HTMLInputElement).checked })"
+            />
+            <span>{{ t('graphics.image.flip') }}</span>
+          </label>
+          <label class="check-row">
+            <input
+              type="checkbox"
+              :checked="selected.shadow"
+              :disabled="busy"
+              @change="patch({ shadow: ($event.target as HTMLInputElement).checked })"
+            />
+            <span>{{ t('graphics.image.shadow') }}</span>
+          </label>
         </div>
       </template>
 
@@ -913,6 +1056,39 @@ function symbolPath(s: GraphicSymbol): string {
 .pos-row .range {
   flex: 1;
   min-width: 0;
+}
+.pos-axis.crop-side {
+  width: 52px;
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-regular);
+}
+.crop-val {
+  width: 48px;
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text);
+  cursor: pointer;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.check-row input {
+  accent-color: var(--ds-accent);
 }
 .input.pos-num {
   width: 64px;
