@@ -6,6 +6,7 @@ import {
   graphicFrame,
   lookKey,
   renderGraphic,
+  stackOrder,
   type GraphicFrame,
   type GraphicOverlay,
 } from '@/lib/graphicOverlay'
@@ -98,7 +99,21 @@ const renderH = computed(() => {
 })
 
 // Bild-Cache je Grafik: nur neu zeichnen, wenn sich das Aussehen ändert.
-const cache = new Map<number, { key: string; url: string; width: number; height: number }>()
+const cache = new Map<
+  number,
+  { key: string; url: string; width: number; height: number; H: number }
+>()
+
+/**
+ * Fotos werden für die Vorschau nur in Anzeigegröße gezeichnet (große PNGs
+ * zu kodieren wäre beim Ziehen der Regler zu langsam); eingebrannt wird in
+ * voller Videohöhe. Formen bleiben pixelgenau in Videohöhe.
+ */
+function previewH(o: GraphicOverlay, H: number, boxH: number): number {
+  if (o.kind !== 'image') return H
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  return Math.min(H, Math.max(1, Math.round(boxH * dpr)))
+}
 
 function imageFor(o: GraphicOverlay, H: number) {
   const key = lookKey(o, H)
@@ -110,6 +125,7 @@ function imageFor(o: GraphicOverlay, H: number) {
     url: canvas.toDataURL('image/png'),
     width: canvas.width,
     height: canvas.height,
+    H,
   }
   cache.set(o.id, entry)
   return entry
@@ -133,9 +149,8 @@ const rendered = computed<Rendered[]>(() => {
   const bh = box.value.height
   if (!(bh > 0)) return []
   const H = renderH.value
-  const scale = bh / H
   const t = time.value
-  return props.overlays.flatMap((o) => {
+  return stackOrder(props.overlays).flatMap((o) => {
     const isSel = o.id === props.selectedId
     const animated = graphicFrame(o, t)
     // Angehalten: ruhende Ansicht für alle Grafiken im Zeitbereich (wie bei Texten).
@@ -144,7 +159,8 @@ const rendered = computed<Rendered[]>(() => {
         ? { visible: animated.visible, opacity: 1, dy: 0 }
         : animated
     if (!frame.visible && !isSel) return []
-    const img = imageFor(o, H)
+    const img = imageFor(o, previewH(o, H, bh))
+    const scale = bh / img.H
     return [
       {
         o,

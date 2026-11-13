@@ -10,6 +10,7 @@
  */
 
 import { fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
+import { getImageAsset, hasImageAsset } from './imageAssets'
 
 export const GRAPHIC_KINDS = [
   'rect',
@@ -19,6 +20,7 @@ export const GRAPHIC_KINDS = [
   'arrow',
   'symbol',
   'emoji',
+  'image',
 ] as const
 export type GraphicKind = (typeof GRAPHIC_KINDS)[number]
 
@@ -113,7 +115,25 @@ export interface GraphicData {
   /** Eckenrundung des Rechtecks, Anteil der kürzeren Seite [0, 0.5]. */
   radius: number
   animation: GraphicAnimation
+  /** Nur Bilder: ID des hochgeladenen Bildes (siehe imageAssets). */
+  image: string
+  /** Nur Bilder: Deckkraft des ganzen Bildes 0..1. */
+  opacity: number
+  /** Nur Bilder: Zuschnitt je Seite als Anteil des Originals [0, MAX_CROP]. */
+  cropL: number
+  cropT: number
+  cropR: number
+  cropB: number
+  /** Nur Bilder: waagerecht spiegeln. */
+  flipX: boolean
+  /** Nur Bilder: weicher Schatten. */
+  shadow: boolean
 }
+
+/** Zusätzliche Startwerte beim Hinzufügen. */
+export type GraphicAddExtra = Partial<
+  Pick<GraphicData, 'symbol' | 'emoji' | 'image' | 'w' | 'cropL' | 'cropT' | 'cropR' | 'cropB'>
+>
 
 export interface GraphicOverlay extends GraphicData {
   id: number
@@ -128,9 +148,16 @@ export const MAX_STROKE = 0.05
 export const MIN_LINE_STROKE = 0.002
 export const MIN_GRAPHIC_DURATION = 0.2
 export const MAX_EMOJI_LENGTH = 16
+/** Höchstens so viel darf je Seite abgeschnitten werden (Rest >= 10 %). */
+export const MAX_CROP = 0.45
+export const MIN_IMAGE_OPACITY = 0.05
+/** Schatten der Bilder: Weichheit und Versatz nach unten (Anteil der Bildhöhe). */
+export const IMAGE_SHADOW_BLUR = 0.025
+export const IMAGE_SHADOW_OFFSET = 0.008
 
 /** Hat diese Art eine eigene Höhe (sonst quadratisch bzw. Linie)? */
 export function hasHeight(kind: GraphicKind): boolean {
+  // Bilder: Höhe folgt aus dem Seitenverhältnis (nach Zuschnitt).
   return kind === 'rect' || kind === 'ellipse' || kind === 'bubble'
 }
 /** Kann diese Art gefüllt werden? */
@@ -157,6 +184,14 @@ export function defaultGraphic(kind: GraphicKind): Omit<GraphicData, 'start' | '
     fillOpacity: 0,
     radius: 0.12,
     animation: 'fade' as GraphicAnimation,
+    image: '',
+    opacity: 1,
+    cropL: 0,
+    cropT: 0,
+    cropR: 0,
+    cropB: 0,
+    flipX: false,
+    shadow: false,
   }
   switch (kind) {
     case 'rect':
@@ -187,6 +222,8 @@ export function defaultGraphic(kind: GraphicKind): Omit<GraphicData, 'start' | '
       }
     case 'emoji':
       return { ...base, w: 0.16 }
+    case 'image':
+      return { ...base, w: 0.5, stroke: '#ffffff', strokeWidth: 0, radius: 0 }
     default: {
       const never: never = kind
       throw new Error(`Unbekannte Grafik: ${String(never)}`)
@@ -214,6 +251,14 @@ export function clampGraphic<T extends GraphicData>(g: T): T {
     radius: c(g.radius, 0, 0.5),
     start: Math.max(0, Number.isFinite(g.start) ? g.start : 0),
     emoji: Array.from(g.emoji).slice(0, MAX_EMOJI_LENGTH).join(''),
+    image: typeof g.image === 'string' ? g.image : '',
+    opacity: Number.isFinite(g.opacity) ? c(g.opacity, MIN_IMAGE_OPACITY, 1) : 1,
+    cropL: Number.isFinite(g.cropL) ? c(g.cropL, 0, MAX_CROP) : 0,
+    cropT: Number.isFinite(g.cropT) ? c(g.cropT, 0, MAX_CROP) : 0,
+    cropR: Number.isFinite(g.cropR) ? c(g.cropR, 0, MAX_CROP) : 0,
+    cropB: Number.isFinite(g.cropB) ? c(g.cropB, 0, MAX_CROP) : 0,
+    flipX: g.flipX === true,
+    shadow: g.shadow === true,
   }
 }
 
@@ -221,6 +266,7 @@ export function clampGraphic<T extends GraphicData>(g: T): T {
 export function isValidGraphic(g: GraphicData, duration: number): boolean {
   const end = duration > 0 ? Math.min(g.end, duration) : g.end
   if (g.kind === 'emoji' && !g.emoji.trim()) return false
+  if (g.kind === 'image' && !hasImageAsset(g.image)) return false
   return end - Math.max(0, g.start) >= MIN_GRAPHIC_DURATION
 }
 
@@ -237,6 +283,31 @@ export interface Extent {
 /** Pfeilspitze: Länge/halbe Breite relativ zur Linienstärke. */
 export function arrowHead(sw: number): { len: number; half: number } {
   return { len: sw * 3.2, half: sw * 2.2 }
+}
+
+/**
+ * Bild nach Zuschnitt: Ausschnitt im Original (px) und Zielgröße (px) für
+ * Bildhöhe `H`. Ohne geladenes Bild: quadratischer Platzhalter.
+ */
+export function imageGeometry(
+  g: GraphicData,
+  H: number,
+): { sx: number; sy: number; sw: number; sh: number; dw: number; dh: number } {
+  const a = getImageAsset(g.image)
+  const iw = a?.width ?? 1
+  const ih = a?.height ?? 1
+  const sx = g.cropL * iw
+  const sy = g.cropT * ih
+  const sw = Math.max(1e-6, iw * (1 - g.cropL - g.cropR))
+  const sh = Math.max(1e-6, ih * (1 - g.cropT - g.cropB))
+  const dw = g.w * H
+  return { sx, sy, sw, sh, dw, dh: (dw * sh) / sw }
+}
+
+/** Höhe des (zugeschnittenen) Bildes als Anteil der Bildhöhe – zur Anzeige. */
+export function imageHeight(g: GraphicData): number {
+  const { dw, dh } = imageGeometry(g, 1)
+  return dw > 0 ? dh : 0
 }
 
 /** Sprechblasen-Zipfel relativ zur Körperhöhe. */
@@ -266,11 +337,22 @@ export function shapeExtent(g: GraphicData, H: number): Extent {
       return box(w / 2 + sw + (SYMBOL_LINE / 48) * w, w / 2 + sw + (SYMBOL_LINE / 48) * w)
     case 'emoji':
       return box(w / 2, w / 2)
+    case 'image': {
+      // Rahmen liegt außen um das Bild (verdeckt nichts davon).
+      const { dw, dh } = imageGeometry(g, H)
+      return box(dw / 2 + sw, dh / 2 + sw)
+    }
     default: {
       const never: never = g.kind
       throw new Error(`Unbekannte Grafik: ${String(never)}`)
     }
   }
+}
+
+/** Zusätzlicher Rand (px) je Seite für den Bild-Schatten. */
+export function shadowPad(g: GraphicData, H: number): number {
+  if (g.kind !== 'image' || !g.shadow) return 0
+  return Math.ceil((IMAGE_SHADOW_BLUR * 1.5 + IMAGE_SHADOW_OFFSET) * H)
 }
 
 /**
@@ -408,6 +490,49 @@ function drawLine(ctx: CanvasRenderingContext2D, g: GraphicData, H: number): voi
   }
 }
 
+/**
+ * Bild ungedreht auf ein eigenes Canvas: Rahmen (außen, abgerundet) + Bild
+ * mit Zuschnitt, Eckenrundung und Spiegelung. Transparenz bleibt erhalten.
+ */
+function composeImage(g: GraphicData, H: number): HTMLCanvasElement {
+  const { sx, sy, sw, sh, dw, dh } = imageGeometry(g, H)
+  const bw = g.strokeWidth * H
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.ceil(dw + 2 * bw))
+  c.height = Math.max(1, Math.ceil(dh + 2 * bw))
+  const ctx = c.getContext('2d')
+  if (!ctx) throw new Error('Canvas nicht verfügbar.')
+  ctx.translate(c.width / 2, c.height / 2)
+  const r = g.radius * Math.min(dw, dh)
+  if (bw > 0) {
+    // Ring zwischen äußerem und innerem Rechteck (bei transparenten PNGs
+    // scheint so keine Rahmenfarbe durch das Bild).
+    ctx.beginPath()
+    roundedRectPath(ctx, -dw / 2 - bw, -dh / 2 - bw, dw + 2 * bw, dh + 2 * bw, r > 0 ? r + bw : 0)
+    roundedRectPath(ctx, -dw / 2, -dh / 2, dw, dh, r)
+    ctx.fillStyle = g.stroke
+    ctx.fill('evenodd')
+  }
+  ctx.save()
+  if (r > 0) {
+    ctx.beginPath()
+    roundedRectPath(ctx, -dw / 2, -dh / 2, dw, dh, r)
+    ctx.clip()
+  }
+  if (g.flipX) ctx.scale(-1, 1)
+  const asset = getImageAsset(g.image)
+  if (asset) {
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(asset.source, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh)
+  } else {
+    ctx.fillStyle = 'rgba(128,128,128,0.6)'
+    ctx.fillRect(-dw / 2, -dh / 2, dw, dh)
+  }
+  ctx.restore()
+  return c
+}
+
 /** Emoji-Maße aus der Schrift: Ausdehnung um die optische Mitte. */
 function emojiMetrics(
   ctx: CanvasRenderingContext2D,
@@ -445,6 +570,10 @@ export function renderGraphic(g: GraphicData, H: number): HTMLCanvasElement {
   const emoji = g.kind === 'emoji' ? emojiMetrics(ctx0, g, H) : null
   const extent = emoji ? emoji.extent : shapeExtent(g, H)
   const size = canvasSize(extent, g.rotation)
+  // Schatten wird nicht mitgedreht -> gleicher Rand ringsum (bleibt zentriert).
+  const pad = shadowPad(g, H)
+  size.width += 2 * pad
+  size.height += 2 * pad
   canvas.width = size.width
   canvas.height = size.height
   const ctx = canvas.getContext('2d')!
@@ -482,6 +611,18 @@ export function renderGraphic(g: GraphicData, H: number): HTMLCanvasElement {
       ctx.textBaseline = 'alphabetic'
       ctx.fillText(g.emoji, emoji!.dx, emoji!.dy)
       break
+    case 'image': {
+      const img = composeImage(g, H)
+      ctx.globalAlpha = g.opacity
+      if (g.shadow) {
+        // Schatten folgt dem Alphakanal (auch bei freigestellten Logos).
+        ctx.shadowColor = 'rgba(0,0,0,0.55)'
+        ctx.shadowBlur = IMAGE_SHADOW_BLUR * H
+        ctx.shadowOffsetY = IMAGE_SHADOW_OFFSET * H
+      }
+      ctx.drawImage(img, -img.width / 2, -img.height / 2)
+      break
+    }
     default: {
       const never: never = g.kind
       throw new Error(`Unbekannte Grafik: ${String(never)}`)
@@ -505,7 +646,24 @@ export function lookKey(g: GraphicData, H: number): string {
     g.fill,
     g.fillOpacity,
     g.radius,
+    g.image,
+    g.opacity,
+    g.cropL,
+    g.cropT,
+    g.cropR,
+    g.cropB,
+    g.flipX,
+    g.shadow,
   ].join('|')
+}
+
+/**
+ * Ebenenreihenfolge: Bilder ganz unten (Formen/Pfeile markieren darauf),
+ * sonst Reihenfolge der Liste. Texte liegen auf dem Server immer obenauf.
+ * Vorschau und Einbrennen nutzen dieselbe Reihenfolge.
+ */
+export function stackOrder<T extends Pick<GraphicData, 'kind'>>(list: readonly T[]): T[] {
+  return [...list.filter((g) => g.kind === 'image'), ...list.filter((g) => g.kind !== 'image')]
 }
 
 // --- Animation (Vorschau, identisch mit den FFmpeg-Filtern des Servers) ------
@@ -555,6 +713,17 @@ export interface ServerGraphic {
   start: number
   end: number
   animation: GraphicAnimation
+}
+
+/** Größtes PNG, das der Server annimmt (Bytes, dekodiert; wie server MAX_GRAPHIC_BYTES). */
+export const MAX_SERVER_GRAPHIC_BYTES = 16 * 1024 * 1024
+
+/** Dekodierte PNG-Größe (Bytes) aus der Data-URL. */
+export function serverGraphicBytes(g: Pick<ServerGraphic, 'png'>): number {
+  const i = g.png.indexOf(',')
+  const b64 = i >= 0 ? g.png.slice(i + 1) : g.png
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0
+  return Math.floor((b64.length * 3) / 4) - pad
 }
 
 /** Zeichnet die Grafik für die Videohöhe `H` und verpackt sie für den Server. */

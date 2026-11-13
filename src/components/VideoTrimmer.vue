@@ -21,8 +21,11 @@ import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
 import { isValidOverlay, toServerOverlay } from '@/lib/textOverlay'
 import {
   isValidGraphic,
+  stackOrder,
   toServerGraphic,
-  type GraphicData,
+  MAX_SERVER_GRAPHIC_BYTES,
+  serverGraphicBytes,
+  type GraphicAddExtra,
   type GraphicKind,
 } from '@/lib/graphicOverlay'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
@@ -591,10 +594,7 @@ function onAddText(): void {
 }
 
 /** Neue Form/Linie/Symbol/Emoji an der aktuellen Stelle (Video wird angehalten). */
-function onAddGraphic(
-  kind: GraphicKind,
-  extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>>,
-): void {
+function onAddGraphic(kind: GraphicKind, extra: GraphicAddExtra): void {
   const el = videoEl.value
   if (el && !el.paused) el.pause()
   const at = el?.currentTime ?? currentTime.value
@@ -629,7 +629,11 @@ async function onBurnText(): Promise<void> {
   try {
     const frameH = item.height || videoEl.value?.videoHeight || 0
     if (shapes.length && !(frameH > 0)) throw new Error(t('errors.graphicsUnsupported'))
-    const serverGraphics = shapes.map((g) => toServerGraphic(g, frameH))
+    // Bilder unten, Formen darüber (wie in der Vorschau), Texte ganz oben.
+    const serverGraphics = stackOrder(shapes).map((g) => toServerGraphic(g, frameH))
+    if (serverGraphics.some((g) => serverGraphicBytes(g) > MAX_SERVER_GRAPHIC_BYTES)) {
+      throw new Error(t('errors.imageTooLarge'))
+    }
     const { media, blob } = await burnText(item.mediaId, list.map(toServerOverlay), serverGraphics)
     library.replaceWithResult(item.id, media, resultFile(blob, media.name))
     // Texte und Grafiken sind jetzt Teil des Bildes.

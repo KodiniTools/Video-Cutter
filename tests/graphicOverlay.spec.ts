@@ -6,11 +6,24 @@ import {
   defaultGraphic,
   graphicFrame,
   isValidGraphic,
+  imageHeight,
   lookKey,
+  serverGraphicBytes,
+  shadowPad,
   shapeExtent,
+  stackOrder,
+  MAX_CROP,
   MAX_GRAPHICS,
+  MIN_IMAGE_OPACITY,
   type GraphicData,
 } from '@/lib/graphicOverlay'
+import {
+  ImageAssetError,
+  checkImageFile,
+  hasImageAsset,
+  pruneImageAssets,
+  registerImageAssetForTest,
+} from '@/lib/imageAssets'
 import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
 
 const g = (p: Partial<GraphicData> = {}): GraphicData => ({
@@ -120,5 +133,82 @@ describe('Grafik-Store', () => {
     for (let i = 0; i < MAX_GRAPHICS; i++) s.add('ellipse', 0, 10)
     expect(s.canAdd).toBe(false)
     expect(s.add('ellipse', 0, 10)).toBeNull()
+  })
+})
+
+describe('Bilder (hochgeladene JPEG/PNG/WebP)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    pruneImageAssets([])
+    registerImageAssetForTest({
+      id: 'imgA',
+      name: 'logo.png',
+      source: {} as CanvasImageSource,
+      width: 400,
+      height: 200,
+    })
+  })
+
+  const img = (p: Partial<GraphicData> = {}) =>
+    g({ ...defaultGraphic('image'), image: 'imgA', ...p })
+
+  it('Höhe folgt dem Seitenverhältnis nach dem Zuschnitt, Rahmen liegt außen', () => {
+    expect(imageHeight(img({ w: 0.5 }))).toBeCloseTo(0.25)
+    // Rechts 25 % weg -> 300x200 -> Höhe = 0.5 * 200/300
+    expect(imageHeight(img({ w: 0.5, cropR: 0.25 }))).toBeCloseTo(1 / 3)
+    const e = shapeExtent(img({ w: 0.5, strokeWidth: 0.01 }), 1000)
+    expect(e).toEqual({ left: -260, right: 260, top: -135, bottom: 135 })
+  })
+
+  it('Schatten vergrößert das Bild symmetrisch, nur wenn aktiv', () => {
+    expect(shadowPad(img(), 1000)).toBe(0)
+    expect(shadowPad(img({ shadow: true }), 1000)).toBeGreaterThan(0)
+    expect(shadowPad(g({ shadow: true }), 1000)).toBe(0) // nur Bilder
+  })
+
+  it('clamp: Zuschnitt, Deckkraft, Schalter', () => {
+    const c = clampGraphic(
+      img({ cropL: 0.9, cropT: -1, opacity: 0, flipX: 'x' as unknown as boolean }),
+    )
+    expect(c).toMatchObject({ cropL: MAX_CROP, cropT: 0, opacity: MIN_IMAGE_OPACITY, flipX: false })
+  })
+
+  it('ungültig ohne geladenes Bild; Look-Schlüssel enthält Bildwerte', () => {
+    expect(isValidGraphic(img(), 10)).toBe(true)
+    expect(isValidGraphic(img({ image: 'fehlt' }), 10)).toBe(false)
+    expect(lookKey(img({ cropL: 0.1 }), 720)).not.toBe(lookKey(img(), 720))
+    expect(lookKey(img({ opacity: 0.5 }), 720)).not.toBe(lookKey(img(), 720))
+  })
+
+  it('Ebenen: Bilder unten, sonst Reihenfolge der Liste', () => {
+    const list = [g({ kind: 'arrow' }), img(), g({ kind: 'emoji' }), img({ w: 0.2 })]
+    expect(stackOrder(list).map((o) => o.kind)).toEqual(['image', 'image', 'arrow', 'emoji'])
+  })
+
+  it('Store gibt Bilder frei, die keine Grafik mehr nutzt', () => {
+    const s = useGraphicOverlayStore()
+    s.setItem(1)
+    const a = s.add('image', 0, 10, { image: 'imgA', w: 0.4 })!
+    expect(a.w).toBe(0.4)
+    s.duplicate(a.id)
+    s.remove(a.id)
+    expect(hasImageAsset('imgA')).toBe(true) // Kopie nutzt es noch
+    s.clearItem(1)
+    expect(hasImageAsset('imgA')).toBe(false)
+  })
+
+  it('PNG-Größe aus der Data-URL', () => {
+    expect(serverGraphicBytes({ png: 'data:image/png;base64,AAAA' })).toBe(3)
+    expect(serverGraphicBytes({ png: 'data:image/png;base64,AAA=' })).toBe(2)
+  })
+})
+
+describe('checkImageFile', () => {
+  it('nur JPEG/PNG/WebP bis 30 MB', () => {
+    expect(() => checkImageFile({ type: 'image/webp', size: 1000 })).not.toThrow()
+    expect(() => checkImageFile({ type: 'image/gif', size: 1000 })).toThrow(ImageAssetError)
+    expect(() => checkImageFile({ type: 'image/png', size: 31 * 1024 * 1024 })).toThrow(
+      ImageAssetError,
+    )
   })
 })

@@ -97,8 +97,9 @@ textRouter.get('/fonts', (_req: Request, res: Response) => {
  */
 textRouter.post(
   '/text',
-  // Grafiken kommen als Base64-PNGs (max. 24 MB dekodiert, siehe graphicOverlay).
-  express.json({ limit: '40mb' }),
+  // Grafiken/Bilder kommen als Base64-PNGs (max. 48 MB dekodiert, siehe
+  // graphicOverlay; Base64 = 4/3 davon + Texte).
+  express.json({ limit: '70mb' }),
   asyncHandler(async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>
     if (!isMediaId(body.mediaId)) throw new ValidationError('Kein Video angegeben.')

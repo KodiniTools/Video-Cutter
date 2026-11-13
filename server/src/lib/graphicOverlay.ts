@@ -2,7 +2,7 @@ import { ValidationError } from './validate'
 import { fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
 
 /**
- * Grafik-Einblendungen (Formen, Linien, Pfeile, Symbole, Emojis).
+ * Grafik-Einblendungen (Formen, Linien, Pfeile, Symbole, Emojis, Bilder).
  *
  * Der Browser zeichnet jede Grafik selbst als PNG (Canvas) – dasselbe Bild,
  * das er auch als Vorschau zeigt. Der Server prüft die PNGs und legt sie mit
@@ -16,10 +16,10 @@ export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide'] as const
 export type GraphicAnimation = (typeof GRAPHIC_ANIMATIONS)[number]
 
 export const MAX_GRAPHICS = 50
-/** Größte einzelne PNG-Datei (Bytes, dekodiert). */
-export const MAX_GRAPHIC_BYTES = 4 * 1024 * 1024
+/** Größte einzelne PNG-Datei (Bytes, dekodiert) – Fotos in voller Bildgröße. */
+export const MAX_GRAPHIC_BYTES = 16 * 1024 * 1024
 /** Alle PNGs eines Auftrags zusammen (Bytes, dekodiert). */
-export const MAX_GRAPHICS_TOTAL_BYTES = 24 * 1024 * 1024
+export const MAX_GRAPHICS_TOTAL_BYTES = 48 * 1024 * 1024
 /** Größte Kantenlänge eines PNGs in Pixeln. */
 export const MAX_GRAPHIC_DIM = 8192
 export const MIN_GRAPHIC_DURATION = 0.2
