@@ -4,6 +4,7 @@ import type { CutOperation, CropRect } from '@/stores/videoEditor'
 import { API_BASE } from '@/lib/apiBase'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 import type { TextOverlayData } from '@/lib/textOverlay'
+import type { ServerGraphic } from '@/lib/graphicOverlay'
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
 export const CUT_CANCELLED = 'CUT_CANCELLED'
@@ -31,6 +32,8 @@ export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
 
 /** Fehler-Kennung: Text einbrennen verlangt, aber das Backend kennt es nicht (veraltet). */
 export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
+/** Fehler-Kennung: Backend kann noch keine Grafiken (Formen/Emojis) einbrennen. */
+export const GRAPHICS_UNSUPPORTED = 'GRAPHICS_UNSUPPORTED'
 
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
@@ -569,23 +572,46 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
 }
 
 /**
+ * Kennt das Backend Grafiken? Fragt /api/health (Feature „graphics“). Ein
+ * nicht erreichbarer Health-Endpunkt gilt als „unbekannt“ (true) – die
+ * Job-Antwort wird ohnehin noch einmal geprüft.
+ */
+async function backendSupportsGraphics(signal?: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { signal })
+    if (!res.ok) return true
+    const data = (await res.json()) as { features?: unknown }
+    return Array.isArray(data.features) ? data.features.includes('graphics') : false
+  } catch (e) {
+    if (signal?.aborted) throw e
+    return true
+  }
+}
+
+/**
  * Startet POST /api/text und liefert die Job-ID. Ein altes Backend (Route
- * unbekannt -> 404, oder fehlende Bestätigung `text`) ergibt TEXT_UNSUPPORTED.
+ * unbekannt -> 404, oder fehlende Bestätigung `text`) ergibt TEXT_UNSUPPORTED;
+ * sind Grafiken dabei und fehlt die Bestätigung `graphics`, GRAPHICS_UNSUPPORTED
+ * (ein altes Backend würde sie sonst stillschweigend weglassen).
  * Exportiert für Tests.
  */
 export async function startTextJob(
   mediaId: string,
   texts: TextOverlayData[],
   signal?: AbortSignal,
+  graphics: ServerGraphic[] = [],
 ): Promise<string> {
+  if (graphics.length && !(await backendSupportsGraphics(signal))) {
+    throw new Error(GRAPHICS_UNSUPPORTED)
+  }
   const res = await fetch(`${API_BASE}/api/text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mediaId, texts }),
+    body: JSON.stringify(graphics.length ? { mediaId, texts, graphics } : { mediaId, texts }),
     signal,
   })
   const raw = await res.text()
-  let data: { jobId?: unknown; text?: unknown; error?: unknown } = {}
+  let data: { jobId?: unknown; text?: unknown; graphics?: unknown; error?: unknown } = {}
   try {
     data = JSON.parse(raw) as typeof data
   } catch {
@@ -603,14 +629,23 @@ export async function startTextJob(
     await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
     throw new Error(TEXT_UNSUPPORTED)
   }
+  if (graphics.length && data.graphics !== true) {
+    await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
+    throw new Error(GRAPHICS_UNSUPPORTED)
+  }
   return data.jobId
 }
 
 /**
- * Brennt Texte in ein Bibliotheks-Video ein. Das Ergebnis wird auf dem Server
- * als neues Video gespeichert und (wie beim Schneiden) zurückgegeben.
+ * Brennt Texte (und optional Grafiken) in ein Bibliotheks-Video ein. Das
+ * Ergebnis wird auf dem Server als neues Video gespeichert und (wie beim
+ * Schneiden) zurückgegeben.
  */
-async function burnText(mediaId: string, texts: TextOverlayData[]): Promise<MediaCutResult> {
+async function burnText(
+  mediaId: string,
+  texts: TextOverlayData[],
+  graphics: ServerGraphic[] = [],
+): Promise<MediaCutResult> {
   return withProcessing(async () => {
     // Kein Upload: direkt in die Verarbeitungsphase.
     phase.value = 'process'
@@ -622,7 +657,7 @@ async function burnText(mediaId: string, texts: TextOverlayData[]): Promise<Medi
     }
     let jobId: string
     try {
-      jobId = await startTextJob(mediaId, texts, controller.signal)
+      jobId = await startTextJob(mediaId, texts, controller.signal, graphics)
     } catch (e) {
       if (cancelled) throw new Error(CUT_CANCELLED)
       throw e

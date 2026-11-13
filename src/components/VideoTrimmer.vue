@@ -13,9 +13,17 @@ import {
   MUSIC_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
   TEXT_UNSUPPORTED,
+  GRAPHICS_UNSUPPORTED,
 } from '@/composables/useServerCut'
 import { useTextOverlayStore } from '@/stores/textOverlays'
-import { toServerOverlay } from '@/lib/textOverlay'
+import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
+import { isValidOverlay, toServerOverlay } from '@/lib/textOverlay'
+import {
+  isValidGraphic,
+  toServerGraphic,
+  type GraphicData,
+  type GraphicKind,
+} from '@/lib/graphicOverlay'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
 import { formatTimeMs, formatNudge, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
@@ -26,6 +34,8 @@ import CropOverlay from './CropOverlay.vue'
 import LibraryList from './LibraryList.vue'
 import TextOverlayLayer from './TextOverlayLayer.vue'
 import TextPanel from './TextPanel.vue'
+import GraphicOverlayLayer from './GraphicOverlayLayer.vue'
+import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
@@ -77,12 +87,22 @@ const {
 
 // Text-Einblendungen des markierten Videos.
 const texts = useTextOverlayStore()
+// Formen, Linien, Symbole, Emojis des markierten Videos.
+const graphics = useGraphicOverlayStore()
 // KI-Assistent (Transkript, Schnittvorschläge je Video).
 const ai = useAiStore()
 watch(
   () => selected.value?.id ?? null,
-  (id) => texts.setItem(id),
+  (id) => {
+    texts.setItem(id)
+    graphics.setItem(id)
+  },
   { immediate: true },
+)
+
+const textsValid = computed(() => texts.overlays.every((o) => isValidOverlay(o, duration.value)))
+const graphicsValid = computed(() =>
+  graphics.overlays.every((g) => isValidGraphic(g, duration.value)),
 )
 
 const { animation, duration: animDuration, transitionName, animations } = useAnimationPref()
@@ -438,6 +458,7 @@ function showJobError(e: unknown): void {
     [MUSIC_UNSUPPORTED]: 'errors.musicUnsupported',
     [MEDIA_UNSUPPORTED]: 'errors.mediaUnsupported',
     [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
+    [GRAPHICS_UNSUPPORTED]: 'errors.graphicsUnsupported',
   }
   store.setError(known[msg] ? t(known[msg]) : msg)
 }
@@ -527,21 +548,53 @@ function onAddText(): void {
   const el = videoEl.value
   if (el && !el.paused) el.pause()
   const at = el?.currentTime ?? currentTime.value
+  graphics.select(null)
   texts.add(at, duration.value, t('text.defaultText'))
 }
 
-/** „Text einbrennen": alle Texte ins markierte Video; Ergebnis ersetzt es. */
+/** Neue Form/Linie/Symbol/Emoji an der aktuellen Stelle (Video wird angehalten). */
+function onAddGraphic(
+  kind: GraphicKind,
+  extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>>,
+): void {
+  const el = videoEl.value
+  if (el && !el.paused) el.pause()
+  const at = el?.currentTime ?? currentTime.value
+  texts.select(null)
+  graphics.add(kind, at, duration.value, extra)
+}
+
+/** Auswahl im Video: immer nur ein Element (Text ODER Grafik) markiert. */
+function onSelectText(id: number): void {
+  graphics.select(null)
+  texts.select(id)
+}
+function onSelectGraphic(id: number): void {
+  texts.select(null)
+  graphics.select(id)
+}
+
+/**
+ * „Einbrennen": alle Texte und Grafiken ins markierte Video; Ergebnis ersetzt
+ * es. Grafiken werden für die echte Videohöhe gezeichnet (wie die Vorschau).
+ */
 async function onBurnText(): Promise<void> {
   const item = selected.value
   const list = texts.overlays
-  if (!item?.mediaId || item.status !== 'ready' || !list.length || busy.value) return
+  const shapes = graphics.overlays
+  if (!item?.mediaId || item.status !== 'ready' || busy.value) return
+  if (!list.length && !shapes.length) return
   store.setError('')
   activeJob.value = 'text'
   try {
-    const { media, blob } = await burnText(item.mediaId, list.map(toServerOverlay))
+    const frameH = item.height || videoEl.value?.videoHeight || 0
+    if (shapes.length && !(frameH > 0)) throw new Error(t('errors.graphicsUnsupported'))
+    const serverGraphics = shapes.map((g) => toServerGraphic(g, frameH))
+    const { media, blob } = await burnText(item.mediaId, list.map(toServerOverlay), serverGraphics)
     library.replaceWithResult(item.id, media, resultFile(blob, media.name))
-    // Die Texte sind jetzt Teil des Bildes.
+    // Texte und Grafiken sind jetzt Teil des Bildes.
     texts.clearItem(item.id)
+    graphics.clearItem(item.id)
     lastResultId.value = item.id
   } catch (e) {
     showJobError(e)
@@ -554,6 +607,7 @@ async function onBurnText(): Promise<void> {
 async function onRemoveItem(id: number): Promise<void> {
   if (lastResultId.value === id) lastResultId.value = null
   texts.clearItem(id)
+  graphics.clearItem(id)
   ai.clearItem(id)
   try {
     await library.remove(id)
@@ -929,13 +983,23 @@ async function downloadResult(): Promise<void> {
               @durationchange="onDurationChange"
               @timeupdate="onTimeUpdate"
             ></video>
+            <GraphicOverlayLayer
+              v-if="graphics.overlays.length"
+              :overlays="graphics.overlays"
+              :selected-id="graphics.selectedId"
+              :target="videoEl"
+              :frame-height="selected?.height ?? 0"
+              :disabled="busy"
+              @select="onSelectGraphic"
+              @move="(id, pos) => graphics.update(id, pos)"
+            />
             <TextOverlayLayer
               v-if="texts.overlays.length"
               :overlays="texts.overlays"
               :selected-id="texts.selectedId"
               :target="videoEl"
               :disabled="busy"
-              @select="texts.select"
+              @select="onSelectText"
               @move="(id, pos) => texts.update(id, pos)"
             />
             <CropOverlay
@@ -1286,7 +1350,24 @@ async function downloadResult(): Promise<void> {
             :burning="activeJob === 'text'"
             :progress-label="`${statusLabel} ${progress}%`"
             :can-burn="selected?.status === 'ready' && !!selected?.mediaId"
+            :graphic-count="graphics.overlays.length"
+            :graphics-invalid="!graphicsValid"
             @add="onAddText"
+            @seek="seekTo"
+            @burn="onBurnText"
+          />
+
+          <!-- Formen, Linien, Symbole, Emojis einblenden -->
+          <GraphicPanel
+            :duration="duration"
+            :current-time="currentTime"
+            :busy="busy"
+            :burning="activeJob === 'text'"
+            :progress-label="`${statusLabel} ${progress}%`"
+            :can-burn="selected?.status === 'ready' && !!selected?.mediaId"
+            :text-count="texts.overlays.length"
+            :texts-valid="textsValid"
+            @add="onAddGraphic"
             @seek="seekTo"
             @burn="onBurnText"
           />

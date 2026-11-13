@@ -7,6 +7,8 @@ import {
   FORMAT_UNSUPPORTED,
   MUSIC_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
+  GRAPHICS_UNSUPPORTED,
+  startTextJob,
 } from '@/composables/useServerCut'
 
 describe('parseJobStart', () => {
@@ -416,5 +418,59 @@ describe('useServerCut – Video-Bibliothek (cutMedia)', () => {
     await expect(
       cutMedia({ mediaId: A, segments: [{ start: 0, duration: 5 }], mode: 'copy' }),
     ).rejects.toThrow(MEDIA_UNSUPPORTED)
+  })
+})
+
+describe('startTextJob – Grafiken (Formen/Emojis)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+  const graphic = {
+    png: 'data:image/png;base64,AAAA',
+    x: 0.5,
+    y: 0.5,
+    start: 0,
+    end: 2,
+    animation: 'none' as const,
+  }
+
+  beforeEach(() => {
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('ohne Grafiken: kein Health-Abruf, Anfrage unverändert', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"jobId":"t1","text":true}', { status: 202 }))
+    await expect(startTextJob('m1', [])).resolves.toBe('t1')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      mediaId: 'm1',
+      texts: [],
+    })
+  })
+
+  it('altes Backend (Feature fehlt in /api/health) -> GRAPHICS_UNSUPPORTED, kein Job', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"features":["text"]}', { status: 200 }))
+    await expect(startTextJob('m1', [], undefined, [graphic])).rejects.toThrow(GRAPHICS_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('fehlende Bestätigung in der Job-Antwort -> Job abbrechen, GRAPHICS_UNSUPPORTED', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["graphics"]}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"jobId":"t2","text":true}', { status: 202 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    await expect(startTextJob('m1', [], undefined, [graphic])).rejects.toThrow(GRAPHICS_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/t2', { method: 'DELETE' })
+  })
+
+  it('neues Backend: sendet Grafiken mit', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["graphics"]}', { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response('{"jobId":"t3","text":true,"graphics":true}', { status: 202 }),
+      )
+    await expect(startTextJob('m1', [], undefined, [graphic])).resolves.toBe('t3')
+    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
+    expect(body.graphics).toEqual([graphic])
   })
 })
