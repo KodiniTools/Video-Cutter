@@ -17,7 +17,7 @@ import {
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { toServerOverlay } from '@/lib/textOverlay'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
-import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
+import { formatTimeMs, formatNudge, parseTimeInput, toMs } from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import { readVideoDuration } from '@/lib/videoMeta'
 import Timeline from './Timeline.vue'
@@ -362,16 +362,16 @@ const maxMs = computed(() => toMs(duration.value))
 
 /** Schrittweite der ▲▼-Spinner an den Zeitfeldern (ms). */
 const SPINNER_MS = 10
-/** Feinjustierung in Millisekunden (±1 / ±10 / ±100 ms). */
-const nudges = [-100, -10, -1, 1, 10, 100] as const
+/** Feinjustierung in Millisekunden (±1 / ±10 / ±100 ms / ±1 s). */
+const nudges = [-1000, -100, -10, -1, 1, 10, 100, 1000] as const
 function nudgeStart(deltaMs: number): void {
   applyStart(startTime.value + deltaMs / 1000)
 }
 function nudgeEnd(deltaMs: number): void {
   applyEnd(endTime.value + deltaMs / 1000)
 }
-function fmtDelta(d: number): string {
-  return `${d > 0 ? '+' : ''}${d}`
+function fmtNudge(d: number): string {
+  return formatNudge(d, t('time.ms'), t('time.s'))
 }
 
 // Gedrückt-halten der Spinner: sofort ein Schritt, nach kurzer Verzögerung
@@ -1068,10 +1068,11 @@ async function downloadResult(): Promise<void> {
                     v-for="d in nudges"
                     :key="`s${d}`"
                     class="btn tiny nudge"
+                    :class="d < 0 ? 'neg' : 'pos'"
                     type="button"
                     @click="nudgeStart(d)"
                   >
-                    {{ fmtDelta(d) }}{{ t('time.ms') }}
+                    {{ fmtNudge(d) }}
                   </button>
                 </div>
               </div>
@@ -1147,10 +1148,11 @@ async function downloadResult(): Promise<void> {
                     v-for="d in nudges"
                     :key="`e${d}`"
                     class="btn tiny nudge"
+                    :class="d < 0 ? 'neg' : 'pos'"
                     type="button"
                     @click="nudgeEnd(d)"
                   >
-                    {{ fmtDelta(d) }}{{ t('time.ms') }}
+                    {{ fmtNudge(d) }}
                   </button>
                 </div>
               </div>
@@ -1758,6 +1760,22 @@ async function downloadResult(): Promise<void> {
   font-size: 11px;
   font-family: var(--ds-font-mono);
   font-variant-numeric: tabular-nums;
+}
+/* Rückwärts leicht rot, vorwärts leicht grün getönt. Die Schrift bleibt
+   --ds-text (Kontrast ≥ 9:1 auf beiden Tönungen, hell wie dunkel). */
+.btn.tiny.nudge.neg {
+  background: color-mix(in srgb, var(--ds-danger) 16%, var(--ds-surface-2));
+  border-color: color-mix(in srgb, var(--ds-danger) 45%, var(--ds-border-strong));
+}
+.btn.tiny.nudge.pos {
+  background: color-mix(in srgb, var(--ds-success) 16%, var(--ds-surface-2));
+  border-color: color-mix(in srgb, var(--ds-success) 45%, var(--ds-border-strong));
+}
+.btn.tiny.nudge.neg:hover {
+  border-color: var(--ds-danger);
+}
+.btn.tiny.nudge.pos:hover {
+  border-color: var(--ds-success);
 }
 .sel {
   display: flex;

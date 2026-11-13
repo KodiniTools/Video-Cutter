@@ -58,3 +58,14 @@ export function parseTimeInput(input: string): number | null {
   if (seconds >= 60 || minutes >= 60) return null
   return (hours * 60 + minutes) * 60 + seconds
 }
+
+/**
+ * Beschriftung eines Feinschritts (Delta in ms) mit Vorzeichen:
+ * volle Sekunden als `+1s`, sonst Millisekunden wie `-100ms`.
+ */
+export function formatNudge(deltaMs: number, msUnit = 'ms', sUnit = 's'): string {
+  const sign = deltaMs > 0 ? '+' : ''
+  return Math.abs(deltaMs) >= 1000 && deltaMs % 1000 === 0
+    ? `${sign}${deltaMs / 1000}${sUnit}`
+    : `${sign}${deltaMs}${msUnit}`
+}
