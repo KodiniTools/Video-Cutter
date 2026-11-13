@@ -30,6 +30,7 @@ const messages = {
     time: {
       placeholder: 'mm:ss.mmm',
       ms: 'ms',
+      s: 's',
       valid: '✓ gültig',
       invalid: 'Ende muss nach dem Start liegen.',
       reset: 'Auswahl zurücksetzen',
@@ -239,6 +240,7 @@ const messages = {
     time: {
       placeholder: 'mm:ss.mmm',
       ms: 'ms',
+      s: 's',
       valid: '✓ valid',
       invalid: 'End must be after start.',
       reset: 'Reset selection',

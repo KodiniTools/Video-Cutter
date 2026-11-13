@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
+import { formatNudge, formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
 
 describe('formatTimeMs', () => {
   it('formatiert mm:ss.mmm', () => {
@@ -40,5 +40,16 @@ describe('parseTimeInput', () => {
     expect(parseTimeInput('1:2:3:4')).toBeNull()
     expect(parseTimeInput('00:75')).toBeNull()
     expect(parseTimeInput('-1')).toBeNull()
+  })
+})
+
+describe('formatNudge', () => {
+  it('Millisekunden mit Vorzeichen', () => {
+    expect(formatNudge(-100)).toBe('-100ms')
+    expect(formatNudge(1)).toBe('+1ms')
+  })
+  it('volle Sekunden als s', () => {
+    expect(formatNudge(-1000)).toBe('-1s')
+    expect(formatNudge(1000)).toBe('+1s')
   })
 })

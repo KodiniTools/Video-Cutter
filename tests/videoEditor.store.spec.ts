@@ -46,6 +46,19 @@ describe('videoEditor store', () => {
     expect(store.endTime).toBe(30)
   })
 
+  it('±1s-Schritte an den Rändern werden begrenzt', () => {
+    const store = loadVideo(30)
+    store.setStart(0.4)
+    store.setStart(store.startTime - 1) // -1s am Anfang
+    expect(store.startTime).toBe(0)
+    store.setEnd(29.6)
+    store.setEnd(store.endTime + 1) // +1s am Ende
+    expect(store.endTime).toBe(30)
+    store.setEnd(0.5)
+    store.setStart(store.startTime + 1) // +1s darf Ende nicht überholen
+    expect(store.startTime).toBeLessThan(store.endTime)
+  })
+
   it('setCurrentTime wird auf [0, duration] begrenzt', () => {
     const store = loadVideo(30)
     store.setCurrentTime(-5)
