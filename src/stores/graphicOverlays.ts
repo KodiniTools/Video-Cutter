@@ -139,6 +139,14 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     pruneUnusedImages()
   }
 
+  /** Übernimmt gespeicherte Grafiken (Projekt öffnen) mit neuen IDs. */
+  function importFor(id: number, list: GraphicOverlay[]): void {
+    setListFor(
+      id,
+      list.map((o) => clampGraphic({ ...o, id: nextId++ })),
+    )
+  }
+
   function clearItem(id: number): void {
     if (!(id in byItem.value)) return
     const next = { ...byItem.value }
@@ -163,6 +171,7 @@ export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
     clearItem,
     listFor,
     setListFor,
+    importFor,
     setRetainedImages,
   }
 })

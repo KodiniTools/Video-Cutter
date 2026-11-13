@@ -149,6 +149,14 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     }
   }
 
+  /** Übernimmt gespeicherte Texte (Projekt öffnen) mit neuen IDs. */
+  function importFor(id: number, list: TextOverlay[]): void {
+    setListFor(
+      id,
+      list.map((o) => ({ ...o, id: nextId++ })),
+    )
+  }
+
   /** Alle Texte eines Videos verwerfen (z. B. nach dem Einbrennen oder Löschen). */
   function clearItem(id: number): void {
     if (!(id in byItem.value)) return
@@ -173,5 +181,6 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     clearItem,
     listFor,
     setListFor,
+    importFor,
   }
 })

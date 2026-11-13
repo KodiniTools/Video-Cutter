@@ -68,6 +68,16 @@ Zusammenfügen laden nichts erneut hoch.
   wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`
   (Standard 20 GB, sonst 507). Die Bibliothek liegt im Arbeitsspeicher des
   Servers – ein Neustart des Backends löscht alle gespeicherten Videos.
+- **Projekte:** Die Karte „Projekte" speichert den ganzen Bearbeitungsstand
+  (Videos, Von/Bis, Auswahl/Ausschnitte, Texte, Formen, Bilder, Musik,
+  Ton-Blende, Übergänge, Ausgabeformat) unter einem Namen auf dem Server.
+  Das Projekt bekommt eigene Videokopien (Hardlink, sonst Kopie) in
+  `PROJECTS_DIR` (Standard `~/.video-cutter/projects`, bewusst außerhalb des
+  Backend-Ordners) – Auto-Aufräumen und Neustart betreffen es nicht.
+  Öffnen ersetzt die aktuelle Bearbeitung; der Rückgängig-Verlauf beginnt neu.
+  Gesamtlimit `MAX_PROJECTS_TOTAL_MB` (Standard 100 GB). Endpunkte:
+  `GET/POST /api/projects`, `GET/DELETE /api/projects/:id`,
+  `POST /api/projects/:id/open`, `GET/POST /api/projects/:id/assets/:sha256`.
 
 Backend: `POST /api/media` (multipart `video`) → `{ id, name, size, duration,
 width, height, hasAudio }`, `GET /api/media/:id`, `GET /api/media/:id/file`,

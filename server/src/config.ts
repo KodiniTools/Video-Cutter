@@ -66,6 +66,14 @@ export const config = {
   /** Obergrenze für alle gespeicherten Videos zusammen. */
   maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
 
+  /**
+   * Gespeicherte Projekte (Bearbeitungsstand + eigene Videokopien). Bewusst
+   * außerhalb des Backend-Ordners, den deploy.sh per rsync --delete spiegelt.
+   */
+  projectsDir: process.env.PROJECTS_DIR ?? path.join(os.homedir(), '.video-cutter', 'projects'),
+  /** Obergrenze für alle Projekte zusammen. */
+  maxProjectsTotalBytes: num('MAX_PROJECTS_TOTAL_MB', 100 * 1024) * 1024 * 1024,
+
   /** Erlaubte Origins für CORS. */
   allowedOrigins: list('ALLOWED_ORIGINS', [
     'https://kodinitools.com',
