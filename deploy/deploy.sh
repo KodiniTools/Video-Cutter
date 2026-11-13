@@ -21,6 +21,12 @@
 
 set -euo pipefail
 
+# Der gesamte Ablauf steckt in main(), das erst in der letzten Zeile aufgerufen
+# wird. So liest Bash das Skript vollständig ein, bevor "git reset --hard" es
+# (Schritt 1) austauscht – sonst liefe der Rest aus einer alten oder gemischten
+# Fassung weiter und neue Schritte (z. B. Schriften kopieren) würden fehlen.
+main() {
+
 # --- Konfiguration --------------------------------------------------------
 BRANCH="${BRANCH:-main}"
 BASE_PATH="${BASE_PATH:-/video-cutter/}"
@@ -154,11 +160,24 @@ else
   # Health-Check (nicht fatal): Port aus .env oder Default 9015.
   API_PORT="$(sed -n 's/^PORT=\([0-9]\+\).*/\1/p' "$API_DIR/.env" 2>/dev/null | head -n1)"
   API_PORT="${API_PORT:-9015}"
-  if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+  # Nach dem Reload braucht der Server einige Sekunden (u. a. eigene Schriften
+  # einlesen) -> bis zu 15 s auf eine Antwort warten statt sofort zu warnen.
+  API_OK=0
+  for _ in $(seq 1 15); do
+    if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+      API_OK=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$API_OK" == "1" ]]; then
     log "Backend gesund auf 127.0.0.1:${API_PORT}"
   else
-    log "WARNUNG: Health-Check auf 127.0.0.1:${API_PORT} fehlgeschlagen – 'pm2 logs video-cutter-api' prüfen."
+    log "WARNUNG: Health-Check auf 127.0.0.1:${API_PORT} nach 15 s fehlgeschlagen – 'pm2 logs video-cutter-api' prüfen."
   fi
 fi
 
 log "Deploy fertig (Frontend + Backend, Branch $BRANCH)"
+}
+
+main "$@"
