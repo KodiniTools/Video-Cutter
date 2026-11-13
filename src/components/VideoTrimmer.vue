@@ -28,6 +28,7 @@ import TextOverlayLayer from './TextOverlayLayer.vue'
 import TextPanel from './TextPanel.vue'
 import AiPanel from './AiPanel.vue'
 import { useAiStore } from '@/stores/ai'
+import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -608,6 +609,9 @@ function pickAnimation(id: (typeof animations)[number]['id'], close: () => void)
   animation.value = id
   close()
 }
+
+// Höhe der fixierten Website-Navigation -> --site-nav-offset (Sticky-Editor).
+useSiteNavOffset()
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
@@ -1504,6 +1508,21 @@ async function downloadResult(): Promise<void> {
   .editor-grid {
     grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(220px, 270px);
     grid-template-areas: 'left canvas right';
+  }
+}
+/* Breit und hoch genug: Der Editor (Mitte) bleibt beim Scrollen der Seitenleisten
+   stehen – direkt unter der fixierten Website-Navigation (--site-nav-offset, siehe
+   useSiteNavOffset). Das Video wird so begrenzt, dass der ganze Editor in das
+   Fenster passt. */
+@media (min-width: 1100px) and (min-height: 640px) {
+  .canvas {
+    position: sticky;
+    top: calc(var(--site-nav-offset, 0px) + 12px);
+    /* Menüs der Werkzeugleiste über den Seitenleisten halten. */
+    z-index: 2;
+  }
+  .player {
+    max-height: max(180px, min(52vh, calc(100dvh - var(--site-nav-offset, 0px) - 340px)));
   }
 }
 
