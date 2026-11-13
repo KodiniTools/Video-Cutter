@@ -8,6 +8,7 @@ import {
   MUSIC_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
+  AUDIO_FADE_UNSUPPORTED,
   startTextJob,
 } from '@/composables/useServerCut'
 
@@ -23,6 +24,7 @@ describe('parseJobStart', () => {
       outputFormat: false,
       music: false,
       seamTransitions: false,
+      audioFade: false,
       storeResult: false,
     })
   })
@@ -38,6 +40,7 @@ describe('parseJobStart', () => {
       outputFormat: false,
       music: false,
       seamTransitions: false,
+      audioFade: false,
       storeResult: false,
     })
   })
@@ -408,6 +411,35 @@ describe('useServerCut – Video-Bibliothek (cutMedia)', () => {
       cutMedia({ mediaId: A, segments: [{ start: 0, duration: 5 }], mode: 'copy' }),
     ).rejects.toThrow(MEDIA_UNSUPPORTED)
     expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-m2', { method: 'DELETE' })
+  })
+
+  it('sendet Ton-Blende (Dauer + Kurve) und bricht ab, wenn der Server sie nicht bestätigt', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-f1","storeResult":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const { cutMedia } = useServerCut()
+    await expect(
+      cutMedia({
+        mediaId: A,
+        segments: [{ start: 0, duration: 5 }],
+        mode: 'copy',
+        audioFade: { inDuration: 1.5, inCurve: 'exp', outDuration: 0, outCurve: 'tri' },
+      }),
+    ).rejects.toThrow(AUDIO_FADE_UNSUPPORTED)
+    const form = instances[0].sentForm
+    expect(form?.get('audioFadeIn')).toBe('1.5')
+    expect(form?.get('audioFadeInCurve')).toBe('exp')
+    expect(form?.get('audioFadeOut')).toBe('0')
+    expect(form?.get('audioFadeOutCurve')).toBe('tri')
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-f1', { method: 'DELETE' })
+  })
+
+  it('ohne Ton-Blende keine Felder (altes Backend bleibt nutzbar)', async () => {
+    const { FakeXhr, instances } = fakeXhr('{"jobId":"job-f2","storeResult":true}')
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    vi.stubGlobal('EventSource', fakeEventSource(R))
+    const { cutMedia } = useServerCut()
+    await cutMedia({ mediaId: A, segments: [{ start: 0, duration: 5 }], mode: 'copy' })
+    expect(instances[0].sentForm?.has('audioFadeIn')).toBe(false)
   })
 
   it('fertig ohne Ergebnis-ID -> MEDIA_UNSUPPORTED', async () => {

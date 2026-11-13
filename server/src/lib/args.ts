@@ -47,6 +47,71 @@ export interface CropRect {
   height: number
 }
 
+/**
+ * Kurvenformen für das Ein-/Ausblenden des Tons (FFmpeg `afade` `curve=`).
+ * Beim Ausblenden spiegelt FFmpeg die Kurve automatisch.
+ */
+export const AUDIO_FADE_CURVES = [
+  'tri',
+  'exp',
+  'log',
+  'qsin',
+  'hsin',
+  'esin',
+  'qua',
+  'cub',
+  'squ',
+] as const
+export type AudioFadeCurve = (typeof AUDIO_FADE_CURVES)[number]
+
+/** Ton am Anfang ein- und am Ende ausblenden (Dauer 0 = aus). */
+export interface AudioFade {
+  /** Einblenddauer in Sekunden. */
+  inDuration: number
+  inCurve: AudioFadeCurve
+  /** Ausblenddauer in Sekunden. */
+  outDuration: number
+  outCurve: AudioFadeCurve
+}
+
+/** Kürzere Blenden sind unhörbar und werden weggelassen. */
+const MIN_AUDIO_FADE = 0.05
+
+/**
+ * `afade`-Filter für ein Ergebnis der Länge `total`. Jede Blende ist auf die
+ * halbe Länge begrenzt, damit sich Ein- und Ausblenden nie überschneiden.
+ * Leeres Array = nichts zu tun.
+ */
+export function audioFadeFilters(fade: AudioFade | undefined, total: number): string[] {
+  if (!fade || !(total > 0)) return []
+  const half = total / 2
+  const fin = Math.min(Math.max(0, fade.inDuration), half)
+  const fout = Math.min(Math.max(0, fade.outDuration), half)
+  const out: string[] = []
+  if (fin >= MIN_AUDIO_FADE) {
+    out.push(`afade=t=in:st=0:d=${fin.toFixed(3)}:curve=${fade.inCurve}`)
+  }
+  if (fout >= MIN_AUDIO_FADE) {
+    const st = Math.max(0, total - fout)
+    out.push(`afade=t=out:st=${st.toFixed(3)}:d=${fout.toFixed(3)}:curve=${fade.outCurve}`)
+  }
+  return out
+}
+
+/** Wirkt die Blende bei dieser Länge überhaupt (mindestens eine Seite)? */
+export function hasAudioFade(fade: AudioFade | undefined, total: number): boolean {
+  return audioFadeFilters(fade, total).length > 0
+}
+
+/**
+ * Hängt die Blende an den Ausgang `[outa]` eines Filtergraphen an. `[outa]`
+ * kommt in allen Graphen genau einmal (als Ausgang) vor.
+ */
+function fadeGraphOutput(filter: string, fx: string[]): string {
+  if (!fx.length) return filter
+  return `${filter.replace('[outa]', '[afpre]')};[afpre]${fx.join(',')}[outa]`
+}
+
 /** Mindestgröße des Bildausschnitts (Anteil der jeweiligen Kante). */
 const MIN_CROP_RATIO = 0.1
 
@@ -81,6 +146,11 @@ export interface ServerArgsInput {
   transition?: Transition
   /** Optionaler Bildausschnitt. Erzwingt Re-Encode (kein Stream-Copy möglich). */
   crop?: CropRect
+  /**
+   * Ton am Anfang/Ende des Ergebnisses ein-/ausblenden. Nur übergeben, wenn
+   * das Video eine Tonspur hat. Erzwingt Re-Encode (kein Stream-Copy möglich).
+   */
+  audioFade?: AudioFade
 }
 
 /**
@@ -229,6 +299,7 @@ function reencodeTrim(
   start: number,
   duration: number,
   crop?: CropRect,
+  afx: string[] = [],
 ): string[] {
   const base = [
     ...PROGRESS,
@@ -239,7 +310,10 @@ function reencodeTrim(
     '-t',
     formatFfmpegTime(Math.max(0, duration)),
   ]
-  const filterArgs = crop ? ['-vf', buildCropFilter(crop)] : []
+  const filterArgs = [
+    ...(crop ? ['-vf', buildCropFilter(crop)] : []),
+    ...(afx.length ? ['-af', afx.join(',')] : []),
+  ]
   return [...base, ...filterArgs, ...reencodeCodecs(output), output]
 }
 
@@ -416,6 +490,7 @@ export function buildServerArgs({
   segments,
   transition,
   crop,
+  audioFade,
 }: ServerArgsInput): string[] {
   const src = segments && segments.length ? segments : [{ start, duration }]
   const fallbackTotal = operation === 'keep' ? Number.POSITIVE_INFINITY : start + duration
@@ -431,25 +506,47 @@ export function buildServerArgs({
     return keepArgs(inputPath, outputPath, start, Math.max(0, duration), mode)
   }
 
+  // Ton-Blende bezieht sich auf die Länge des Ergebnisses.
+  const afx = audioFadeFilters(audioFade, outputDurationFor(keep, transition))
+
   if (keep.length === 1) {
     const r = keep[0]
-    // Verlustfrei nur bei 'keep' + copy + ohne Zuschnitt möglich; Zuschneiden
-    // erfordert Decode+Encode, 'remove' kodiert ohnehin immer neu.
-    if (operation === 'keep' && mode === 'copy' && !crop) {
+    // Verlustfrei nur bei 'keep' + copy + ohne Zuschnitt/Ton-Blende möglich;
+    // beides erfordert Decode+Encode, 'remove' kodiert ohnehin immer neu.
+    if (operation === 'keep' && mode === 'copy' && !crop && !afx.length) {
       return keepArgs(inputPath, outputPath, r.start, r.duration, 'copy')
     }
-    return reencodeTrim(inputPath, outputPath, r.start, r.duration, crop)
+    return reencodeTrim(inputPath, outputPath, r.start, r.duration, crop, afx)
   }
 
   const xf = effectiveTransition(keep, transition)
+  let args: string[]
   if (xf) {
     // 'fade' = Dip to Black (nacheinander, keine Überlappung), sonst xfade.
-    if (xf.preset === 'fade') {
-      return fadeDipArgs(inputPath, outputPath, keep, xf.d, crop)
-    }
-    return xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d, crop)
+    args =
+      xf.preset === 'fade'
+        ? fadeDipArgs(inputPath, outputPath, keep, xf.d, crop)
+        : xfadeArgs(inputPath, outputPath, keep, xf.type, xf.d, crop)
+  } else {
+    args = concatArgs(inputPath, outputPath, keep, crop)
   }
-  return concatArgs(inputPath, outputPath, keep, crop)
+  if (afx.length) {
+    const i = args.indexOf('-filter_complex')
+    args[i + 1] = fadeGraphOutput(args[i + 1], afx)
+  }
+  return args
+}
+
+/**
+ * Wird mit dieser Ton-Blende verlustfrei kopiert? (Für die Dateiendung im
+ * Router: Blende erzwingt Re-Encode.)
+ */
+export function audioFadeForcesReencode(
+  fade: AudioFade | undefined,
+  keep: Segment[],
+  transition?: Transition,
+): boolean {
+  return hasAudioFade(fade, outputDurationFor(keep, transition))
 }
 
 /**
@@ -545,6 +642,8 @@ export interface MergeArgsInput {
    * (`transition`). Ohne Angabe gilt überall der globale Übergang.
    */
   seams?: (TransitionPreset | null)[]
+  /** Ton am Anfang/Ende des Gesamtergebnisses ein-/ausblenden (inkl. Musik). */
+  audioFade?: AudioFade
 }
 
 /**
@@ -781,6 +880,7 @@ export function buildMergeArgs({
   fill = 'pad',
   music,
   seams,
+  audioFade,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -912,11 +1012,14 @@ export function buildMergeArgs({
       `concat=n=${clips.length}:v=1:a=1[outv][${aFinal}]`
   }
 
+  const total = mergeOutputDuration(ranges, transition, seams)
   const musicInput: string[] = []
   if (music) {
-    filter += `;${musicMixFilter(music, clips.length, aFinal, mergeOutputDuration(ranges, transition, seams))}`
+    filter += `;${musicMixFilter(music, clips.length, aFinal, total)}`
     musicInput.push(...(music.loop ? ['-stream_loop', '-1'] : []), '-i', music.path)
   }
+  // Blende zuletzt: wirkt auf Originalton UND Musik.
+  filter = fadeGraphOutput(filter, audioFadeFilters(audioFade, total))
 
   return [
     ...PROGRESS,

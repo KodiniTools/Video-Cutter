@@ -13,6 +13,7 @@ import {
   mergeTargetSize,
   outputDurationFor,
   outputTargetSize,
+  audioFadeForcesReencode,
   type AppendClip,
   type MusicTrack,
 } from '../lib/args'
@@ -20,6 +21,7 @@ import { probeMedia, type MediaInfo } from '../lib/probe'
 import { isMediaId, mediaStore } from '../lib/media'
 import {
   parseAppendMeta,
+  parseAudioFade,
   parseCutParams,
   parseNormalizeAudio,
   parseOutputFormat,
@@ -84,6 +86,7 @@ export const SERVER_FEATURES = [
   'ai',
   'graphics',
   'aiTranslate',
+  'audioFade',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -118,7 +121,8 @@ function parseMediaIdList(raw: unknown, max: number): string[] {
  *                 operation, total, crop, transitionPreset, transitionDuration,
  *                 normalizeAudio, outputAspect, outputFill,
  *                 music, musicVolume, musicOriginalVolume, musicFade, musicLoop,
- *                 seamTransitions)
+ *                 seamTransitions, audioFadeIn, audioFadeInCurve, audioFadeOut,
+ *                 audioFadeOutCurve)
  * Legt einen Job an und startet die Verarbeitung.
  * Antwort: { jobId, crop, append, appendTrim, appendSlots, normalizeAudio } –
  * `crop` bestätigt den Bildausschnitt, `append` die Anzahl der angehängten
@@ -126,7 +130,8 @@ function parseMediaIdList(raw: unknown, max: number): string[] {
  * `appendSlots` freie Einfügestellen zwischen den Ausschnitten und
  * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen),
  * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus, `music` die
- * Hintergrundmusik, `seamTransitions` die Übergänge je Nahtstelle.
+ * Hintergrundmusik, `seamTransitions` die Übergänge je Nahtstelle,
+ * `audioFade` das Ein-/Ausblenden des Tons (bei Videos ohne Ton wirkungslos).
  */
 cutRouter.post(
   '/cut',
@@ -189,6 +194,7 @@ cutRouter.post(
       // Übergänge je Nahtstelle gelten nur beim Zusammenfügen mit angehängten Videos.
       const seamInput = appendSrcs.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
       const useMerge = appendSrcs.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
+      const audioFade = parseAudioFade(req.body ?? {})
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -280,6 +286,7 @@ cutRouter.post(
           fill: output.fill,
           music,
           seams,
+          audioFade,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = mergeOutputDuration(
@@ -288,13 +295,22 @@ cutRouter.post(
           seams,
         )
       } else {
+        // Ton-Blende nur mit Tonspur (ein -af ohne Tonspur bricht FFmpeg ab).
+        const mainHasAudio = audioFade
+          ? (mainSrc.info ?? (await probeMedia(mainSrc.path))).hasAudio
+          : false
+        const fade = mainHasAudio ? audioFade : undefined
         // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
         // 'keep' + copy + OHNE Zuschnitt möglich – dann bleibt der Original-
         // Container erhalten. Sonst (remove, mehrere Bereiche, reencode oder
         // Zuschnitt) wird neu kodiert: WebM-Input -> WebM (VP9/Opus), sonst
         // mp4 (H.264/AAC).
         const lossless =
-          !params.crop && params.operation === 'keep' && params.mode === 'copy' && keep.length === 1
+          !params.crop &&
+          params.operation === 'keep' &&
+          params.mode === 'copy' &&
+          keep.length === 1 &&
+          !audioFadeForcesReencode(fade, keep, params.transition)
         outExt = lossless ? inExt : isWebm ? 'webm' : 'mp4'
         outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
         args = buildServerArgs({
@@ -306,6 +322,7 @@ cutRouter.post(
           segments: params.segments,
           transition: params.transition,
           crop: params.crop,
+          audioFade: fade,
         })
         // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
         // behaltenen Bereiche (abzüglich Übergangs-Überlappungen).
@@ -344,6 +361,7 @@ cutRouter.post(
         outputFormat: true,
         music: musicFile !== undefined,
         seamTransitions: seamInput !== undefined,
+        audioFade: audioFade !== undefined,
         storeResult,
       })
     } catch (err) {
