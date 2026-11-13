@@ -113,3 +113,35 @@ export async function deleteMedia(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 404) throw errorFrom(res.status, await res.text().catch(() => ''))
 }
+
+/** Parameter eines Bild-Clips (POST /api/media/still). */
+export interface StillClipRequest {
+  /** Hintergrund in Zielgröße (PNG). */
+  image: Blob
+  duration: number
+  width: number
+  height: number
+  fps: number
+  name?: string
+}
+
+/**
+ * Erzeugt auf dem Server aus einem Bild einen Video-Clip mit stiller Tonspur
+ * und legt ihn in der Bibliothek ab. Altes Backend (Route fehlt) ->
+ * MEDIA_UNSUPPORTED.
+ */
+export async function createStillClip(
+  req: StillClipRequest,
+  signal?: AbortSignal,
+): Promise<MediaView> {
+  const form = new FormData()
+  form.append('duration', String(req.duration))
+  form.append('width', String(req.width))
+  form.append('height', String(req.height))
+  form.append('fps', String(req.fps))
+  if (req.name) form.append('name', req.name)
+  form.append('image', req.image, 'bild.png')
+  const res = await fetch(`${API_BASE}/api/media/still`, { method: 'POST', body: form, signal })
+  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''))
+  return parseMediaView(await res.json())
+}

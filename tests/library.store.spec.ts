@@ -172,6 +172,20 @@ describe('library store – Ergebnisse', () => {
     expect(lib.selectedId).toBe(r.id)
     expect(r).toMatchObject({ status: 'ready', include: false })
   })
+
+  it('insertResult fügt an Position ein, merkt vor und markiert', () => {
+    const lib = useLibraryStore()
+    lib.addFiles([vid('a.mp4'), vid('b.mp4')])
+    const r = lib.insertResult(media(), vid('Bild-Clip_5s.mp4'), 1)
+    expect(lib.items.map((it) => it.id)).toEqual([lib.items[0].id, r.id, lib.items[2].id])
+    expect(lib.items[2].name).toBe('b.mp4')
+    expect(lib.selectedId).toBe(r.id)
+    expect(r).toMatchObject({ status: 'ready', include: true })
+    const front = lib.insertResult(media(), vid('x.mp4'), 0)
+    expect(lib.items[0].id).toBe(front.id)
+    const end = lib.insertResult(media(), vid('y.mp4'), 99)
+    expect(lib.items.at(-1)?.id).toBe(end.id)
+  })
 })
 
 describe('library store – Zusammenfügen', () => {

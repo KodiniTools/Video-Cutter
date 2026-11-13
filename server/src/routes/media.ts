@@ -1,9 +1,13 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
 import { probeMedia } from '../lib/probe'
+import { runFfmpeg } from '../lib/ffmpeg'
+import { jobManager } from '../lib/jobs'
+import { buildStillArgs, parseStillParams, stillClipName } from '../lib/stillClip'
 import { safeExt, ValidationError } from '../lib/validate'
 import { isMediaId, mediaStore, mediaView, StorageFullError } from '../lib/media'
 
@@ -22,6 +26,23 @@ const upload = multer({
     else cb(new ValidationError('Nur Videodateien werden akzeptiert.'))
   },
 })
+
+/** Bild für einen Bild-Clip (vom Browser bereits in Zielgröße gezeichnet). */
+const STILL_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const stillUpload = multer({
+  storage: multer.diskStorage({
+    destination: config.tmpDir,
+    filename: (_req, file, cb) => cb(null, `${randomUUID()}-still.${safeExt(file.originalname)}`),
+  }),
+  limits: { fileSize: 40 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (STILL_IMAGE_TYPES.has(file.mimetype)) cb(null, true)
+    else cb(new ValidationError('Nur PNG-, JPEG- oder WebP-Bilder werden akzeptiert.'))
+  },
+})
+
+/** Laufende Bild-Clip-Berechnungen (kurz, aber nicht parallel). */
+let stillActive = 0
 
 const asyncHandler =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
@@ -57,6 +78,51 @@ mediaRouter.post(
         return
       }
       throw err
+    }
+  }),
+)
+
+/**
+ * POST /api/media/still (multipart: image, duration, width, height, fps?, name?)
+ * -> 201 MediaView. Erzeugt aus einem Bild einen Video-Clip mit stiller
+ * Tonspur und legt ihn in der Bibliothek ab.
+ */
+mediaRouter.post(
+  '/media/still',
+  stillUpload.single('image'),
+  asyncHandler(async (req, res) => {
+    const file = req.file
+    const outputPath = path.join(config.tmpDir, `${randomUUID()}-still-out.mp4`)
+    let stored = false
+    try {
+      if (!file) throw new ValidationError('Kein Bild empfangen.')
+      const params = parseStillParams((req.body ?? {}) as Record<string, unknown>)
+      if (stillActive > 0 || !jobManager.hasCapacity()) {
+        res.status(503).json({ error: 'Server ist ausgelastet. Bitte gleich erneut versuchen.' })
+        return
+      }
+      const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+      const name = rawName ? displayName(rawName) : stillClipName(params.duration)
+      stillActive++
+      try {
+        await runFfmpeg(buildStillArgs(file.path, outputPath, params), params.duration, () => {})
+          .promise
+      } finally {
+        stillActive--
+      }
+      const info = await probeMedia(outputPath)
+      const item = await mediaStore.add(outputPath, name, info)
+      stored = true
+      res.status(201).json(mediaView(item))
+    } catch (err) {
+      if (err instanceof StorageFullError) {
+        res.status(err.statusCode).json({ error: err.message })
+        return
+      }
+      throw err
+    } finally {
+      if (file) await rm(file.path, { force: true }).catch(() => {})
+      if (!stored) await rm(outputPath, { force: true }).catch(() => {})
     }
   }),
 )

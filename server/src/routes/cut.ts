@@ -88,6 +88,7 @@ export const SERVER_FEATURES = [
   'aiTranslate',
   'audioFade',
   'projects',
+  'stillClip',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

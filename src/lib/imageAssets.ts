@@ -119,3 +119,6 @@ export function pruneImageAssets(used: Iterable<string>): void {
 export function registerImageAssetForTest(asset: ImageAsset): void {
   assets.set(asset.id, asset)
 }
+
+/** Dekodiert eine Bilddatei (EXIF-Ausrichtung beachtet), ohne sie zu registrieren. */
+export { decode as decodeImageFile }
