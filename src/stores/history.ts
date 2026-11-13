@@ -518,6 +518,23 @@ export const useHistoryStore = defineStore('history', () => {
     { flush: 'sync' },
   )
 
+  /**
+   * Verlauf komplett verwerfen (Projekt geöffnet): Der geladene Stand ist der
+   * neue Ausgangspunkt. Nicht mehr gebrauchte Server-Fassungen werden gelöscht.
+   */
+  function reset(): void {
+    clearTimer()
+    const dropped: HistoryEntry[] = []
+    for (const h of Object.values(stacks.value)) dropped.push(...h.undo, ...h.redo)
+    stacks.value = {}
+    editorBeforeLoad = null
+    deferredEditor = null
+    gestures = 0
+    itemId.value = library.selectedId
+    rebase()
+    release(dropped)
+  }
+
   /** Nur für Tests: offenen Schritt sofort festschreiben. */
   function flush(): void {
     commit()
@@ -530,6 +547,7 @@ export const useHistoryStore = defineStore('history', () => {
     undo,
     redo,
     flush,
+    reset,
     beginGesture,
     endGesture,
   }

@@ -362,6 +362,70 @@ export const useLibraryStore = defineStore('library', () => {
     return item
   }
 
+  /**
+   * Lädt ein Video erneut hoch (z. B. weil es auf dem Server aufgeräumt wurde).
+   * Löst auf, sobald es wieder bereit ist; wirft bei Fehler/Löschen.
+   */
+  function reupload(id: number): Promise<void> {
+    const it = find(id)
+    if (!it) return Promise.reject(new Error('Video nicht mehr vorhanden.'))
+    uploads.get(id)?.abort()
+    update(id, (x) => ({ ...x, mediaId: null, status: 'uploading', progress: 0, error: '' }))
+    const run = queue.then(() => runUpload(id))
+    queue = run
+    return run.then(() => {
+      const cur = find(id)
+      if (!cur || cur.status !== 'ready' || !cur.mediaId) {
+        throw new Error(cur?.error || 'Upload fehlgeschlagen.')
+      }
+    })
+  }
+
+  /**
+   * Ersetzt die ganze Liste (Projekt öffnen). Laufende Uploads werden
+   * abgebrochen, bisherige Videos vom Server gelöscht – außer sie gehören auch
+   * zur neuen Liste. Liefert die neuen Einträge in derselben Reihenfolge.
+   */
+  function replaceAll(
+    entries: {
+      file: File
+      media: MediaView
+      name: string
+      start: number
+      end: number | null
+      include: boolean
+    }[],
+    opts: {
+      selected: number | null
+      seams: { from: number; to: number; preset: SeamPreset }[]
+      normalizeAudio: boolean
+    },
+  ): LibraryItem[] {
+    for (const up of uploads.values()) up.abort()
+    const old = items.value
+    const next = entries.map((e) =>
+      applyMedia(
+        newItem(e.file, { name: e.name, start: e.start, end: e.end, include: e.include }),
+        e.media,
+      ),
+    )
+    items.value = next
+    selectedId.value = next[opts.selected ?? 0]?.id ?? next[0]?.id ?? null
+    const seams: Record<string, SeamPreset> = {}
+    for (const s of opts.seams) {
+      const a = next[s.from]
+      const b = next[s.to]
+      if (a && b) seams[seamKey(a, b)] = s.preset
+    }
+    seamTransitions.value = seams
+    normalizeAudio.value = opts.normalizeAudio
+    const keep = new Set(next.map((it) => it.mediaId))
+    for (const it of old) {
+      if (it.mediaId && !keep.has(it.mediaId)) void deleteMedia(it.mediaId).catch(() => {})
+    }
+    return next
+  }
+
   /** Lokal ermittelte Dauer (nur falls der Server sie noch nicht geliefert hat). */
   function setDuration(id: number, d: number): void {
     if (!(Number.isFinite(d) && d > 0)) return
@@ -446,6 +510,8 @@ export const useLibraryStore = defineStore('library', () => {
     mergeState,
     applyMergeState,
     addResult,
+    reupload,
+    replaceAll,
     setDuration,
     setStart,
     setEnd,

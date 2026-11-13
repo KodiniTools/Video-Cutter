@@ -45,6 +45,7 @@ import GraphicOverlayLayer from './GraphicOverlayLayer.vue'
 import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
 import AudioFadePanel from './AudioFadePanel.vue'
+import ProjectPanel from './ProjectPanel.vue'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
@@ -794,20 +795,24 @@ async function downloadResult(): Promise<void> {
 
 <template>
   <section class="trimmer">
-    <!-- Upload / Dropzone -->
-    <label
-      v-if="!hasVideo"
-      class="dropzone"
-      :class="{ over: isDragOver }"
-      @dragover.prevent="isDragOver = true"
-      @dragleave.prevent="isDragOver = false"
-      @drop.prevent="onDrop"
-    >
-      <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
-      <div class="dz-icon" aria-hidden="true">▶</div>
-      <p class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</p>
-      <p class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</p>
-    </label>
+    <!-- Upload / Dropzone (+ gespeicherte Projekte öffnen) -->
+    <template v-if="!hasVideo">
+      <label
+        class="dropzone"
+        :class="{ over: isDragOver }"
+        @dragover.prevent="isDragOver = true"
+        @dragleave.prevent="isDragOver = false"
+        @drop.prevent="onDrop"
+      >
+        <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
+        <div class="dz-icon" aria-hidden="true">▶</div>
+        <p class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</p>
+        <p class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</p>
+      </label>
+      <div class="start-projects">
+        <ProjectPanel :disabled="busy" />
+      </div>
+    </template>
 
     <!-- Editor -->
     <div v-else class="editor">
@@ -852,6 +857,9 @@ async function downloadResult(): Promise<void> {
       <div class="editor-grid">
         <!-- LINKS: Meine Videos -->
         <div class="panel panel-left">
+          <!-- Projekte: Bearbeitungsstand speichern / öffnen -->
+          <ProjectPanel :disabled="busy" />
+
           <!-- Meine Videos: auf dem Server gespeichert; markiertes Video = Editor -->
           <section class="card segments library">
             <div class="card-head">
@@ -1651,6 +1659,11 @@ async function downloadResult(): Promise<void> {
   transition:
     border-color var(--ds-duration) var(--ds-ease),
     background var(--ds-duration) var(--ds-ease);
+}
+.start-projects {
+  width: 100%;
+  max-width: 680px;
+  margin: 16px auto 0;
 }
 .dropzone.over {
   border-color: var(--ds-accent);

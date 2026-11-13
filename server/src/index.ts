@@ -8,6 +8,7 @@ import { config } from './config'
 import { cutRouter, SERVER_FEATURES } from './routes/cut'
 import { mediaRouter } from './routes/media'
 import { textRouter } from './routes/text'
+import { projectsRouter } from './routes/projects'
 import { mediaStore } from './lib/media'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
@@ -17,6 +18,8 @@ import { aiJobs } from './lib/aiJobs'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
+  await mkdir(config.projectsDir, { recursive: true })
+  console.log(`Projekte: ${config.projectsDir}`)
   const fonts = await initCustomFonts(config.customFontsDir, config.tmpDir)
   console.log(`Eigene Schriften: ${fonts.length} aus ${config.customFontsDir}`)
   const ai = aiStatus()
@@ -64,6 +67,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api', mediaRouter)
   app.use('/api', textRouter)
   app.use('/api', aiRouter)
+  app.use('/api', projectsRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))

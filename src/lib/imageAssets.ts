@@ -21,6 +21,8 @@ export interface ImageAsset {
   source: CanvasImageSource
   width: number
   height: number
+  /** Originaldatei (zum Speichern im Projekt). */
+  file?: File
 }
 
 export class ImageAssetError extends Error {
@@ -84,7 +86,14 @@ export async function addImageAsset(file: File): Promise<ImageAsset> {
     release(source)
     throw new ImageAssetError('dim', 'Bild zu groß.')
   }
-  const asset: ImageAsset = { id: `img${++counter}`, name: file.name, source, width: w, height: h }
+  const asset: ImageAsset = {
+    id: `img${++counter}`,
+    name: file.name,
+    source,
+    width: w,
+    height: h,
+    file,
+  }
   assets.set(asset.id, asset)
   return asset
 }
