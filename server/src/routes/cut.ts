@@ -82,6 +82,7 @@ export const SERVER_FEATURES = [
   'text',
   'customFonts',
   'ai',
+  'graphics',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

@@ -32,6 +32,10 @@ const props = defineProps<{
   burning: boolean
   progressLabel: string
   canBurn: boolean
+  /** Grafiken (Formen/Emojis), die beim Einbrennen mitkommen. */
+  graphicCount?: number
+  /** Ist mindestens eine dieser Grafiken ungültig? */
+  graphicsInvalid?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +53,9 @@ const { fonts: customFonts, loadCustomFonts } = useCustomFonts()
 const fontGroups = computed(() => groupFonts(customFonts.value))
 onMounted(() => void loadCustomFonts())
 
-const allValid = computed(() => overlays.value.every((o) => isValidOverlay(o, props.duration)))
+const allValid = computed(
+  () => !props.graphicsInvalid && overlays.value.every((o) => isValidOverlay(o, props.duration)),
+)
 
 function patch(p: Partial<TextOverlayData>): void {
   if (selected.value) texts.update(selected.value.id, p)
@@ -434,6 +440,9 @@ function preview(text: string): string {
       @click="emit('burn')"
     >
       <template v-if="burning">{{ progressLabel }}</template>
+      <template v-else-if="graphicCount">{{
+        t('graphics.burnCount', { n: overlays.length + graphicCount })
+      }}</template>
       <template v-else>{{ t('text.burnCount', { n: overlays.length }) }}</template>
     </button>
     <p v-if="overlays.length" class="hint">{{ t('text.burnHint') }}</p>

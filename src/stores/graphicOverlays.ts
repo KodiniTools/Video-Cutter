@@ -1,0 +1,121 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { DEFAULT_TEXT_DURATION } from '@/lib/textOverlay'
+import {
+  MAX_GRAPHICS,
+  MIN_GRAPHIC_DURATION,
+  clampGraphic,
+  defaultGraphic,
+  type GraphicData,
+  type GraphicKind,
+  type GraphicOverlay,
+} from '@/lib/graphicOverlay'
+
+/**
+ * Grafik-Einblendungen (Formen, Linien, Symbole, Emojis) je Bibliotheks-Video
+ * – aufgebaut wie der Text-Store: bleiben beim Videowechsel erhalten und
+ * werden nach dem Einbrennen für dieses Video geleert.
+ */
+export const useGraphicOverlayStore = defineStore('graphicOverlays', () => {
+  const byItem = ref<Record<number, GraphicOverlay[]>>({})
+  const itemId = ref<number | null>(null)
+  const selectedId = ref<number | null>(null)
+  let nextId = 1
+
+  const overlays = computed<GraphicOverlay[]>(() =>
+    itemId.value === null ? [] : (byItem.value[itemId.value] ?? []),
+  )
+  const selected = computed(() => overlays.value.find((o) => o.id === selectedId.value) ?? null)
+  const canAdd = computed(() => itemId.value !== null && overlays.value.length < MAX_GRAPHICS)
+
+  function setItem(id: number | null): void {
+    if (itemId.value === id) return
+    itemId.value = id
+    selectedId.value = null
+  }
+
+  function write(list: GraphicOverlay[]): void {
+    if (itemId.value === null) return
+    byItem.value = { ...byItem.value, [itemId.value]: list }
+  }
+
+  /**
+   * Neue Grafik ab `at` (Sekunden), in der Bildmitte. Farben/Kontur übernimmt
+   * sie von der zuletzt gewählten Grafik derselben Art (einheitlicher Look).
+   */
+  function add(
+    kind: GraphicKind,
+    at: number,
+    duration: number,
+    extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>> = {},
+  ): GraphicOverlay | null {
+    if (!canAdd.value) return null
+    const total = duration > 0 ? duration : Infinity
+    let start = Math.max(0, at)
+    if (total - start < MIN_GRAPHIC_DURATION) start = Math.max(0, total - DEFAULT_TEXT_DURATION)
+    const end = Math.min(total, start + DEFAULT_TEXT_DURATION)
+    const same = [...overlays.value].reverse().find((o) => o.kind === kind)
+    const look = same
+      ? (({ id: _id, start: _s, end: _e, x: _x, y: _y, ...rest }) => rest)(same)
+      : defaultGraphic(kind)
+    const g: GraphicOverlay = clampGraphic({
+      ...look,
+      ...extra,
+      kind,
+      id: nextId++,
+      start,
+      end,
+      x: 0.5,
+      y: 0.5,
+    })
+    write([...overlays.value, g])
+    selectedId.value = g.id
+    return g
+  }
+
+  /** Ändert eine Grafik; Werte werden in gültige Bereiche gebracht. */
+  function update(id: number, patch: Partial<GraphicData>): void {
+    write(overlays.value.map((o) => (o.id === id ? clampGraphic({ ...o, ...patch }) : o)))
+  }
+
+  /** Kopie (leicht versetzt) – praktisch für mehrere gleiche Markierungen. */
+  function duplicate(id: number): void {
+    const o = overlays.value.find((x) => x.id === id)
+    if (!o || !canAdd.value) return
+    const copy = clampGraphic({ ...o, id: nextId++, x: o.x + 0.03, y: o.y + 0.03 })
+    write([...overlays.value, copy])
+    selectedId.value = copy.id
+  }
+
+  function remove(id: number): void {
+    write(overlays.value.filter((o) => o.id !== id))
+    if (selectedId.value === id) selectedId.value = null
+  }
+
+  function select(id: number | null): void {
+    selectedId.value = id !== null && overlays.value.some((o) => o.id === id) ? id : null
+  }
+
+  function clearItem(id: number): void {
+    if (!(id in byItem.value)) return
+    const next = { ...byItem.value }
+    delete next[id]
+    byItem.value = next
+    if (itemId.value === id) selectedId.value = null
+  }
+
+  return {
+    overlays,
+    selected,
+    selectedId,
+    itemId,
+    canAdd,
+    setItem,
+    add,
+    update,
+    duplicate,
+    remove,
+    select,
+    clearItem,
+  }
+})
