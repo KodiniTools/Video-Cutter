@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
+import { frameCount, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
+import FrameSpinner from './FrameSpinner.vue'
 import {
   EMOJI_PRESETS,
   GRAPHIC_ANIMATIONS,
@@ -41,11 +43,15 @@ const props = defineProps<{
   textCount: number
   /** Sind auch alle Texte gültig? */
   textsValid: boolean
+  /** Bildrate des Videos; 0/fehlend = unbekannt (Schritte dann 10 ms). */
+  fps?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'add', kind: GraphicKind, extra: Partial<Pick<GraphicData, 'symbol' | 'emoji'>>): void
   (e: 'seek', sec: number): void
+  /** Video anhalten und auf diese Zeit springen (Spinner/Eingabe von Von/Bis). */
+  (e: 'scrub', sec: number): void
   (e: 'burn'): void
 }>()
 
@@ -73,8 +79,37 @@ function patch(p: Partial<GraphicData>): void {
 function pick(id: number): void {
   graphics.select(id)
   const o = overlays.value.find((x) => x.id === id)
-  if (o) emit('seek', o.start)
+  if (o) emit('seek', frameSeekTime(o.start, fps.value))
 }
+
+// --- Bildgenaue Zeiten (wie bei Texten, siehe lib/frameTime) -----------------
+// Von/Bis liegen auf Bildanfängen: sichtbar, wenn start <= Bild < end – in der
+// Vorschau wie im eingebrannten Video.
+const fps = computed(() => props.fps ?? 0)
+
+/** Von/Bis setzen: begrenzen, auf den Bildanfang legen, optional Bild zeigen. */
+function setTime(which: 'start' | 'end', sec: number, scrub: boolean): void {
+  const v = snapToFrame(clampTime(sec), fps.value)
+  patch(which === 'start' ? { start: v } : { end: v })
+  if (scrub) emit('scrub', frameSeekTime(v, fps.value))
+}
+
+function stepTime(which: 'start' | 'end', dir: 1 | -1): void {
+  const o = selected.value
+  if (o) setTime(which, stepFrames(o[which], dir, fps.value, props.duration), true)
+}
+
+const stepUnit = computed(() => (fps.value > 0 ? t('text.frame.one') : t('text.frame.ms')))
+
+/** „00:03.000 · 75 Bilder" – Dauer der gewählten Grafik. */
+const durationLabel = computed(() => {
+  const o = selected.value
+  if (!o) return ''
+  const base = formatTimeMs(Math.max(0, o.end - o.start))
+  return fps.value > 0
+    ? `${base} · ${t('text.frame.count', { n: frameCount(o.start, o.end, fps.value) })}`
+    : base
+})
 
 // Eigenes Emoji (beliebiges Zeichen inkl. Kombinationen wie 👍🏽).
 const customEmoji = ref('')
@@ -108,7 +143,9 @@ function commitTime(which: 'start' | 'end'): void {
     input.value = selected.value ? formatTimeMs(selected.value[which]) : ''
     return
   }
-  patch(which === 'start' ? { start: clampTime(v) } : { end: clampTime(v) })
+  setTime(which, v, true)
+  // Gleicher Wert nach dem Einrasten -> Watch feuert nicht, Feld trotzdem normalisieren.
+  input.value = formatTimeMs(selected.value[which])
 }
 
 // --- Zahlen-Regler (Anzeige in %, Grad) --------------------------------------
@@ -341,13 +378,19 @@ function symbolPath(s: GraphicSymbol): string {
               @change="commitTime('start')"
               @keydown.enter.prevent="commitTime('start')"
             />
+            <FrameSpinner
+              :disabled="busy"
+              :up-label="`${t('text.from')}: +1 ${stepUnit}`"
+              :down-label="`${t('text.from')}: −1 ${stepUnit}`"
+              @step="(dir) => stepTime('start', dir)"
+            />
             <button
               class="btn tiny"
               type="button"
               :disabled="busy"
               :title="t('text.toPlayhead')"
               :aria-label="`${t('text.from')}: ${t('text.toPlayhead')}`"
-              @click="patch({ start: clampTime(currentTime) })"
+              @click="setTime('start', currentTime, false)"
             >
               ⏱
             </button>
@@ -365,19 +408,36 @@ function symbolPath(s: GraphicSymbol): string {
               @change="commitTime('end')"
               @keydown.enter.prevent="commitTime('end')"
             />
+            <FrameSpinner
+              :disabled="busy"
+              :up-label="`${t('text.to')}: +1 ${stepUnit}`"
+              :down-label="`${t('text.to')}: −1 ${stepUnit}`"
+              @step="(dir) => stepTime('end', dir)"
+            />
             <button
               class="btn tiny"
               type="button"
               :disabled="busy"
               :title="t('text.toPlayhead')"
               :aria-label="`${t('text.to')}: ${t('text.toPlayhead')}`"
-              @click="patch({ end: clampTime(currentTime) })"
+              @click="setTime('end', currentTime, false)"
             >
               ⏱
             </button>
           </span>
         </label>
       </div>
+      <p class="field-row duration-row">
+        <span class="field-label">{{ t('text.frame.duration') }}</span>
+        <span class="field-value">{{ durationLabel }}</span>
+      </p>
+      <p class="hint">
+        {{
+          fps > 0
+            ? t('graphics.frameHint', { fps: fps.toFixed(fps % 1 ? 2 : 0) })
+            : t('text.frame.hintMs')
+        }}
+      </p>
       <p v-if="!isValidGraphic(selected, duration)" class="hint warn">
         {{ t('graphics.invalid') }}
       </p>
@@ -811,7 +871,12 @@ function symbolPath(s: GraphicSymbol): string {
 .text-area {
   resize: vertical;
 }
-.time-grid,
+/* Von/Bis untereinander: Zeitfeld + ▲▼ + ⏱ brauchen die volle Breite. */
+.time-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -819,7 +884,11 @@ function symbolPath(s: GraphicSymbol): string {
 }
 .time-row {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+.duration-row {
+  margin: 0;
 }
 .input.time {
   font-variant-numeric: tabular-nums;
