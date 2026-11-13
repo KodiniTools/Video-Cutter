@@ -48,6 +48,11 @@ const messages = {
       stepUpMs: 'Cursor 10 ms vor',
       stepDownMs: 'Cursor 10 ms zurück',
     },
+    preview: {
+      play: '▶ Auswahl abspielen',
+      stop: '■ Vorschau stoppen',
+      loop: 'Schleife',
+    },
     segments: {
       title: 'Ausschnitte',
       add: 'Ausschnitt hinzufügen',
@@ -440,6 +445,11 @@ const messages = {
       stepDown: 'Cursor 1 frame back',
       stepUpMs: 'Cursor 10 ms forward',
       stepDownMs: 'Cursor 10 ms back',
+    },
+    preview: {
+      play: '▶ Play selection',
+      stop: '■ Stop preview',
+      loop: 'Loop',
     },
     segments: {
       title: 'Segments',

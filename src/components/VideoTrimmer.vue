@@ -47,6 +47,7 @@ import AudioFadePanel from './AudioFadePanel.vue'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
+import { useSelectionPreview } from '@/composables/useSelectionPreview'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -359,6 +360,17 @@ function scrubTo(sec: number): void {
   seekTo(sec)
 }
 
+// --- Auswahl-Vorschau: nur Anfang–Ende abspielen, Regler aktualisieren live ---
+const preview = useSelectionPreview({
+  video: videoEl,
+  start: startTime,
+  end: endTime,
+  fps,
+  seek: seekTo,
+})
+const previewActive = preview.active
+const previewLoop = preview.loop
+
 function stepCursor(dir: 1 | -1): void {
   scrubTo(frameSeekTime(stepFrames(currentTime.value, dir, fps.value, duration.value), fps.value))
 }
@@ -386,10 +398,12 @@ watch(endTime, (v) => (endInput.value = formatTimeMs(v)), { immediate: true })
 function applyStart(sec: number): void {
   store.setStart(sec)
   seekTo(startTime.value) // geclampten Wert übernehmen
+  preview.rangeEdited('start')
 }
 function applyEnd(sec: number): void {
   store.setEnd(sec)
   seekTo(endTime.value)
+  preview.rangeEdited('end')
 }
 
 function commitStart(): void {
@@ -1105,7 +1119,27 @@ async function downloadResult(): Promise<void> {
             @update:start="store.setStart"
             @update:end="store.setEnd"
             @seek="seekTo"
+            @grab="preview.holdForEdit()"
+            @release="preview.rangeEdited"
           />
+
+          <!-- Vorschau nur des ausgewählten Bereichs (im Player oben, mit Overlays) -->
+          <div class="preview-row">
+            <button
+              class="btn tiny preview-play"
+              :class="{ active: previewActive }"
+              type="button"
+              :disabled="!objectUrl || busy || !(endTime > startTime)"
+              :aria-pressed="previewActive"
+              @click="preview.toggle()"
+            >
+              {{ previewActive ? t('preview.stop') : t('preview.play') }}
+            </button>
+            <label class="check-row preview-loop">
+              <input v-model="previewLoop" type="checkbox" />
+              {{ t('preview.loop') }}
+            </label>
+          </div>
 
           <!-- Ergebnis-Status: das Ergebnis läuft im selben Player oben,
                kein zweites Vorschaufenster. Nur Hinweis + Download-Hinweis. -->
@@ -1984,6 +2018,31 @@ async function downloadResult(): Promise<void> {
   padding: 6px 9px;
   font-size: var(--ds-text-md);
   line-height: 1;
+}
+
+/* Auswahl-Vorschau unter der Timeline */
+.preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.btn.tiny.preview-play {
+  min-width: 13em;
+}
+.btn.tiny.preview-play.active {
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: var(--ds-on-accent);
+}
+.preview-loop {
+  align-items: center;
+  font-size: var(--ds-text-sm);
+}
+.preview-loop input {
+  margin-top: 0;
 }
 
 /* Live-Zeile unter dem Player */
