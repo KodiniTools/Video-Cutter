@@ -165,6 +165,23 @@ async function askClaude(
   schema: Record<string, unknown>,
   signal: AbortSignal,
 ): Promise<unknown> {
+  return askClaudeWith(
+    SYSTEM,
+    `<transcript>\n${formatWords(words)}\n</transcript>`,
+    task,
+    schema,
+    signal,
+  )
+}
+
+/** Wie askClaude, aber mit eigenem System-Prompt und Eingabetext. */
+async function askClaudeWith(
+  system: string,
+  input: string,
+  task: string,
+  schema: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<unknown> {
   let message: Anthropic.Beta.BetaMessage
   try {
     const stream = getClient().beta.messages.stream(
@@ -177,7 +194,7 @@ async function askClaude(
         fallbacks: 'default',
         thinking: { type: 'adaptive' },
         output_config: { effort: effort(), format: { type: 'json_schema', schema } },
-        system: SYSTEM,
+        system,
         messages: [
           {
             role: 'user',
@@ -186,7 +203,7 @@ async function askClaude(
               // dasselbe Video teilen sich diesen Teil.
               {
                 type: 'text',
-                text: `<transcript>\n${formatWords(words)}\n</transcript>`,
+                text: input,
                 cache_control: { type: 'ephemeral' },
               },
               { type: 'text', text: task },
@@ -386,4 +403,97 @@ export async function createCutSuggestions(
   if (words.length === 0) return findPauses(words, duration, minPause)
   const raw = await askClaude(words, CUT_TASK, CUT_SCHEMA, signal)
   return buildCutSuggestions(words, raw, duration, minPause)
+}
+
+// --- Texte übersetzen ------------------------------------------------------------
+
+/** Zielsprachen für das Übersetzen vorhandener Texte. */
+export const TRANSLATE_TARGETS = ['en', 'de'] as const
+export type TranslateTarget = (typeof TRANSLATE_TARGETS)[number]
+
+const TRANSLATE_SYSTEM = `You translate short on-screen texts (titles, captions, subtitles, labels) of a tutorial video. You receive them as a numbered list in JSON. Answer only with the requested JSON.`
+
+function translateTask(target: TranslateTarget): string {
+  return `Translate every text into ${LANG_NAMES[target]}.
+
+Rules:
+- Return one entry per input text with the same "i".
+- Translate naturally and concisely, as subtitles or on-screen labels; keep the tone.
+- Keep line breaks: if a text has several lines, the translation has the same number of lines, separated by "\\n".
+- Keep emojis, numbers, URLs, product names, keyboard shortcuts and UI labels in quotes unchanged.
+- If a text is already in ${LANG_NAMES[target]}, return it unchanged.`
+}
+
+const TRANSLATE_SCHEMA = {
+  type: 'object',
+  properties: {
+    translations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { i: { type: 'integer' }, text: { type: 'string' } },
+        required: ['i', 'text'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['translations'],
+  additionalProperties: false,
+}
+
+/**
+ * Ordnet Claudes Übersetzungen den Eingaben zu. Fehlende oder leere Einträge
+ * behalten den Originaltext (`missing` zählt sie). Zeilenumbrüche aus "\\n"
+ * werden echte Umbrüche; Länge und Zeilenzahl bleiben in den Text-Grenzen.
+ */
+export function buildTranslations(
+  texts: string[],
+  raw: unknown,
+  maxLength = 300,
+  maxLines = 6,
+): { texts: string[]; missing: number } {
+  const list = isRecord(raw) && Array.isArray(raw.translations) ? raw.translations : []
+  const byIndex = new Map<number, string>()
+  for (const t of list.filter(isRecord)) {
+    const i = intOr(t.i, -1)
+    if (i < 0 || i >= texts.length || typeof t.text !== 'string') continue
+    const clean = t.text
+      .replace(/\\n/g, '\n')
+      .replace(/\r\n?/g, '\n')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    if (!clean.length) continue
+    const lines =
+      clean.length > maxLines
+        ? [...clean.slice(0, maxLines - 1), clean.slice(maxLines - 1).join(' ')]
+        : clean
+    byIndex.set(i, lines.join('\n').slice(0, maxLength))
+  }
+  let missing = 0
+  const out = texts.map((orig, i) => {
+    const t = byIndex.get(i)
+    if (t === undefined) missing++
+    return t ?? orig
+  })
+  return { texts: out, missing }
+}
+
+export async function translateTexts(
+  texts: string[],
+  target: TranslateTarget,
+  signal: AbortSignal,
+): Promise<{ texts: string[]; missing: number }> {
+  if (texts.length === 0) return { texts: [], missing: 0 }
+  const input = JSON.stringify(texts.map((text, i) => ({ i, text })))
+  const raw = await askClaudeWith(
+    TRANSLATE_SYSTEM,
+    `<texts>\n${input}\n</texts>`,
+    translateTask(target),
+    TRANSLATE_SCHEMA,
+    signal,
+  )
+  return buildTranslations(texts, raw)
 }

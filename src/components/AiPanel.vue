@@ -10,6 +10,7 @@ import {
   AI_UNSUPPORTED,
   type SubtitleTarget,
   type TranscribeLanguage,
+  type TranslateTarget,
 } from '@/lib/aiApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 
@@ -44,6 +45,7 @@ const language = ref<TranscribeLanguage>('auto')
 const target = ref<SubtitleTarget>('original')
 const replaceTexts = ref(false)
 const minPause = ref(1.2)
+const translateTarget = ref<TranslateTarget>('en')
 const error = ref('')
 const notice = ref('')
 
@@ -127,6 +129,40 @@ async function onSuggest(): Promise<void> {
   }
 }
 
+/**
+ * Alle Texte des Videos übersetzen und ERSETZEN (Zeit, Position, Design
+ * bleiben). Zuordnung über die ID, damit zwischendurch gelöschte Texte nicht
+ * verrutschen.
+ */
+async function onTranslate(): Promise<void> {
+  const itemId = props.itemId
+  const list = texts.overlays.filter((o) => o.text.trim())
+  if (disabled.value || itemId === null || !list.length) return
+  error.value = ''
+  notice.value = ''
+  try {
+    const r = await ai.translate(
+      itemId,
+      list.map((o) => o.text),
+      translateTarget.value,
+    )
+    if (texts.itemId !== itemId) return
+    let n = 0
+    list.forEach((o, i) => {
+      const next = r.texts[i]
+      if (next === undefined || next === o.text) return
+      if (!texts.overlays.some((x) => x.id === o.id)) return
+      texts.update(o.id, { text: next })
+      n++
+    })
+    notice.value = r.missing
+      ? t('ai.translatedPartly', { n, m: r.missing })
+      : t('ai.translated', { n })
+  } catch (e) {
+    fail(e)
+  }
+}
+
 function onApply(): void {
   if (props.itemId === null || !checked.value.length) return
   const list = checked.value
@@ -193,6 +229,24 @@ const taskLabel = computed(() => {
         </summary>
         <p class="transcript-text">{{ transcript.text || '—' }}</p>
       </details>
+
+      <!-- Vorhandene Texte übersetzen (braucht kein Transkript) -->
+      <div v-if="texts.overlays.length" class="block-sep">
+        <span class="field-label">{{ t('ai.translate') }}</span>
+        <select v-model="translateTarget" class="input" :disabled="disabled">
+          <option value="en">{{ t('ai.target.en') }}</option>
+          <option value="de">{{ t('ai.target.de') }}</option>
+        </select>
+        <button
+          class="btn block"
+          type="button"
+          :disabled="disabled || !canClaude"
+          @click="onTranslate"
+        >
+          {{ t('ai.translateCount', { n: texts.overlays.length }) }}
+        </button>
+        <p class="hint">{{ t('ai.translateHint') }}</p>
+      </div>
 
       <template v-if="transcript">
         <!-- 2. Untertitel -->

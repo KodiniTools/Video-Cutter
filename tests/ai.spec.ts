@@ -180,3 +180,16 @@ describe('AiPanel', () => {
     expect(btn?.attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('parseTranslation', () => {
+  it('nimmt nur vollständige Ergebnisse an', async () => {
+    const { parseTranslation } = await import('@/lib/aiApi')
+    expect(parseTranslation({ texts: ['a', 'b'], missing: 1 }, 2)).toEqual({
+      texts: ['a', 'b'],
+      missing: 1,
+    })
+    expect(() => parseTranslation({ texts: ['a'] }, 2)).toThrow()
+    expect(() => parseTranslation({ texts: ['a', 3] }, 2)).toThrow()
+    expect(() => parseTranslation(null, 1)).toThrow()
+  })
+})

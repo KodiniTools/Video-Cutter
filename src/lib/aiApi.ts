@@ -13,6 +13,7 @@ export const AI_CANCELLED = 'AI_CANCELLED'
 
 export type TranscribeLanguage = 'auto' | 'de' | 'en'
 export type SubtitleTarget = 'original' | 'de' | 'en'
+export type TranslateTarget = 'en' | 'de'
 export type CutKind = 'filler' | 'slip' | 'repeat' | 'pause'
 
 export interface AiStatus {
@@ -73,6 +74,22 @@ export function parseSubtitles(data: unknown): { cues: SubtitleCue[]; truncated:
   return { cues, truncated: d.truncated === true }
 }
 
+/**
+ * Übersetzungen: gleich viele Texte wie geschickt, sonst ungültig (die
+ * Zuordnung zu den Einblendungen läuft über die Reihenfolge).
+ */
+export function parseTranslation(
+  data: unknown,
+  expected: number,
+): { texts: string[]; missing: number } {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.texts) ? d.texts : []
+  if (list.length !== expected || !list.every((t) => typeof t === 'string')) {
+    throw new Error('Ungültiges Ergebnis der Übersetzung.')
+  }
+  return { texts: list as string[], missing: finite(d.missing) ? d.missing : 0 }
+}
+
 const KINDS: readonly CutKind[] = ['filler', 'slip', 'repeat', 'pause']
 
 export function parseSuggestions(data: unknown): CutSuggestion[] {
@@ -120,7 +137,7 @@ export interface AiRun<T> {
  * Ergebnis. `parse` prüft das Ergebnis. Abbruch stoppt auch den Server-Job.
  */
 export function runAiJob<T>(
-  action: 'transcribe' | 'subtitles' | 'cuts',
+  action: 'transcribe' | 'subtitles' | 'cuts' | 'translate',
   body: Record<string, unknown>,
   parse: (data: unknown) => T,
   onProgress?: (percent: number) => void,

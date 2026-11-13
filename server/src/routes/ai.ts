@@ -13,18 +13,22 @@ import {
 } from '../lib/whisper'
 import {
   SUBTITLE_TARGETS,
+  TRANSLATE_TARGETS,
   claudeReady,
   createCutSuggestions,
   createSubtitles,
+  translateTexts,
   type SubtitleTarget,
+  type TranslateTarget,
 } from '../lib/claude'
-import { MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
+import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
 
 /**
  * KI-Funktionen:
  * - POST /api/ai/transcribe { mediaId, language }  -> Whisper-Transkript (pro Video gemerkt)
  * - POST /api/ai/subtitles  { mediaId, target }    -> Untertitel (Claude)
  * - POST /api/ai/cuts       { mediaId, minPause }  -> Schnittvorschläge (Claude + Pausen)
+ * - POST /api/ai/translate  { texts, target }      -> vorhandene Texte übersetzen (Claude)
  * Alle Aufrufe starten einen Job: 202 { jobId }. Status/Ergebnis per SSE unter
  * GET /api/ai/jobs/:id/events, Abbruch per DELETE /api/ai/jobs/:id.
  */
@@ -142,6 +146,36 @@ aiRouter.post('/ai/cuts', json, (req: Request, res: Response) => {
   }))
   started(res, job)
 })
+
+/** Prüft die zu übersetzenden Texte (wie die Text-Einblendungen begrenzt). */
+export function parseTranslateTexts(v: unknown): string[] {
+  if (!Array.isArray(v) || v.length === 0) throw new ValidationError('Keine Texte angegeben.')
+  if (v.length > MAX_TEXT_OVERLAYS) {
+    throw new ValidationError(`Maximal ${MAX_TEXT_OVERLAYS} Texte.`)
+  }
+  return v.map((t, i) => {
+    if (typeof t !== 'string' || !t.trim()) throw new ValidationError(`Text ${i + 1} ist leer.`)
+    if (t.length > MAX_TEXT_LENGTH) throw new ValidationError(`Text ${i + 1} ist zu lang.`)
+    return t
+  })
+}
+
+aiRouter.post(
+  '/ai/translate',
+  // 500 Texte × 300 Zeichen (UTF-8, JSON-maskiert) passen sicher hinein.
+  express.json({ limit: '1mb' }),
+  (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const texts = parseTranslateTexts(body.texts)
+    requireClaude()
+    const target = (TRANSLATE_TARGETS as readonly unknown[]).includes(body.target)
+      ? (body.target as TranslateTarget)
+      : 'en'
+    if (!capacity('claude', res)) return
+    const job = aiJobs.start('claude', (signal) => translateTexts(texts, target, signal))
+    started(res, job)
+  },
+)
 
 /** GET /api/ai/jobs/:id/events (Server-Sent Events) – bis fertig/fehlerhaft. */
 aiRouter.get('/ai/jobs/:id/events', (req: Request, res: Response) => {
