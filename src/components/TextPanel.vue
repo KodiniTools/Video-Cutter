@@ -8,6 +8,7 @@ import { frameCount, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameT
 import FrameSpinner from './FrameSpinner.vue'
 import { groupFonts, useCustomFonts } from '@/lib/customFonts'
 import {
+  ANIM_SPEEDS,
   FONT_OPTIONS,
   MAX_TEXT_LENGTH,
   MAX_TEXT_OVERLAYS,
@@ -17,6 +18,9 @@ import {
   TEXT_ANIMATIONS,
   TEXT_FONTS,
   TEXT_STYLES,
+  animSpeedIndex,
+  animSpeedOf,
+  formatAnimSpeed,
   isValidOverlay,
   type PositionPreset,
   type TextOverlayData,
@@ -50,7 +54,7 @@ const emit = defineEmits<{
   (e: 'burn'): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const texts = useTextOverlayStore()
 const { overlays, selected, selectedId, canAdd } = storeToRefs(texts)
 
@@ -449,6 +453,29 @@ function preview(text: string): string {
           </option>
         </select>
       </label>
+      <div class="field-col">
+        <div class="field-row">
+          <span class="field-label">{{ t('text.animSpeed') }}</span>
+          <span class="field-value">{{ formatAnimSpeed(animSpeedOf(selected), locale) }}</span>
+        </div>
+        <input
+          class="range"
+          type="range"
+          min="0"
+          :max="ANIM_SPEEDS.length - 1"
+          step="1"
+          :value="animSpeedIndex(animSpeedOf(selected))"
+          :disabled="busy || selected.animation === 'none'"
+          :aria-label="t('text.animSpeed')"
+          :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
+          @input="
+            patch({
+              animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
+            })
+          "
+        />
+        <span class="hint">{{ t('text.animSpeedHint') }}</span>
+      </div>
 
       <div class="field-col">
         <div class="field-row">

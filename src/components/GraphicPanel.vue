@@ -30,6 +30,7 @@ import {
   type GraphicOverlay,
   type GraphicSymbol,
 } from '@/lib/graphicOverlay'
+import { ANIM_SPEEDS, animSpeedIndex, animSpeedOf, formatAnimSpeed } from '@/lib/textOverlay'
 import { IMAGE_ACCEPT, ImageAssetError, addImageAsset, getImageAsset } from '@/lib/imageAssets'
 
 /**
@@ -60,7 +61,7 @@ const emit = defineEmits<{
   (e: 'burn'): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const graphics = useGraphicOverlayStore()
 const { overlays, selected, selectedId, canAdd } = storeToRefs(graphics)
 
@@ -806,6 +807,29 @@ function symbolPath(s: GraphicSymbol): string {
         </select>
         <span v-if="selected.loop !== 'none'" class="hint">{{ t('graphics.loopHint') }}</span>
       </label>
+      <div class="field-col">
+        <div class="field-row">
+          <span class="field-label">{{ t('text.animSpeed') }}</span>
+          <span class="field-value">{{ formatAnimSpeed(animSpeedOf(selected), locale) }}</span>
+        </div>
+        <input
+          class="range"
+          type="range"
+          min="0"
+          :max="ANIM_SPEEDS.length - 1"
+          step="1"
+          :value="animSpeedIndex(animSpeedOf(selected))"
+          :disabled="busy || (selected.animation === 'none' && selected.loop === 'none')"
+          :aria-label="t('text.animSpeed')"
+          :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
+          @input="
+            patch({
+              animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
+            })
+          "
+        />
+        <span class="hint">{{ t('text.animSpeedHint') }}</span>
+      </div>
     </div>
 
     <button

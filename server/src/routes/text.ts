@@ -95,7 +95,7 @@ textRouter.get('/fonts', (_req: Request, res: Response) => {
  * Bibliotheks-Video ein. Das Ergebnis wird als neues
  * Bibliotheks-Video gespeichert (wie „Schneiden" mit storeResult); Fortschritt
  * und Abbruch laufen über die bekannten Job-Endpunkte (/api/cut/:id/…).
- * Antwort: 202 { jobId, text: true, graphics: true, graphicMotion: true, storeResult: true }
+ * Antwort: 202 { jobId, text: true, graphics: true, graphicMotion: true, animSpeed: true, storeResult: true }
  */
 textRouter.post(
   '/text',
@@ -157,9 +157,14 @@ textRouter.post(
         outputName: `${baseName}_text.${outExt}`,
       })
       void jobManager.run(job, args, duration, customFontsEnv())
-      res
-        .status(202)
-        .json({ jobId: id, text: true, graphics: true, graphicMotion: true, storeResult: true })
+      res.status(202).json({
+        jobId: id,
+        text: true,
+        graphics: true,
+        graphicMotion: true,
+        animSpeed: true,
+        storeResult: true,
+      })
     } catch (err) {
       await Promise.all(ownedFiles.map((p) => rm(p, { force: true }).catch(() => {})))
       await mediaStore.release([item.id])

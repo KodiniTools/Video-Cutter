@@ -8,6 +8,7 @@ import {
   type GraphicOverlay,
 } from './graphicOverlay'
 import {
+  animSpeedOf,
   DEFAULT_TEXT_STYLE,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
@@ -105,6 +106,8 @@ function parseText(v: unknown): TextOverlay | null {
     style: oneOf(v.style, TEXT_STYLES, d.style),
     accent: str(v.accent, d.accent),
     animation: oneOf(v.animation, TEXT_ANIMATIONS, d.animation),
+    // Tempo nur, wenn abweichend gespeichert (alte Projekte: normal).
+    ...(animSpeedOf(v) !== 1 ? { animSpeed: animSpeedOf(v) } : {}),
   }
 }
 

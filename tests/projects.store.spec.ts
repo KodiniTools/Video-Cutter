@@ -405,4 +405,18 @@ describe('parseProjectState', () => {
       ['fade', 'none'],
     ])
   })
+
+  it('Tempo der Animationen: gespeichert übernommen, sonst normal', () => {
+    const s = parseProjectState({
+      items: [
+        {
+          media: 'a',
+          texts: [{ text: 'x', animSpeed: 0.5 }, { text: 'y' }],
+          graphics: [{ kind: 'emoji', emoji: '👉', start: 0, end: 2, animSpeed: 2 }],
+        },
+      ],
+    })
+    expect(s.items[0].texts.map((t) => t.animSpeed)).toEqual([0.5, undefined])
+    expect(s.items[0].graphics[0].animSpeed).toBe(2)
+  })
 })

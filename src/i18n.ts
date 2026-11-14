@@ -319,6 +319,8 @@ const messages = {
       style: 'Stil',
       accent: 'Akzentfarbe',
       styles: { outline: 'Kontur', box: 'Box', shadow: 'Schatten', none: 'Ohne' },
+      animSpeed: 'Tempo der Animation',
+      animSpeedHint: 'Kleiner = langsamer (0,5× = halb so schnell), größer = schneller.',
       animation: 'Animation',
       animations: {
         none: 'Keine',
@@ -594,6 +596,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keinen Text einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       graphicsUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Formen/Emojis einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      animSpeedUnsupported:
+        'Das Server-Backend ist veraltet und kennt das Tempo von Animationen noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder das Tempo auf 1× stellen.',
       graphicMotionUnsupported:
         'Das Server-Backend ist veraltet und kann „Aufploppen“ und Dauer-Animationen von Formen/Emojis/Bildern noch nicht einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder diese Animationen abwählen.',
       imageTooLarge:
@@ -911,6 +915,8 @@ const messages = {
       style: 'Style',
       accent: 'Accent colour',
       styles: { outline: 'Outline', box: 'Box', shadow: 'Shadow', none: 'None' },
+      animSpeed: 'Animation speed',
+      animSpeedHint: 'Lower = slower (0.5× = half as fast), higher = faster.',
       animation: 'Animation',
       animations: {
         none: 'None',
@@ -1180,6 +1186,8 @@ const messages = {
         'The server backend is outdated and cannot burn in text yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       graphicsUnsupported:
         'The server backend is outdated and cannot burn in shapes/emojis yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      animSpeedUnsupported:
+        'The server backend is outdated and does not know animation speed yet. Please update the backend (deploy/deploy.sh without SKIP_API) or set the speed to 1×.',
       graphicMotionUnsupported:
         'The server backend is outdated and cannot burn in “Pop” or continuous animations of shapes/emojis/images yet. Please update the backend (deploy/deploy.sh without SKIP_API) or turn these animations off.',
       imageTooLarge:

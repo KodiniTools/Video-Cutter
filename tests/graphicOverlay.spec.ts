@@ -155,6 +155,14 @@ describe('Aufploppen und Dauer-Animationen (wie scale/rotate/enable des Servers)
     expect(defaultGraphic('emoji').loop).toBe('none')
   })
 
+  it('Tempo: Perioden und Einblenden skalieren, fehlt = 1', () => {
+    expect(graphicFrame(g({ loop: 'spin', animSpeed: 2 }), 1.75).angle).toBeCloseTo(180)
+    expect(graphicFrame(g({ loop: 'blink', animSpeed: 0.5 }), 2.1).opacity).toBe(1)
+    expect(graphicFrame(g({ animSpeed: 0.5 }), 1.4).opacity).toBeCloseTo(0.5)
+    expect(clampGraphic(g()).animSpeed).toBe(1)
+    expect(clampGraphic(g({ animSpeed: 10 })).animSpeed).toBe(4)
+  })
+
   it('hasMotion: nur pop oder Dauer-Animation brauchen das neue Backend', () => {
     expect(hasMotion(g())).toBe(false)
     expect(hasMotion(g({ animation: 'slide' }))).toBe(false)

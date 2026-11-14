@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import {
   parseJobStart,
   useServerCut,
@@ -9,6 +10,7 @@ import {
   MEDIA_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
   GRAPHIC_MOTION_UNSUPPORTED,
+  ANIM_SPEED_UNSUPPORTED,
   AUDIO_FADE_UNSUPPORTED,
   PREVIEW_UNSUPPORTED,
   startTextJob,
@@ -539,6 +541,23 @@ describe('startTextJob – Grafiken (Formen/Emojis)', () => {
       startTextJob('m1', [], undefined, [{ ...graphic, animation: 'pop' }]),
     ).rejects.toThrow(GRAPHIC_MOTION_UNSUPPORTED)
     expect(fetchMock).toHaveBeenCalledWith('/api/cut/t4', { method: 'DELETE' })
+  })
+
+  it('Tempo ≠ 1 bei Texten + Backend ohne animSpeed -> ANIM_SPEED_UNSUPPORTED, kein Job', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{"features":["text","graphics"]}'))
+    const text = { ...DEFAULT_TEXT_STYLE, text: 'a', start: 0, end: 2, animSpeed: 0.5 }
+    await expect(startTextJob('m1', [text])).rejects.toThrow(ANIM_SPEED_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('Tempo ≠ 1 + fehlende Bestätigung animSpeed -> Job abbrechen', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["text","animSpeed"]}'))
+      .mockResolvedValueOnce(new Response('{"jobId":"t6","text":true}', { status: 202 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    const text = { ...DEFAULT_TEXT_STYLE, text: 'a', start: 0, end: 2, animSpeed: 2 }
+    await expect(startTextJob('m1', [text])).rejects.toThrow(ANIM_SPEED_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/t6', { method: 'DELETE' })
   })
 
   it('neues Backend: Dauer-Animation wird mitgesendet', async () => {

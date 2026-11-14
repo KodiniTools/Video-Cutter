@@ -9,7 +9,7 @@
  * der Mittelpunkt als Anteil von Breite/Höhe. Animations-Zeiten wie bei Texten.
  */
 
-import { fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
+import { animSpeedOf, fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
 import { getImageAsset, hasImageAsset } from './imageAssets'
 
 export const GRAPHIC_KINDS = [
@@ -141,6 +141,8 @@ export interface GraphicData {
   animation: GraphicAnimation
   /** Dauer-Animation, solange die Grafik sichtbar ist. */
   loop: GraphicLoop
+  /** Tempo von Ein-/Ausblenden und Dauer-Animation (Faktor, fehlt = 1). */
+  animSpeed?: number
   /** Nur Bilder: ID des hochgeladenen Bildes (siehe imageAssets). */
   image: string
   /** Nur Bilder: Deckkraft des ganzen Bildes 0..1. */
@@ -281,6 +283,7 @@ export function clampGraphic<T extends GraphicData>(g: T): T {
       ? g.animation
       : 'fade',
     loop: (GRAPHIC_LOOPS as readonly string[]).includes(g.loop) ? g.loop : 'none',
+    animSpeed: animSpeedOf(g),
     start: Math.max(0, Number.isFinite(g.start) ? g.start : 0),
     emoji: Array.from(g.emoji).slice(0, MAX_EMOJI_LENGTH).join(''),
     image: typeof g.image === 'string' ? g.image : '',
@@ -739,8 +742,9 @@ export function graphicFrame(g: GraphicData, t: number): GraphicFrame {
   const u = t - g.start
   const ms = u * 1000
   const left = (g.end - t) * 1000
-  const f = fadeMs(dur)
-  const m = moveMs(dur)
+  const sp = animSpeedOf(g)
+  const f = fadeMs(dur, sp)
+  const m = moveMs(dur, sp)
   const fadeOut = f > 0 ? clamp01(left / f) : 1
   const frame: GraphicFrame = { visible: true, opacity: 1, dy: 0, scale: 1, angle: 0 }
   switch (g.animation) {
@@ -775,19 +779,20 @@ export function graphicFrame(g: GraphicData, t: number): GraphicFrame {
     case 'none':
       break
     case 'pulse':
-      frame.scale *= 1 + (PULSE_AMOUNT / 2) * (1 - Math.cos((2 * Math.PI * u) / PULSE_PERIOD))
+      frame.scale *=
+        1 + (PULSE_AMOUNT / 2) * (1 - Math.cos((2 * Math.PI * u) / (PULSE_PERIOD / sp)))
       break
     case 'wobble':
-      frame.angle = WOBBLE_DEG * Math.sin((2 * Math.PI * u) / WOBBLE_PERIOD)
+      frame.angle = WOBBLE_DEG * Math.sin((2 * Math.PI * u) / (WOBBLE_PERIOD / sp))
       break
     case 'spin':
-      frame.angle = ((360 * u) / SPIN_PERIOD) % 360
+      frame.angle = ((360 * u) / (SPIN_PERIOD / sp)) % 360
       break
     case 'float':
-      frame.dy -= FLOAT_AMOUNT * Math.sin((2 * Math.PI * u) / FLOAT_PERIOD)
+      frame.dy -= FLOAT_AMOUNT * Math.sin((2 * Math.PI * u) / (FLOAT_PERIOD / sp))
       break
     case 'blink':
-      if (u % BLINK_PERIOD >= BLINK_PERIOD * BLINK_ON) frame.opacity = 0
+      if (u % (BLINK_PERIOD / sp) >= (BLINK_PERIOD * BLINK_ON) / sp) frame.opacity = 0
       break
     default: {
       const never: never = loop
@@ -808,6 +813,8 @@ export interface ServerGraphic {
   end: number
   animation: GraphicAnimation
   loop: GraphicLoop
+  /** Nur gesendet, wenn ≠ 1 (sonst Anfrage wie bisher). */
+  animSpeed?: number
 }
 
 /** Größtes PNG, das der Server annimmt (Bytes, dekodiert; wie server MAX_GRAPHIC_BYTES). */
@@ -833,5 +840,6 @@ export function toServerGraphic(g: GraphicOverlay, H: number): ServerGraphic {
     end: r(c.end, 3),
     animation: c.animation,
     loop: c.loop,
+    ...(animSpeedOf(c) !== 1 ? { animSpeed: animSpeedOf(c) } : {}),
   }
 }

@@ -7,6 +7,7 @@ import {
   MAX_TEXT_SIZE,
   MIN_TEXT_DURATION,
   MIN_TEXT_SIZE,
+  animSpeedOf,
   type TextOverlay,
   type TextOverlayData,
 } from '@/lib/textOverlay'
@@ -55,6 +56,8 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
     const end = Math.min(total, start + DEFAULT_TEXT_DURATION)
     const template = selected.value ?? overlays.value[overlays.value.length - 1] ?? null
     const { x, y, font, size, color, style, accent, animation } = template ?? DEFAULT_TEXT_STYLE
+    // Tempo wie das Design übernehmen (nur wenn abweichend gesetzt).
+    const sp = template ? animSpeedOf(template) : 1
     const o: TextOverlay = {
       id: nextId++,
       text,
@@ -68,6 +71,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
       style,
       accent,
       animation,
+      ...(sp !== 1 ? { animSpeed: sp } : {}),
     }
     write([...overlays.value, o])
     selectedId.value = o.id
@@ -89,6 +93,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
       ...DEFAULT_TEXT_STYLE,
       animation: 'none' as const,
     }
+    const sp = template ? animSpeedOf(template) : 1
     const room = Math.max(0, MAX_TEXT_OVERLAYS - base.length)
     const added: TextOverlay[] = cues.slice(0, room).map((c) => ({
       id: nextId++,
@@ -103,6 +108,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
       style,
       accent,
       animation,
+      ...(sp !== 1 ? { animSpeed: sp } : {}),
     }))
     write([...base, ...added].sort((a, b) => a.start - b.start))
     selectedId.value = null
@@ -119,6 +125,7 @@ export const useTextOverlayStore = defineStore('textOverlays', () => {
         n.y = Math.min(1, Math.max(0, n.y))
         n.size = Math.min(MAX_TEXT_SIZE, Math.max(MIN_TEXT_SIZE, n.size))
         n.start = Math.max(0, n.start)
+        if (n.animSpeed !== undefined) n.animSpeed = animSpeedOf(n)
         return n
       }),
     )

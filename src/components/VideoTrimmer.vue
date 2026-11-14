@@ -24,6 +24,7 @@ import {
   TEXT_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
   GRAPHIC_MOTION_UNSUPPORTED,
+  ANIM_SPEED_UNSUPPORTED,
   PREVIEW_UNSUPPORTED,
   SPEED_UNSUPPORTED,
   type MediaCutRequest,
@@ -611,6 +612,7 @@ function showJobError(e: unknown): void {
     [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
     [GRAPHICS_UNSUPPORTED]: 'errors.graphicsUnsupported',
     [GRAPHIC_MOTION_UNSUPPORTED]: 'errors.graphicMotionUnsupported',
+    [ANIM_SPEED_UNSUPPORTED]: 'errors.animSpeedUnsupported',
     [PREVIEW_UNSUPPORTED]: 'errors.previewUnsupported',
     [SPEED_UNSUPPORTED]: 'errors.speedUnsupported',
   }

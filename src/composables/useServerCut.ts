@@ -4,7 +4,7 @@ import type { CutOperation, CropRect } from '@/stores/videoEditor'
 import { API_BASE } from '@/lib/apiBase'
 import { fallbackErrorMessage, retryAfterOf } from '@/lib/httpError'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
-import type { TextOverlayData } from '@/lib/textOverlay'
+import { animSpeedOf, type TextOverlayData } from '@/lib/textOverlay'
 import { hasMotion, type ServerGraphic } from '@/lib/graphicOverlay'
 import type { AudioFadeInput } from '@/lib/audioFade'
 
@@ -47,6 +47,8 @@ export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
 export const GRAPHICS_UNSUPPORTED = 'GRAPHICS_UNSUPPORTED'
 /** Backend kennt „Aufploppen“/Dauer-Animationen von Grafiken noch nicht. */
 export const GRAPHIC_MOTION_UNSUPPORTED = 'GRAPHIC_MOTION_UNSUPPORTED'
+/** Backend kennt das Tempo von Animationen (Texte/Grafiken) noch nicht. */
+export const ANIM_SPEED_UNSUPPORTED = 'ANIM_SPEED_UNSUPPORTED'
 
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
@@ -711,7 +713,7 @@ async function previewMerge(req: MediaCutRequest): Promise<Blob> {
  */
 async function backendSupportsGraphics(
   signal?: AbortSignal,
-  feature: 'graphics' | 'graphicMotion' = 'graphics',
+  feature: 'graphics' | 'graphicMotion' | 'animSpeed' = 'graphics',
 ): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/api/health`, { signal })
@@ -746,6 +748,11 @@ export async function startTextJob(
   if (motion && !(await backendSupportsGraphics(signal, 'graphicMotion'))) {
     throw new Error(GRAPHIC_MOTION_UNSUPPORTED)
   }
+  // Abweichendes Tempo: ein altes Backend würde es stillschweigend ignorieren.
+  const speed = [...texts, ...graphics].some((o) => animSpeedOf(o) !== 1)
+  if (speed && !(await backendSupportsGraphics(signal, 'animSpeed'))) {
+    throw new Error(ANIM_SPEED_UNSUPPORTED)
+  }
   const res = await fetch(`${API_BASE}/api/text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -758,6 +765,7 @@ export async function startTextJob(
     text?: unknown
     graphics?: unknown
     graphicMotion?: unknown
+    animSpeed?: unknown
     error?: unknown
   } = {}
   try {
@@ -784,6 +792,10 @@ export async function startTextJob(
   if (motion && data.graphicMotion !== true) {
     await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
     throw new Error(GRAPHIC_MOTION_UNSUPPORTED)
+  }
+  if (speed && data.animSpeed !== true) {
+    await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
+    throw new Error(ANIM_SPEED_UNSUPPORTED)
   }
   return data.jobId
 }

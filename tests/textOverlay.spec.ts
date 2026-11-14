@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import {
+  animSpeedIndex,
+  animSpeedOf,
+  fadeMs,
+  formatAnimSpeed,
   DEFAULT_TEXT_STYLE,
   MAX_TEXT_OVERLAYS,
   isValidOverlay,
@@ -17,6 +21,45 @@ const o = (p: Partial<TextOverlayData> = {}): TextOverlayData => ({
   start: 1,
   end: 4,
   ...p,
+})
+
+describe('Tempo der Animation', () => {
+  it('Faktor 1 = bisherige Zeiten, 0,5 = doppelt so lang (höchstens 1/3 der Dauer)', () => {
+    expect(fadeMs(3)).toBe(400)
+    expect(fadeMs(3, 0.5)).toBe(800)
+    expect(fadeMs(3, 0.25)).toBe(1000)
+    expect(fadeMs(3, 2)).toBe(200)
+  })
+
+  it('fade/slide/typewriter folgen dem Tempo', () => {
+    expect(overlayFrame(o({ animation: 'fade', animSpeed: 0.5 }), 1.4).opacity).toBeCloseTo(0.5)
+    expect(overlayFrame(o({ animation: 'slide', animSpeed: 2 }), 1.25).dy).toBe(0)
+    const tw = o({ text: 'abcd', animation: 'typewriter', animSpeed: 2 })
+    expect(overlayFrame(tw, 1.031).chars).toBe(2)
+  })
+
+  it('animSpeedOf/Index/Anzeige', () => {
+    expect(animSpeedOf({})).toBe(1)
+    expect(animSpeedOf({ animSpeed: 99 })).toBe(4)
+    expect(animSpeedOf({ animSpeed: 'x' })).toBe(1)
+    expect(animSpeedIndex(1)).toBe(3)
+    expect(animSpeedIndex(0.6)).toBe(1)
+    expect(formatAnimSpeed(0.5, 'de')).toBe('0,5×')
+  })
+
+  it('toServerOverlay: Tempo nur senden, wenn ≠ 1', () => {
+    expect(toServerOverlay({ ...o(), id: 1 })).not.toHaveProperty('animSpeed')
+    expect(toServerOverlay({ ...o({ animSpeed: 2 }), id: 1 }).animSpeed).toBe(2)
+  })
+
+  it('Store: neuer Text übernimmt das Tempo des gewählten', () => {
+    setActivePinia(createPinia())
+    const st = useTextOverlayStore()
+    st.setItem(1)
+    const a = st.add(0, 10, 'a')!
+    st.update(a.id, { animSpeed: 0.5 })
+    expect(st.add(2, 10, 'b')!.animSpeed).toBe(0.5)
+  })
 })
 
 describe('overlayFrame (Vorschau = Server-Animation)', () => {

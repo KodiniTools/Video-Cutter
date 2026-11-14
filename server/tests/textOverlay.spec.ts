@@ -130,6 +130,14 @@ describe('buildAssEvent', () => {
 
   it('Animationen erzeugen passende Tags', () => {
     expect(buildAssEvent(overlay({ animation: 'fade' }), 100, 100)).toContain('\\fad(400,400)')
+    // Tempo: 0,5 = doppelt so lang, fehlendes Feld = 1
+    expect(buildAssEvent(overlay({ animation: 'fade', animSpeed: 0.5 }), 100, 100)).toContain(
+      '\\fad(800,800)',
+    )
+    const [p] = parseTextOverlays([{ ...base, animSpeed: 9 }], 10)
+    expect(p!.animSpeed).toBe(4)
+    expect(parseTextOverlays([base], 10)[0]!.animSpeed).toBe(1)
+    expect(() => parseTextOverlays([{ ...base, animSpeed: 'x' }], 10)).toThrow(/Tempo/)
     expect(buildAssEvent(overlay({ animation: 'slide' }), 1000, 1000)).toContain(
       '\\move(500,960,500,900,0,500)',
     )
