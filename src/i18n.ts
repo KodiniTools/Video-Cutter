@@ -538,6 +538,7 @@ const messages = {
       loop: 'Wiederholen, wenn die Musik kürzer ist',
       hint: 'Die Musik läuft über das gesamte nächste Ergebnis (Schneiden oder Zusammenfügen) und endet mit dem Video. Erzwingt Neu-Kodieren.',
       notAudio: 'Bitte eine Audiodatei auswählen.',
+      duration: 'Dauer der Musik',
     },
     format: {
       legend: 'Ausgabeformat',
@@ -1128,6 +1129,7 @@ const messages = {
       loop: 'Repeat if the music is shorter',
       hint: 'The music plays over the whole next result (cut or join) and ends with the video. Forces re-encoding.',
       notAudio: 'Please choose an audio file.',
+      duration: 'Music duration',
     },
     format: {
       legend: 'Output format',

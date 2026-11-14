@@ -69,3 +69,16 @@ export function formatNudge(deltaMs: number, msUnit = 'ms', sUnit = 's'): string
     ? `${sign}${deltaMs / 1000}${sUnit}`
     : `${sign}${deltaMs}${msUnit}`
 }
+
+/**
+ * Kurze Dauer-Anzeige wie in Musik-Playern: `m:ss`, ab einer Stunde `h:mm:ss`.
+ * Sekunden werden gerundet (3:41.6 -> "3:42"). Ungültig/negativ -> "0:00".
+ */
+export function formatClockDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(Number.isFinite(seconds) ? seconds : 0))
+  const sec = total % 60
+  const totalMin = Math.floor(total / 60)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (totalMin < 60) return `${totalMin}:${pad(sec)}`
+  return `${Math.floor(totalMin / 60)}:${pad(totalMin % 60)}:${pad(sec)}`
+}

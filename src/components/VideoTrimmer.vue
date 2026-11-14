@@ -42,7 +42,13 @@ import {
   type GraphicKind,
 } from '@/lib/graphicOverlay'
 import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
-import { formatTimeMs, formatNudge, parseTimeInput, toMs } from '@/lib/timeFormat'
+import {
+  formatClockDuration,
+  formatTimeMs,
+  formatNudge,
+  parseTimeInput,
+  toMs,
+} from '@/lib/timeFormat'
 import { saveFile, isAppleMobile } from '@/lib/download'
 import { readVideoDuration } from '@/lib/videoMeta'
 import { frameIndex, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
@@ -250,6 +256,23 @@ const uploadDetail = computed(() => {
   }
   return parts.join(' · ')
 })
+
+/**
+ * Dauer der gewählten Musikdatei (nur Anzeige, aus den Metadaten im Browser).
+ * 0 = unbekannt/noch nicht gelesen. Reagiert auf jede neue Datei (Wählen,
+ * Projekt öffnen, Rückgängig); veraltete Antworten werden verworfen.
+ */
+const musicDuration = ref(0)
+watch(
+  () => music.value?.file ?? null,
+  async (file) => {
+    musicDuration.value = 0
+    if (!file) return
+    const d = await readVideoDuration(file)
+    if (music.value?.file === file) musicDuration.value = d
+  },
+  { immediate: true },
+)
 
 // --- Videos anhängen (Zusammenfügen) -----------------------------------------
 /** Musikdatei wählen (Audio oder Video mit Tonspur). */
@@ -1802,6 +1825,14 @@ async function downloadResult(): Promise<void> {
                 <span class="segment-time music-name" :title="music.file.name">
                   ♪ {{ music.file.name }}
                 </span>
+                <span
+                  v-if="musicDuration > 0"
+                  class="music-duration"
+                  data-test="music-duration"
+                  :title="t('music.duration')"
+                >
+                  {{ formatClockDuration(musicDuration) }}
+                </span>
                 <button
                   class="btn tiny remove"
                   type="button"
@@ -2608,6 +2639,12 @@ label.btn.block {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+.music-duration {
+  flex: none;
+  font-size: var(--ds-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-2);
 }
 .check-row small {
   display: block;
