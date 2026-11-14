@@ -5,7 +5,7 @@ import { API_BASE } from '@/lib/apiBase'
 import { fallbackErrorMessage, retryAfterOf } from '@/lib/httpError'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 import type { TextOverlayData } from '@/lib/textOverlay'
-import type { ServerGraphic } from '@/lib/graphicOverlay'
+import { hasMotion, type ServerGraphic } from '@/lib/graphicOverlay'
 import type { AudioFadeInput } from '@/lib/audioFade'
 
 /** Fehler-Kennung für einen vom Nutzer abgebrochenen Vorgang. */
@@ -45,6 +45,8 @@ export const PREVIEW_UNSUPPORTED = 'PREVIEW_UNSUPPORTED'
 export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
 /** Fehler-Kennung: Backend kann noch keine Grafiken (Formen/Emojis) einbrennen. */
 export const GRAPHICS_UNSUPPORTED = 'GRAPHICS_UNSUPPORTED'
+/** Backend kennt „Aufploppen“/Dauer-Animationen von Grafiken noch nicht. */
+export const GRAPHIC_MOTION_UNSUPPORTED = 'GRAPHIC_MOTION_UNSUPPORTED'
 
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
@@ -707,12 +709,15 @@ async function previewMerge(req: MediaCutRequest): Promise<Blob> {
  * nicht erreichbarer Health-Endpunkt gilt als „unbekannt“ (true) – die
  * Job-Antwort wird ohnehin noch einmal geprüft.
  */
-async function backendSupportsGraphics(signal?: AbortSignal): Promise<boolean> {
+async function backendSupportsGraphics(
+  signal?: AbortSignal,
+  feature: 'graphics' | 'graphicMotion' = 'graphics',
+): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/api/health`, { signal })
     if (!res.ok) return true
     const data = (await res.json()) as { features?: unknown }
-    return Array.isArray(data.features) ? data.features.includes('graphics') : false
+    return Array.isArray(data.features) ? data.features.includes(feature) : false
   } catch (e) {
     if (signal?.aborted) throw e
     return true
@@ -735,6 +740,12 @@ export async function startTextJob(
   if (graphics.length && !(await backendSupportsGraphics(signal))) {
     throw new Error(GRAPHICS_UNSUPPORTED)
   }
+  // Aufploppen/Dauer-Animationen: ein altes Backend würde 'pop' ablehnen und
+  // `loop` stillschweigend ignorieren – vorher klar melden.
+  const motion = graphics.some(hasMotion)
+  if (motion && !(await backendSupportsGraphics(signal, 'graphicMotion'))) {
+    throw new Error(GRAPHIC_MOTION_UNSUPPORTED)
+  }
   const res = await fetch(`${API_BASE}/api/text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -742,7 +753,13 @@ export async function startTextJob(
     signal,
   })
   const raw = await res.text()
-  let data: { jobId?: unknown; text?: unknown; graphics?: unknown; error?: unknown } = {}
+  let data: {
+    jobId?: unknown
+    text?: unknown
+    graphics?: unknown
+    graphicMotion?: unknown
+    error?: unknown
+  } = {}
   try {
     data = JSON.parse(raw) as typeof data
   } catch {
@@ -763,6 +780,10 @@ export async function startTextJob(
   if (graphics.length && data.graphics !== true) {
     await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
     throw new Error(GRAPHICS_UNSUPPORTED)
+  }
+  if (motion && data.graphicMotion !== true) {
+    await fetch(`${API_BASE}/api/cut/${data.jobId}`, { method: 'DELETE' }).catch(() => {})
+    throw new Error(GRAPHIC_MOTION_UNSUPPORTED)
   }
   return data.jobId
 }

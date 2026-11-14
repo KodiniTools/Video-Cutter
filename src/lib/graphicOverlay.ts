@@ -24,8 +24,32 @@ export const GRAPHIC_KINDS = [
 ] as const
 export type GraphicKind = (typeof GRAPHIC_KINDS)[number]
 
-export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide'] as const
+export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide', 'pop'] as const
 export type GraphicAnimation = (typeof GRAPHIC_ANIMATIONS)[number]
+
+/**
+ * Dauer-Animationen, solange die Grafik sichtbar ist (Zeit ab ihrem Start).
+ * Konstanten identisch mit dem Server (server/src/lib/graphicOverlay.ts).
+ */
+export const GRAPHIC_LOOPS = ['none', 'pulse', 'wobble', 'spin', 'float', 'blink'] as const
+export type GraphicLoop = (typeof GRAPHIC_LOOPS)[number]
+/** Pulsieren: Größe 1 … 1+Amplitude, Periode in s. */
+export const PULSE_PERIOD = 1
+export const PULSE_AMOUNT = 0.12
+/** Wackeln: ±Grad, Periode in s. */
+export const WOBBLE_PERIOD = 0.8
+export const WOBBLE_DEG = 10
+/** Drehen: eine Umdrehung (im Uhrzeigersinn) je Periode in s. */
+export const SPIN_PERIOD = 3
+/** Schweben: Auf und Ab um ±Anteil der Bildhöhe, Periode in s. */
+export const FLOAT_PERIOD = 2
+export const FLOAT_AMOUNT = 0.015
+/** Blinken: sichtbar im ersten Anteil jeder Periode. */
+export const BLINK_PERIOD = 1
+export const BLINK_ON = 0.6
+/** Aufploppen: Größe 0,4 -> 1,12 -> 1 (wie bei Texten). */
+export const POP_FROM = 0.4
+export const POP_PEAK = 1.12
 
 /**
  * Vektor-Symbole im 24er-Raster. `stroke` = als dicke Linie gezeichnet
@@ -115,6 +139,8 @@ export interface GraphicData {
   /** Eckenrundung des Rechtecks, Anteil der kürzeren Seite [0, 0.5]. */
   radius: number
   animation: GraphicAnimation
+  /** Dauer-Animation, solange die Grafik sichtbar ist. */
+  loop: GraphicLoop
   /** Nur Bilder: ID des hochgeladenen Bildes (siehe imageAssets). */
   image: string
   /** Nur Bilder: Deckkraft des ganzen Bildes 0..1. */
@@ -184,6 +210,7 @@ export function defaultGraphic(kind: GraphicKind): Omit<GraphicData, 'start' | '
     fillOpacity: 0,
     radius: 0.12,
     animation: 'fade' as GraphicAnimation,
+    loop: 'none' as GraphicLoop,
     image: '',
     opacity: 1,
     cropL: 0,
@@ -249,6 +276,11 @@ export function clampGraphic<T extends GraphicData>(g: T): T {
     strokeWidth: c(g.strokeWidth, isLine ? MIN_LINE_STROKE : 0, MAX_STROKE),
     fillOpacity: c(g.fillOpacity, 0, 1),
     radius: c(g.radius, 0, 0.5),
+    // Unbekannte Werte (z. B. aus gespeicherten Projekten) -> Standard.
+    animation: (GRAPHIC_ANIMATIONS as readonly string[]).includes(g.animation)
+      ? g.animation
+      : 'fade',
+    loop: (GRAPHIC_LOOPS as readonly string[]).includes(g.loop) ? g.loop : 'none',
     start: Math.max(0, Number.isFinite(g.start) ? g.start : 0),
     emoji: Array.from(g.emoji).slice(0, MAX_EMOJI_LENGTH).join(''),
     image: typeof g.image === 'string' ? g.image : '',
@@ -673,34 +705,96 @@ export interface GraphicFrame {
   opacity: number
   /** Vertikaler Versatz als Anteil der Bildhöhe (in px gerundet wie der Server). */
   dy: number
+  /** Größenfaktor um den Mittelpunkt (Aufploppen/Pulsieren), 1 = unverändert. */
+  scale: number
+  /** Zusätzliche Drehung im Uhrzeigersinn in Grad (Wackeln/Drehen). */
+  angle: number
+}
+
+/** Ruhende Ansicht (angehalten): keine Animation. */
+export const STILL_FRAME: Readonly<Omit<GraphicFrame, 'visible'>> = {
+  opacity: 1,
+  dy: 0,
+  scale: 1,
+  angle: 0,
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+const lerp = (a: number, b: number, t: number) => a + (b - a) * clamp01(t)
 
+/** Hat die Grafik eine Dauer-Animation oder Aufploppen (braucht neues Backend)? */
+export function hasMotion(g: Pick<GraphicData, 'animation' | 'loop'>): boolean {
+  return g.animation === 'pop' || (g.loop ?? 'none') !== 'none'
+}
+
+/**
+ * Darstellung zur Zeit `t` – dieselben Formeln wie die FFmpeg-Filter des
+ * Servers (fade/overlay-y/scale/rotate/enable).
+ */
 export function graphicFrame(g: GraphicData, t: number): GraphicFrame {
-  if (!(t >= g.start && t < g.end)) return { visible: false, opacity: 0, dy: 0 }
+  if (!(t >= g.start && t < g.end)) {
+    return { visible: false, opacity: 0, dy: 0, scale: 1, angle: 0 }
+  }
   const dur = g.end - g.start
-  const ms = (t - g.start) * 1000
+  const u = t - g.start
+  const ms = u * 1000
   const left = (g.end - t) * 1000
   const f = fadeMs(dur)
   const m = moveMs(dur)
   const fadeOut = f > 0 ? clamp01(left / f) : 1
+  const frame: GraphicFrame = { visible: true, opacity: 1, dy: 0, scale: 1, angle: 0 }
   switch (g.animation) {
     case 'none':
-      return { visible: true, opacity: 1, dy: 0 }
+      break
     case 'fade':
-      return { visible: true, opacity: Math.min(f > 0 ? clamp01(ms / f) : 1, fadeOut), dy: 0 }
+      frame.opacity = Math.min(f > 0 ? clamp01(ms / f) : 1, fadeOut)
+      break
     case 'slide':
-      return {
-        visible: true,
-        opacity: Math.min(m > 0 ? clamp01(ms / m) : 1, fadeOut),
-        dy: SLIDE_OFFSET * (m > 0 ? Math.max(0, 1 - ms / m) : 0),
+      frame.opacity = Math.min(m > 0 ? clamp01(ms / m) : 1, fadeOut)
+      frame.dy = SLIDE_OFFSET * (m > 0 ? Math.max(0, 1 - ms / m) : 0)
+      break
+    case 'pop': {
+      const inMs = Math.round(m / 2)
+      frame.opacity = Math.min(inMs > 0 ? clamp01(ms / inMs) : 1, fadeOut)
+      if (m > 0) {
+        const a = Math.round(m * 0.6)
+        frame.scale =
+          ms < a
+            ? lerp(POP_FROM, POP_PEAK, a > 0 ? ms / a : 1)
+            : lerp(POP_PEAK, 1, m > a ? (ms - a) / (m - a) : 1)
       }
+      break
+    }
     default: {
       const never: never = g.animation
       throw new Error(`Unbekannte Animation: ${String(never)}`)
     }
   }
+  const loop: GraphicLoop = g.loop ?? 'none'
+  switch (loop) {
+    case 'none':
+      break
+    case 'pulse':
+      frame.scale *= 1 + (PULSE_AMOUNT / 2) * (1 - Math.cos((2 * Math.PI * u) / PULSE_PERIOD))
+      break
+    case 'wobble':
+      frame.angle = WOBBLE_DEG * Math.sin((2 * Math.PI * u) / WOBBLE_PERIOD)
+      break
+    case 'spin':
+      frame.angle = ((360 * u) / SPIN_PERIOD) % 360
+      break
+    case 'float':
+      frame.dy -= FLOAT_AMOUNT * Math.sin((2 * Math.PI * u) / FLOAT_PERIOD)
+      break
+    case 'blink':
+      if (u % BLINK_PERIOD >= BLINK_PERIOD * BLINK_ON) frame.opacity = 0
+      break
+    default: {
+      const never: never = loop
+      throw new Error(`Unbekannte Dauer-Animation: ${String(never)}`)
+    }
+  }
+  return frame
 }
 
 // --- Server ---------------------------------------------------------------------
@@ -713,6 +807,7 @@ export interface ServerGraphic {
   start: number
   end: number
   animation: GraphicAnimation
+  loop: GraphicLoop
 }
 
 /** Größtes PNG, das der Server annimmt (Bytes, dekodiert; wie server MAX_GRAPHIC_BYTES). */
@@ -737,5 +832,6 @@ export function toServerGraphic(g: GraphicOverlay, H: number): ServerGraphic {
     start: r(c.start, 3),
     end: r(c.end, 3),
     animation: c.animation,
+    loop: c.loop,
   }
 }

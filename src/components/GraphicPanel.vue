@@ -9,6 +9,7 @@ import FrameSpinner from './FrameSpinner.vue'
 import {
   EMOJI_PRESETS,
   GRAPHIC_ANIMATIONS,
+  GRAPHIC_LOOPS,
   GRAPHIC_SYMBOLS,
   MAX_CROP,
   MAX_EMOJI_LENGTH,
@@ -771,7 +772,7 @@ function symbolPath(s: GraphicSymbol): string {
       </template>
 
       <label class="field-col">
-        <span class="field-label">{{ t('text.animation') }}</span>
+        <span class="field-label">{{ t('graphics.entry') }}</span>
         <select
           class="input"
           :value="selected.animation"
@@ -786,6 +787,24 @@ function symbolPath(s: GraphicSymbol): string {
             {{ t(`text.animations.${a}`) }}
           </option>
         </select>
+      </label>
+      <label class="field-col">
+        <span class="field-label">{{ t('graphics.loop') }}</span>
+        <select
+          class="input"
+          :value="selected.loop"
+          :disabled="busy"
+          @change="
+            patch({
+              loop: ($event.target as HTMLSelectElement).value as typeof selected.loop,
+            })
+          "
+        >
+          <option v-for="l in GRAPHIC_LOOPS" :key="l" :value="l">
+            {{ t(`graphics.loops.${l}`) }}
+          </option>
+        </select>
+        <span v-if="selected.loop !== 'none'" class="hint">{{ t('graphics.loopHint') }}</span>
       </label>
     </div>
 

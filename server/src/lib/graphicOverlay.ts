@@ -12,8 +12,32 @@ import { fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
  * brauchen auf dem Server keine eigene Emoji-Schrift.
  */
 
-export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide'] as const
+export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide', 'pop'] as const
 export type GraphicAnimation = (typeof GRAPHIC_ANIMATIONS)[number]
+
+/**
+ * Dauer-Animationen, solange die Grafik sichtbar ist (Zeit ab ihrem Start).
+ * Konstanten identisch mit dem Frontend (src/lib/graphicOverlay.ts).
+ */
+export const GRAPHIC_LOOPS = ['none', 'pulse', 'wobble', 'spin', 'float', 'blink'] as const
+export type GraphicLoop = (typeof GRAPHIC_LOOPS)[number]
+/** Pulsieren: Größe 1 … 1+Amplitude, Periode in s. */
+export const PULSE_PERIOD = 1
+export const PULSE_AMOUNT = 0.12
+/** Wackeln: ±Grad, Periode in s. */
+export const WOBBLE_PERIOD = 0.8
+export const WOBBLE_DEG = 10
+/** Drehen: eine Umdrehung (im Uhrzeigersinn) je Periode in s. */
+export const SPIN_PERIOD = 3
+/** Schweben: Auf und Ab um ±Anteil der Bildhöhe, Periode in s. */
+export const FLOAT_PERIOD = 2
+export const FLOAT_AMOUNT = 0.015
+/** Blinken: sichtbar im ersten Anteil jeder Periode. */
+export const BLINK_PERIOD = 1
+export const BLINK_ON = 0.6
+/** Aufploppen: Größe 0,4 -> 1,12 -> 1 (wie bei Texten). */
+export const POP_FROM = 0.4
+export const POP_PEAK = 1.12
 
 export const MAX_GRAPHICS = 50
 /** Größte einzelne PNG-Datei (Bytes, dekodiert) – Fotos in voller Bildgröße. */
@@ -37,6 +61,7 @@ export interface GraphicOverlay {
   start: number
   end: number
   animation: GraphicAnimation
+  loop: GraphicLoop
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -118,6 +143,11 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
     ) {
       throw new ValidationError(`Ungültige Animation von Grafik ${n}.`)
     }
+    // Fehlt bei älteren Clients -> keine Dauer-Animation.
+    const loop = item.loop ?? 'none'
+    if (typeof loop !== 'string' || !(GRAPHIC_LOOPS as readonly string[]).includes(loop)) {
+      throw new ValidationError(`Ungültige Dauer-Animation von Grafik ${n}.`)
+    }
     return {
       ...img,
       x: clamp(num(item.x, `Position von Grafik ${n}`), 0, 1),
@@ -125,9 +155,13 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
       start,
       end,
       animation: animation as GraphicAnimation,
+      loop: loop as GraphicLoop,
     }
   })
 }
+
+/** Rand (s) um den sichtbaren Bereich, in dem Drehen/Skalieren aktiv sind. */
+const LIVE_MARGIN = 0.1
 
 /** Ausgleich der ms-Rundung von Bildzeiten im Client (Sekunden). */
 const FRAME_TOLERANCE = 0.001
@@ -149,11 +183,21 @@ export function graphicTopLeft(
   }
 }
 
+/** Seitenlänge des Quadrats, in dem sich ein w×h-Bild frei drehen kann. */
+export function rotationBox(width: number, height: number): number {
+  return Math.ceil(Math.hypot(width, height))
+}
+
 /**
  * Filterkette für eine Grafik: Eingang `[in]` (Video), Grafik-Eingang
  * `[k:v]`, Ausgang `[out]`. Ein-/Ausblenden über den Alphakanal des
  * wiederholten Standbilds, Hereingleiten über einen zeitabhängigen y-Wert –
  * Zeiten wie bei den Texten (fadeMs/moveMs, linear).
+ * Aufploppen/Pulsieren skalieren das Standbild je Bild (`scale`, eval=frame,
+ * zentriert über overlay_w/overlay_h), Wackeln/Drehen drehen es um seinen
+ * Mittelpunkt (`rotate` in einem festen Quadrat), Schweben bewegt y,
+ * Blinken blendet über `enable` aus. Ohne diese Animationen entsteht exakt
+ * die bisherige Filterkette.
  */
 export function graphicFilter(
   g: GraphicOverlay,
@@ -166,10 +210,15 @@ export function graphicFilter(
   const dur = g.end - g.start
   const f = fadeMs(dur) / 1000
   const m = moveMs(dur) / 1000
-  const { left, top } = graphicTopLeft(g, frameW, frameH)
+  const loop = g.loop ?? 'none'
+  const st = f3(g.start)
+  const u = `(t-${st})`
   const src = [`[${inputIndex}:v]format=rgba`]
   let fadeIn = 0
-  let y = String(top)
+  /** Zusätzlicher y-Versatz in px (Ausdruck) – Hereingleiten/Schweben. */
+  const yParts: string[] = []
+  /** Skalierungsfaktoren (Ausdrücke) – Aufploppen/Pulsieren. */
+  const scales: string[] = []
   switch (g.animation) {
     case 'none':
       break
@@ -179,7 +228,23 @@ export function graphicFilter(
     case 'slide': {
       fadeIn = m
       const dy = Math.round(SLIDE_OFFSET * frameH)
-      if (m > 0) y = `'${top}+${dy}*max(0,1-(t-${f3(g.start)})/${f3(m)})'`
+      if (m > 0) yParts.push(`${dy}*max(0,1-${u}/${f3(m)})`)
+      break
+    }
+    case 'pop': {
+      const mMs = Math.round(m * 1000)
+      fadeIn = Math.round(mMs / 2) / 1000
+      const a = Math.round(mMs * 0.6) / 1000
+      if (m > 0) {
+        // Linear 0,4 -> 1,12 (bis a), dann 1,12 -> 1 (bis m), wie libass \t.
+        const up =
+          a > 0
+            ? `${POP_FROM}+${f3(POP_PEAK - POP_FROM)}*min(1,max(0,${u}/${f3(a)}))`
+            : `${POP_PEAK}`
+        const down =
+          m > a ? `${POP_PEAK}-${f3(POP_PEAK - 1)}*min(1,max(0,(${u}-${f3(a)})/${f3(m - a)}))` : '1'
+        scales.push(`if(lt(${u},${f3(a)}),${up},${down})`)
+      }
       break
     }
     default: {
@@ -187,9 +252,64 @@ export function graphicFilter(
       throw new Error(`Unbekannte Animation: ${String(never)}`)
     }
   }
+  let angle = ''
+  let blink = ''
+  switch (loop) {
+    case 'none':
+      break
+    case 'pulse':
+      scales.push(`(1+${PULSE_AMOUNT / 2}*(1-cos(2*PI*${u}/${PULSE_PERIOD})))`)
+      break
+    case 'wobble':
+      angle = `${Math.round(((WOBBLE_DEG * Math.PI) / 180) * 1e4) / 1e4}*sin(2*PI*${u}/${WOBBLE_PERIOD})`
+      break
+    case 'spin':
+      angle = `2*PI*${u}/${SPIN_PERIOD}`
+      break
+    case 'float':
+      yParts.push(`-${f3(FLOAT_AMOUNT * frameH)}*sin(2*PI*${u}/${FLOAT_PERIOD})`)
+      break
+    case 'blink':
+      blink = `*lt(mod(${u},${BLINK_PERIOD}),${BLINK_PERIOD * BLINK_ON})`
+      break
+    default: {
+      const never: never = loop
+      throw new Error(`Unbekannte Dauer-Animation: ${String(never)}`)
+    }
+  }
   if (g.animation !== 'none') {
-    if (fadeIn > 0) src.push(`fade=t=in:st=${f3(g.start)}:d=${f3(fadeIn)}:alpha=1`)
+    if (fadeIn > 0) src.push(`fade=t=in:st=${st}:d=${f3(fadeIn)}:alpha=1`)
     if (f > 0) src.push(`fade=t=out:st=${f3(g.end - f)}:d=${f3(f)}:alpha=1`)
+  }
+  // Drehen/Skalieren nur rund um den sichtbaren Bereich – sonst liefe es für
+  // jedes Bild des ganzen Videos (große Fotos: spürbar langsamer). Außerhalb
+  // ist die Grafik ohnehin ausgeblendet (overlay enable).
+  const live = `between(t,${f3(g.start - LIVE_MARGIN)},${f3(g.end + LIVE_MARGIN)})`
+  // Drehen in einem festen Quadrat (Diagonale), damit nichts abgeschnitten
+  // wird; transparent gefüllt (c=none ließe alte Bildreste stehen).
+  let w = g.width
+  let h = g.height
+  if (angle) {
+    const box = rotationBox(g.width, g.height)
+    src.push(`rotate=a='${angle}':ow=${box}:oh=${box}:c=black@0:enable='${live}'`)
+    w = box
+    h = box
+  }
+  if (scales.length) {
+    const s = `if(${live},${scales.join('*')},1)`
+    src.push(`scale=w='max(1,trunc(iw*${s}))':h='max(1,trunc(ih*${s}))':eval=frame`)
+  }
+  const extraY = yParts.map((p) => (p.startsWith('-') ? p : `+${p}`)).join('')
+  let x: string
+  let y: string
+  if (scales.length) {
+    // Größe ändert sich je Bild: Mittelpunkt über die aktuelle Grafikgröße.
+    x = `'${f3(g.x * frameW)}-overlay_w/2'`
+    y = `'${f3(g.y * frameH)}-overlay_h/2${extraY}'`
+  } else {
+    const { left, top } = graphicTopLeft({ ...g, width: w, height: h }, frameW, frameH)
+    x = String(left)
+    y = extraY ? `'${top}${extraY}'` : String(top)
   }
   const gLabel = `[g${inputIndex}]`
   // Bildgenau wie die Vorschau (start <= t < end): Der Client rundet Bildzeiten
@@ -199,8 +319,8 @@ export function graphicFilter(
   const to = f3(g.end - FRAME_TOLERANCE)
   return (
     `${src.join(',')}${gLabel};` +
-    `${inLabel}${gLabel}overlay=x=${left}:y=${y}` +
-    `:enable='gte(t,${from})*lt(t,${to})':shortest=1${outLabel}`
+    `${inLabel}${gLabel}overlay=x=${x}:y=${y}` +
+    `:enable='gte(t,${from})*lt(t,${to})${blink}':shortest=1${outLabel}`
   )
 }
 
@@ -209,9 +329,21 @@ export function graphicFilter(
  * `durationSec` begrenzt die Wiederholung (0 = unbekannt, dann nur über
  * `shortest=1` im overlay-Filter).
  */
-export function graphicInputArgs(paths: string[], durationSec: number): string[] {
+export function graphicInputArgs(paths: string[], durationSec: number, fps = 0): string[] {
   const limit = durationSec > 0 ? ['-t', f3(durationSec + 1)] : []
-  return paths.flatMap((p) => ['-loop', '1', '-framerate', String(GRAPHIC_FPS), ...limit, '-i', p])
+  const rate = graphicFps(fps)
+  return paths.flatMap((p) => ['-loop', '1', '-framerate', rate, ...limit, '-i', p])
+}
+
+/**
+ * Bildrate der Grafik-Standbilder: die des Videos (bekannt und sinnvoll),
+ * damit jedes Videobild ein eigenes Grafikbild mit derselben Zeit bekommt –
+ * Animationen treffen dann dieselben Zeitpunkte wie die Vorschau. Sonst 30.
+ */
+export function graphicFps(fps: number): string {
+  // Volle Genauigkeit: FFmpeg macht aus 29.97002997… wieder exakt 30000/1001.
+  if (Number.isFinite(fps) && fps >= 1 && fps <= 120) return String(fps)
+  return String(GRAPHIC_FPS)
 }
 
 /**

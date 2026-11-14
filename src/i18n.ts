@@ -276,6 +276,18 @@ const messages = {
         'Brennt alle Texte ins markierte Video ein; das Ergebnis ersetzt es in der Liste. Tipp: erst schneiden, dann Text einfügen – sonst verschieben sich die Zeiten.',
     },
     graphics: {
+      entry: 'Animation (Ein-/Ausblenden)',
+      loop: 'Dauer-Animation',
+      loops: {
+        none: 'Keine',
+        pulse: 'Pulsieren',
+        wobble: 'Wackeln',
+        spin: 'Drehen',
+        float: 'Schweben',
+        blink: 'Blinken',
+      },
+      loopHint:
+        'Läuft, solange das Element sichtbar ist. In der Vorschau beim Abspielen sichtbar (angehalten ruht es).',
       frameHint:
         '▲▼ = 1 Bild ({fps} fps). Von/Bis rasten auf Bildanfänge ein; die Grafik erscheint ab dem Bild bei „Von“ und ist ab dem Bild bei „Bis“ wieder weg – genau so wird sie eingebrannt.',
       title: 'Formen, Emojis & Bilder',
@@ -512,6 +524,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keinen Text einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       graphicsUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Formen/Emojis einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      graphicMotionUnsupported:
+        'Das Server-Backend ist veraltet und kann „Aufploppen“ und Dauer-Animationen von Formen/Emojis/Bildern noch nicht einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder diese Animationen abwählen.',
       imageTooLarge:
         'Ein Bild ist für das Einbrennen zu groß (höchstens 16 MB als PNG). Bitte das Bild kleiner einstellen oder zuschneiden.',
     },
@@ -788,6 +802,18 @@ const messages = {
         'Burns all texts into the selected video; the result replaces it in the list. Tip: cut first, then add text – otherwise the times shift.',
     },
     graphics: {
+      entry: 'Animation (in/out)',
+      loop: 'Continuous animation',
+      loops: {
+        none: 'None',
+        pulse: 'Pulse',
+        wobble: 'Wobble',
+        spin: 'Spin',
+        float: 'Float',
+        blink: 'Blink',
+      },
+      loopHint:
+        'Runs while the element is visible. Shown in the preview during playback (it rests while paused).',
       frameHint:
         '▲▼ = 1 frame ({fps} fps). From/To snap to frame starts; the graphic appears on the frame at “From” and is gone again on the frame at “To” – exactly as it will be burned in.',
       title: 'Shapes, emojis & images',
@@ -1018,6 +1044,8 @@ const messages = {
         'The server backend is outdated and cannot burn in text yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       graphicsUnsupported:
         'The server backend is outdated and cannot burn in shapes/emojis yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      graphicMotionUnsupported:
+        'The server backend is outdated and cannot burn in “Pop” or continuous animations of shapes/emojis/images yet. Please update the backend (deploy/deploy.sh without SKIP_API) or turn these animations off.',
       imageTooLarge:
         'An image is too large to burn in (max. 16 MB as PNG). Please make it smaller or crop it.',
     },
