@@ -34,6 +34,9 @@ export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
 /** Fehler-Kennung: Ton ein-/ausblenden verlangt, aber vom Backend nicht bestätigt. */
 export const AUDIO_FADE_UNSUPPORTED = 'AUDIO_FADE_UNSUPPORTED'
 
+/** Fehler-Kennung: Vorschau des Zusammenfügens verlangt, aber vom Backend nicht bestätigt. */
+export const PREVIEW_UNSUPPORTED = 'PREVIEW_UNSUPPORTED'
+
 /** Fehler-Kennung: Text einbrennen verlangt, aber das Backend kennt es nicht (veraltet). */
 export const TEXT_UNSUPPORTED = 'TEXT_UNSUPPORTED'
 /** Fehler-Kennung: Backend kann noch keine Grafiken (Formen/Emojis) einbrennen. */
@@ -61,6 +64,8 @@ export interface JobStartResponse {
   audioFade?: boolean
   /** Wird das Ergebnis in der Video-Bibliothek gespeichert? */
   storeResult?: boolean
+  /** Wird eine kleine Vorschau statt des endgültigen Ergebnisses erzeugt? */
+  preview?: boolean
 }
 
 /**
@@ -80,6 +85,7 @@ export function parseJobStart(text: string): JobStartResponse {
     seamTransitions?: unknown
     audioFade?: unknown
     storeResult?: unknown
+    preview?: unknown
   }
   let data: Raw
   try {
@@ -103,6 +109,7 @@ export function parseJobStart(text: string): JobStartResponse {
     seamTransitions: data.seamTransitions === true,
     audioFade: data.audioFade === true,
     storeResult: data.storeResult === true,
+    preview: data.preview === true,
   }
 }
 
@@ -327,6 +334,8 @@ interface JobRequest {
   audioFade?: AudioFadeInput
   /** Ergebnis in der Bibliothek speichern (statt zum Download bereitzuhalten). */
   storeResult?: boolean
+  /** Nur eine kleine, schnell kodierte Vorschau erzeugen (zum Download bereitgehalten). */
+  preview?: boolean
 }
 
 /** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
@@ -347,6 +356,7 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   // Textfelder vor den Dateien, damit der Server sie beim Upload schon kennt.
   if (!(req.source instanceof File)) form.append('mediaId', req.source.mediaId)
   if (req.storeResult) form.append('storeResult', '1')
+  if (req.preview) form.append('preview', '1')
   form.append('segments', JSON.stringify(segments))
   form.append('mode', mode)
   form.append('operation', operation)
@@ -461,6 +471,10 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
 
   // Speichern in der Bibliothek verlangt, aber nicht bestätigt -> veralteter Server.
   if (req.storeResult && !started.storeResult) await abortJob(jobId, MEDIA_UNSUPPORTED)
+
+  // Vorschau verlangt, aber nicht bestätigt -> veralteter Server (würde sonst
+  // in voller Qualität rechnen).
+  if (req.preview && !started.preview) await abortJob(jobId, PREVIEW_UNSUPPORTED)
 
   // Upload fertig -> serverseitige Verarbeitung (Fortschritt via SSE).
   phase.value = 'process'
@@ -594,6 +608,37 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
 }
 
 /**
+ * Erzeugt eine kleine, schnell kodierte Vorschau des Zusammenfügens mit genau
+ * denselben Einstellungen wie `cutMedia` (Reihenfolge, Von/Bis, Übergänge,
+ * Musik, Ton-Blende, Ausgabeformat). Nichts landet in der Bibliothek; der
+ * Server räumt den Job nach dem Abholen auf.
+ */
+async function previewMerge(req: MediaCutRequest): Promise<Blob> {
+  return withProcessing(async () => {
+    const { jobId } = await startAndWait({
+      source: { mediaId: req.mediaId },
+      segments: req.segments,
+      mode: req.mode,
+      operation: req.operation ?? 'keep',
+      total: req.total ?? 0,
+      transition: req.transition,
+      crop: req.crop,
+      appends: req.appends ?? [],
+      normalizeAudio: req.normalizeAudio ?? false,
+      output: req.output,
+      music: req.music,
+      seams: req.seams,
+      audioFade: req.audioFade,
+      preview: true,
+    })
+    const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
+    if (!download.ok) throw new Error(await readError(download))
+    currentJobId = null
+    return await download.blob()
+  })
+}
+
+/**
  * Kennt das Backend Grafiken? Fragt /api/health (Feature „graphics“). Ein
  * nicht erreichbarer Health-Endpunkt gilt als „unbekannt“ (true) – die
  * Job-Antwort wird ohnehin noch einmal geprüft.
@@ -707,6 +752,7 @@ export function useServerCut() {
     bytesPerSec,
     cut,
     cutMedia,
+    previewMerge,
     burnText,
     cancel,
   }

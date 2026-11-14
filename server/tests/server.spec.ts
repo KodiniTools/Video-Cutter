@@ -12,6 +12,8 @@ import {
   musicMixFilter,
   resolveSeams,
   mergeOutputDuration,
+  previewTargetSize,
+  PREVIEW_CODECS,
 } from '../src/lib/args'
 import { parseFrameRate, parseProbeOutput } from '../src/lib/probe'
 import {
@@ -1082,5 +1084,37 @@ describe('Übergang je Nahtstelle', () => {
     expect(() => parseSeamTransitions({ seamTransitions: '["wobble"]' })).toThrow(ValidationError)
     expect(() => parseSeamTransitions({ seamTransitions: '{}' })).toThrow(ValidationError)
     expect(() => parseSeamTransitions({ seamTransitions: 'x' })).toThrow(ValidationError)
+  })
+})
+
+describe('Vorschau des Zusammenfügens', () => {
+  const base = {
+    inputPath: '/tmp/in.webm',
+    outputPath: '/tmp/out.mp4',
+    keep: [{ start: 0, duration: 3 }],
+    mainHasAudio: true,
+    appends: [{ path: '/tmp/b.mp4', duration: 4, hasAudio: true }],
+    width: 640,
+    height: 360,
+  }
+
+  it('previewTargetSize verkleinert auf höchstens 640 px (Seitenverhältnis bleibt)', () => {
+    expect(previewTargetSize({ width: 1920, height: 1080 })).toEqual({ width: 640, height: 360 })
+    expect(previewTargetSize({ width: 1080, height: 1920 })).toEqual({ width: 360, height: 640 })
+    expect(previewTargetSize({ width: 1080, height: 1080 })).toEqual({ width: 640, height: 640 })
+    // Kleiner als die Grenze: nie hochskalieren.
+    expect(previewTargetSize({ width: 480, height: 270 })).toEqual({ width: 480, height: 270 })
+  })
+
+  it('preview nutzt H.264 ultrafast, sonst unveränderte Codecs', () => {
+    const fast = buildMergeArgs({ ...base, preview: true })
+    expect(fast.slice(fast.indexOf('-c:v'), -1)).toEqual(PREVIEW_CODECS)
+    expect(fast.at(-1)).toBe('/tmp/out.mp4')
+    const normal = buildMergeArgs(base)
+    expect(normal).toContain('veryfast')
+    expect(normal).not.toContain('ultrafast')
+    // Filtergraph ist identisch – die Vorschau zeigt genau dasselbe Ergebnis.
+    const f = (a: string[]) => a[a.indexOf('-filter_complex') + 1]
+    expect(f(fast)).toBe(f(normal))
   })
 })

@@ -269,6 +269,42 @@ export function reencodeCodecs(outputPath: string): string[] {
   ]
 }
 
+/**
+ * Schnelle Vorschau-Codecs: H.264/AAC (spielt in jedem Browser), kleinste
+ * Encoder-Stufe und höhere Kompression – nur zum Ansehen, nicht zum Behalten.
+ */
+export const PREVIEW_CODECS = [
+  '-c:v',
+  'libx264',
+  '-preset',
+  'ultrafast',
+  '-crf',
+  '30',
+  '-c:a',
+  'aac',
+  '-b:a',
+  '96k',
+  '-movflags',
+  '+faststart',
+]
+
+/** Längste Kante der Vorschau in Pixeln. */
+export const PREVIEW_MAX_EDGE = 640
+
+/**
+ * Verkleinert die Zielauflösung für die Vorschau (Seitenverhältnis bleibt,
+ * nie hochskalieren). Gerade Pixelzahlen wie beim echten Zusammenfügen.
+ */
+export function previewTargetSize(size: { width: number; height: number }): {
+  width: number
+  height: number
+} {
+  const long = Math.max(size.width, size.height)
+  if (!(long > PREVIEW_MAX_EDGE)) return { width: evenPx(size.width), height: evenPx(size.height) }
+  const f = PREVIEW_MAX_EDGE / long
+  return { width: evenPx(size.width * f), height: evenPx(size.height * f) }
+}
+
 /** Behalten: schneidet [start, start+duration] heraus (copy = verlustfrei, sonst H.264/AAC). */
 function keepArgs(
   input: string,
@@ -644,6 +680,8 @@ export interface MergeArgsInput {
   seams?: (TransitionPreset | null)[]
   /** Ton am Anfang/Ende des Gesamtergebnisses ein-/ausblenden (inkl. Musik). */
   audioFade?: AudioFade
+  /** Schnelle Vorschau: H.264 ultrafast statt der normalen Codecs (Ausgabe .mp4). */
+  preview?: boolean
 }
 
 /**
@@ -881,6 +919,7 @@ export function buildMergeArgs({
   music,
   seams,
   audioFade,
+  preview = false,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -1031,7 +1070,7 @@ export function buildMergeArgs({
     '[outv]',
     '-map',
     '[outa]',
-    ...reencodeCodecs(outputPath),
+    ...(preview ? PREVIEW_CODECS : reencodeCodecs(outputPath)),
     outputPath,
   ]
 }

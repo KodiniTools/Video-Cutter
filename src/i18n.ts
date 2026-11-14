@@ -179,12 +179,21 @@ const messages = {
       cutHint: 'Schneidet nur das markierte Video; das Ergebnis ersetzt es in der Liste.',
       merge: 'Zusammenfügen',
       mergeHint: 'Fügt die angehakten Videos der Liste zu einem neuen Video zusammen.',
+      mergePreview: 'Vorschau',
+      mergePreviewHint:
+        'Zeigt vor dem Zusammenfügen eine schnelle, kleinere Vorschau des Ergebnisses (mit Übergängen, Musik und Format). Es wird nichts gespeichert.',
       download: 'Herunterladen',
       discard: 'Verwerfen',
       cancel: 'Abbrechen',
       undo: 'Rückgängig',
       redo: 'Wiederherstellen',
       removeVideo: 'Video löschen',
+    },
+    mergePreview: {
+      title: 'Vorschau des zusammengefügten Videos',
+      hint: 'Schnelle Vorschau in reduzierter Qualität. Zusammenfügen erstellt das Video mit denselben Einstellungen in voller Qualität.',
+      close: 'Schließen',
+      merge: 'Jetzt zusammenfügen',
     },
     text: {
       title: 'Text',
@@ -453,6 +462,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann den Ton noch nicht ein- und ausblenden. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder „Ton ein- und ausblenden“ abschalten.',
       mediaUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Videos speichern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      previewUnsupported:
+        'Das Server-Backend ist veraltet und kann noch keine Vorschau des Zusammenfügens erstellen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder direkt zusammenfügen.',
       textUnsupported:
         'Das Server-Backend ist veraltet und kann noch keinen Text einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       graphicsUnsupported:
@@ -636,12 +647,21 @@ const messages = {
       cutHint: 'Cuts only the selected video; the result replaces it in the list.',
       merge: 'Join',
       mergeHint: 'Joins the ticked videos of the list into a new video.',
+      mergePreview: 'Preview',
+      mergePreviewHint:
+        'Shows a quick, smaller preview of the result before joining (with transitions, music and format). Nothing is saved.',
       download: 'Download',
       discard: 'Discard',
       cancel: 'Cancel',
       undo: 'Undo',
       redo: 'Redo',
       removeVideo: 'Delete video',
+    },
+    mergePreview: {
+      title: 'Preview of the joined video',
+      hint: 'Quick preview in reduced quality. Joining creates the video in full quality with the same settings.',
+      close: 'Close',
+      merge: 'Join now',
     },
     text: {
       title: 'Text',
@@ -904,6 +924,8 @@ const messages = {
         'The server backend is outdated and cannot fade the audio yet. Please update the backend (deploy/deploy.sh without SKIP_API) or switch off “Fade audio in and out”.',
       mediaUnsupported:
         'The server backend is outdated and cannot store videos yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      previewUnsupported:
+        'The server backend is outdated and cannot create a join preview yet. Please update the backend (deploy/deploy.sh without SKIP_API) or join directly.',
       textUnsupported:
         'The server backend is outdated and cannot burn in text yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       graphicsUnsupported:

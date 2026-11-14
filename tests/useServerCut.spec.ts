@@ -9,6 +9,7 @@ import {
   MEDIA_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
   AUDIO_FADE_UNSUPPORTED,
+  PREVIEW_UNSUPPORTED,
   startTextJob,
 } from '@/composables/useServerCut'
 
@@ -26,6 +27,7 @@ describe('parseJobStart', () => {
       seamTransitions: false,
       audioFade: false,
       storeResult: false,
+      preview: false,
     })
   })
 
@@ -42,6 +44,7 @@ describe('parseJobStart', () => {
       seamTransitions: false,
       audioFade: false,
       storeResult: false,
+      preview: false,
     })
   })
 
@@ -504,5 +507,67 @@ describe('startTextJob – Grafiken (Formen/Emojis)', () => {
     await expect(startTextJob('m1', [], undefined, [graphic])).resolves.toBe('t3')
     const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
     expect(body.graphics).toEqual([graphic])
+  })
+})
+
+describe('useServerCut – Vorschau des Zusammenfügens (previewMerge)', () => {
+  const A = '00000000-0000-4000-8000-00000000000a'
+  const B = '00000000-0000-4000-8000-00000000000b'
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  class DoneEventSource {
+    onmessage: null | ((ev: { data: string }) => void) = null
+    onerror: null | (() => void) = null
+    constructor() {
+      queueMicrotask(() =>
+        this.onmessage?.({ data: JSON.stringify({ state: 'done', progress: 100, error: null }) }),
+      )
+    }
+    close(): void {}
+  }
+
+  beforeEach(() => {
+    fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/download')) return new Response('vorschau', { status: 200 })
+      return new Response('{}', { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('EventSource', DoneEventSource)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const req = {
+    mediaId: A,
+    segments: [{ start: 0, duration: 5 }],
+    mode: 'reencode' as const,
+    appends: [{ mediaId: B, start: 0, position: 'after' as const }],
+  }
+
+  it('fordert preview statt storeResult an und lädt die Vorschau herunter', async () => {
+    const { FakeXhr, instances } = fakeXhr(
+      '{"jobId":"job-p1","append":1,"appendTrim":true,"appendSlots":true,"preview":true}',
+    )
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const { previewMerge, isProcessing } = useServerCut()
+    const blob = await previewMerge(req)
+    const form = instances[0].sentForm
+    expect(form?.get('preview')).toBe('1')
+    expect(form?.has('storeResult')).toBe(false)
+    expect(form?.get('appendMediaIds')).toBe(JSON.stringify([B]))
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-p1/download')
+    expect(await blob.text()).toBe('vorschau')
+    expect(isProcessing.value).toBe(false)
+  })
+
+  it('altes Backend ohne preview-Bestätigung -> PREVIEW_UNSUPPORTED, Job wird gelöscht', async () => {
+    const { FakeXhr } = fakeXhr(
+      '{"jobId":"job-p2","append":1,"appendTrim":true,"appendSlots":true}',
+    )
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    const { previewMerge } = useServerCut()
+    await expect(previewMerge(req)).rejects.toThrow(PREVIEW_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/job-p2', { method: 'DELETE' })
   })
 })
