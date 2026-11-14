@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useLibraryStore } from '@/stores/library'
 import { IMAGE_ACCEPT, checkImageFile, decodeImageFile } from '@/lib/imageAssets'
-import { createStillClip, fetchMediaFile, MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
+import { createStillClip, fetchMediaFile, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 import StillAiImage, { type SceneRef } from './StillAiImage.vue'
 import {
   STILL_DEFAULT_DURATION,
@@ -225,13 +225,32 @@ async function create(): Promise<void> {
       height: s.height,
       fps: stillFps(s.fps),
     })
-    const blob = await fetchMediaFile(media.id)
-    const file = new File([blob], media.name, { type: blob.type || 'video/mp4' })
-    library.insertResult(media, file, position.value)
-    open.value = false
+    await insertMedia(media)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     error.value = msg === MEDIA_UNSUPPORTED ? t('still.outdated') : msg || t('still.failed')
+  } finally {
+    busy.value = false
+  }
+}
+
+/** Fügt ein fertiges Server-Video an der gewählten Stelle in die Liste ein. */
+async function insertMedia(media: MediaView): Promise<void> {
+  const blob = await fetchMediaFile(media.id)
+  const file = new File([blob], media.name, { type: blob.type || 'video/mp4' })
+  library.insertResult(media, file, position.value)
+  open.value = false
+}
+
+/** KI-Video (neu erzeugt oder aus der Galerie): direkt als Clip einfügen. */
+async function onAiVideo(media: MediaView): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await insertMedia(media)
+  } catch (e) {
+    error.value = e instanceof Error && e.message ? e.message : t('still.failed')
   } finally {
     busy.value = false
   }
@@ -306,6 +325,7 @@ onBeforeUnmount(releaseImage)
         :after="sceneAfter"
         :disabled="busy || disabled"
         @pick="onAiPick"
+        @video="onAiVideo"
         @busy="aiBusy = $event"
       />
 

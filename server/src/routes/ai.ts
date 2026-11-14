@@ -1,10 +1,12 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { readFile, rm } from 'node:fs/promises'
+import { copyFile, readFile, rm, writeFile } from 'node:fs/promises'
 import { config } from '../config'
 import { runFfmpeg } from '../lib/ffmpeg'
-import { isMediaId, mediaStore, type MediaItem } from '../lib/media'
+import { isMediaId, mediaStore, mediaView, StorageFullError, type MediaItem } from '../lib/media'
+import { probeMedia } from '../lib/probe'
+import { clampVideoDuration, generateVideo, videoAspectFor } from '../lib/geminiVideo'
 import { ValidationError } from '../lib/validate'
 import { aiJobs, type AiJobKind, type AiJobSnapshot } from '../lib/aiJobs'
 import {
@@ -21,6 +23,7 @@ import {
   IMAGE_STYLES,
   createCutSuggestions,
   createImagePrompt,
+  createVideoPrompt,
   createSubtitles,
   translateTexts,
   type ImageContextScene,
@@ -51,6 +54,9 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
  * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
  * - GET  /api/ai/images/:id                         -> erzeugtes Bild (30 min abrufbar)
+ * - POST /api/ai/video-prompt (wie image-prompt, + duration) -> Video-Prompt (Claude)
+ * - POST /api/ai/video      { prompt, width, height, duration } -> KI-Video (Gemini Omni)
+ * - POST /api/ai/gallery/:id/media                  -> Galerie-Video in die Bibliothek
  * - GET  /api/ai/gallery                            -> dauerhaft gespeicherte KI-Bilder
  * - GET  /api/ai/gallery/:id/file | /thumb          -> Original bzw. Vorschau
  * - DELETE /api/ai/gallery/:id                      -> Bild vom Server löschen
@@ -284,7 +290,8 @@ async function grabFrame(item: MediaItem, time: number): Promise<Buffer | null> 
   }
 }
 
-aiRouter.post('/ai/image-prompt', json, (req: Request, res: Response) => {
+/** Gemeinsamer Ablauf für Bild- und Video-Prompt (Stichworte, Stil, Nachbarclips). */
+function startPromptJob(kind: 'image' | 'video', req: Request, res: Response): void {
   const body = (req.body ?? {}) as Record<string, unknown>
   const idea = typeof body.idea === 'string' ? body.idea.trim() : ''
   if (idea.length > MAX_IDEA_LENGTH) {
@@ -325,10 +332,94 @@ aiRouter.post('/ai/image-prompt', json, (req: Request, res: Response) => {
       await mediaStore.release(ids)
     }
     progress(20)
+    if (kind === 'video') {
+      return createVideoPrompt(
+        {
+          idea,
+          style,
+          aspect: videoAspectFor(size.width, size.height),
+          language,
+          scenes,
+          duration: clampVideoDuration(body.duration),
+        },
+        signal,
+      )
+    }
     return createImagePrompt(
       { idea, style, aspect: nearestAspect(size.width, size.height), language, scenes },
       signal,
     )
+  })
+  started(res, job)
+}
+
+aiRouter.post('/ai/image-prompt', json, (req: Request, res: Response) =>
+  startPromptJob('image', req, res),
+)
+aiRouter.post('/ai/video-prompt', json, (req: Request, res: Response) =>
+  startPromptJob('video', req, res),
+)
+
+/** Name des KI-Video-Clips in der Liste. */
+export function aiVideoName(duration: number): string {
+  return `KI-Video_${Math.round(duration)}s.mp4`
+}
+
+/**
+ * POST /api/ai/video { prompt, width, height, duration } -> Job. Ergebnis:
+ * { media, saved, galleryError }. Das Video landet als normales Video in der
+ * Bibliothek (wie ein Bild-Clip) und zusätzlich dauerhaft in der Galerie.
+ */
+aiRouter.post('/ai/video', json, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
+  if (!prompt) throw new ValidationError('Bitte einen Prompt eingeben.')
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    throw new ValidationError(`Der Prompt ist zu lang (max. ${MAX_PROMPT_LENGTH} Zeichen).`)
+  }
+  const size = parseTargetSize(body)
+  const duration = clampVideoDuration(body.duration)
+  requireGemini()
+  if (!capacity('video', res)) return
+  const job = aiJobs.start('video', async (signal, progress) => {
+    const data = await generateVideo(
+      prompt,
+      videoAspectFor(size.width, size.height),
+      duration,
+      signal,
+      progress,
+    )
+    // Zuerst in die Galerie: Das bezahlte Video soll nie verloren gehen.
+    let saved = 0
+    let galleryError = ''
+    try {
+      await gallery.add(data, 'video/mp4', prompt)
+      saved = 1
+    } catch (err) {
+      galleryError =
+        err instanceof GalleryFullError
+          ? err.message
+          : 'Das Video konnte nicht in der Galerie gespeichert werden.'
+      if (!(err instanceof GalleryFullError)) console.error('Galerie:', err)
+    }
+    const file = path.join(config.tmpDir, `${randomUUID()}-ai-video.mp4`)
+    let stored = false
+    try {
+      await writeFile(file, data)
+      const info = await probeMedia(file).catch(() => {
+        throw new Error('Gemini lieferte keine gültige Videodatei.')
+      })
+      const item = await mediaStore.add(file, aiVideoName(info.duration || duration), info)
+      stored = true
+      return { media: mediaView(item), saved, galleryError }
+    } catch (err) {
+      if (err instanceof StorageFullError && saved) {
+        throw new Error(`${err.message} Das Video liegt in der Galerie.`)
+      }
+      throw err
+    } finally {
+      if (!stored) await rm(file, { force: true }).catch(() => {})
+    }
   })
   started(res, job)
 })
@@ -431,6 +522,40 @@ function sendGalleryFile(thumb: boolean) {
 
 aiRouter.get('/ai/gallery/:id/file', sendGalleryFile(false))
 aiRouter.get('/ai/gallery/:id/thumb', sendGalleryFile(true))
+
+/**
+ * POST /api/ai/gallery/:id/media -> 201 MediaView. Legt ein Galerie-Video als
+ * (temporäres) Bibliotheks-Video an, damit es in die Liste eingefügt werden kann.
+ */
+aiRouter.post('/ai/gallery/:id/media', (req: Request, res: Response, next: NextFunction) => {
+  const id = req.params.id
+  void (async () => {
+    const img = isGalleryId(id) ? gallery.get(id) : undefined
+    const src = img ? await gallery.pathOf(img.id, false) : null
+    if (!img || !src) {
+      res.status(404).json({ error: 'Video nicht in der Galerie.' })
+      return
+    }
+    if (img.mime !== 'video/mp4') throw new ValidationError('Dieser Eintrag ist kein Video.')
+    const file = path.join(config.tmpDir, `${randomUUID()}-gallery-video.mp4`)
+    let stored = false
+    try {
+      await copyFile(src.path, file)
+      const info = await probeMedia(file)
+      const item = await mediaStore.add(file, aiVideoName(info.duration), info)
+      stored = true
+      res.status(201).json(mediaView(item))
+    } catch (err) {
+      if (err instanceof StorageFullError) {
+        res.status(err.statusCode).json({ error: err.message })
+        return
+      }
+      throw err
+    } finally {
+      if (!stored) await rm(file, { force: true }).catch(() => {})
+    }
+  })().catch(next)
+})
 
 aiRouter.delete('/ai/gallery/:id', (req: Request, res: Response, next: NextFunction) => {
   const id = req.params.id

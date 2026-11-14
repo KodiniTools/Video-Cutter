@@ -5,19 +5,23 @@ import { useAiStore } from '@/stores/ai'
 import {
   AI_CANCELLED,
   AI_UNSUPPORTED,
+  DEFAULT_VIDEO_DURATION,
   IMAGE_STYLES,
   MAX_IMAGE_COUNT,
   MAX_IMAGE_IDEA,
   MAX_IMAGE_PROMPT,
   MIN_IMAGE_COUNT,
+  VIDEO_DURATIONS,
   fetchGeneratedImage,
   parseGeneratedImages,
+  parseGeneratedVideo,
   parseImagePrompt,
   runAiJob,
   type AiRun,
   type ImageStyle,
 } from '@/lib/aiApi'
 import { saveFile } from '@/lib/download'
+import type { MediaView } from '@/lib/mediaApi'
 import StillGallery from './StillGallery.vue'
 
 /**
@@ -25,6 +29,9 @@ import StillGallery from './StillGallery.vue'
  * und den Nachbarclips (Standbild + Transkript) einen Prompt, den man sieht
  * und ändern kann; Gemini erzeugt daraus 1–4 Varianten. Die gewählte Variante
  * geht als Datei an den Bild-Clip (wie ein hochgeladenes Bild).
+ *
+ * Modus „Video“: derselbe Weg mit Video-Prompt; Gemini erzeugt einen kurzen
+ * Clip, der als normales Video an der Einfügestelle in die Liste kommt.
  */
 export interface SceneRef {
   mediaId: string
@@ -43,6 +50,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   pick: [file: File]
+  /** Fertiges KI-Video (liegt schon in der Server-Bibliothek). */
+  video: [media: MediaView]
   busy: [busy: boolean]
 }>()
 
@@ -53,8 +62,15 @@ const idea = ref('')
 const style = ref<ImageStyle>('auto')
 const count = ref(2)
 const useContext = ref(true)
-const prompt = ref('')
-const phase = ref<'prompt' | 'images' | null>(null)
+/** Bild oder Video erzeugen; jeder Modus behält seinen eigenen Prompt. */
+const mode = ref<'image' | 'video'>('image')
+const duration = ref<number>(DEFAULT_VIDEO_DURATION)
+const prompts = ref({ image: '', video: '' })
+const prompt = computed({
+  get: () => prompts.value[mode.value],
+  set: (v: string) => (prompts.value[mode.value] = v),
+})
+const phase = ref<'prompt' | 'images' | 'video' | null>(null)
 const progress = ref(0)
 const error = ref('')
 const notice = ref('')
@@ -86,7 +102,7 @@ const canGenerate = computed(
   () => !props.disabled && !busy.value && imageOk.value && prompt.value.trim() !== '',
 )
 
-function setPhase(p: 'prompt' | 'images' | null): void {
+function setPhase(p: 'prompt' | 'images' | 'video' | null): void {
   phase.value = p
   progress.value = 0
   emit('busy', p !== null)
@@ -104,8 +120,9 @@ async function writePrompt(): Promise<void> {
   notice.value = ''
   setPhase('prompt')
   const r = runAiJob(
-    'image-prompt',
+    mode.value === 'video' ? 'video-prompt' : 'image-prompt',
     {
+      ...(mode.value === 'video' ? { duration: duration.value } : {}),
       idea: idea.value.trim(),
       style: style.value,
       width: props.width,
@@ -138,7 +155,38 @@ function clearVariants(): void {
   selected.value = -1
 }
 
+async function generateVideo(): Promise<void> {
+  if (!canGenerate.value) return
+  error.value = ''
+  notice.value = ''
+  setPhase('video')
+  const r = runAiJob(
+    'video',
+    {
+      prompt: prompt.value.trim(),
+      width: props.width,
+      height: props.height,
+      duration: duration.value,
+    },
+    parseGeneratedVideo,
+    (p) => (progress.value = p),
+  )
+  run.value = r as AiRun<unknown>
+  try {
+    const res = await r.promise
+    notice.value = res.galleryError
+    if (res.saved) galleryRefresh.value++
+    emit('video', res.media)
+  } catch (e) {
+    if (!(e instanceof Error && e.message === AI_CANCELLED)) error.value = message(e)
+  } finally {
+    run.value = null
+    setPhase(null)
+  }
+}
+
 async function generate(): Promise<void> {
+  if (mode.value === 'video') return generateVideo()
   if (!canGenerate.value) return
   error.value = ''
   notice.value = ''
@@ -180,8 +228,9 @@ function onGalleryPick(file: File): void {
   emit('pick', file)
 }
 
-function onGalleryPrompt(text: string): void {
-  prompt.value = text.slice(0, MAX_IMAGE_PROMPT)
+function onGalleryPrompt(text: string, kind: 'image' | 'video'): void {
+  if (!busy.value) mode.value = kind
+  prompts.value[kind] = text.slice(0, MAX_IMAGE_PROMPT)
 }
 
 function choose(i: number): void {
@@ -221,6 +270,22 @@ onBeforeUnmount(() => {
       {{ t('stillAi.noImageKey') }}
     </p>
 
+    <div class="modes" role="group" :aria-label="t('stillAi.mode')">
+      <button
+        v-for="m in ['image', 'video'] as const"
+        :key="m"
+        type="button"
+        class="mode"
+        :class="{ on: mode === m }"
+        :aria-pressed="mode === m"
+        :disabled="busy"
+        :data-test="`still-ai-mode-${m}`"
+        @click="mode = m"
+      >
+        {{ t(`stillAi.modes.${m}`) }}
+      </button>
+    </div>
+
     <label class="field stack">
       <span class="field-label">{{ t('stillAi.idea') }}</span>
       <input
@@ -243,7 +308,18 @@ onBeforeUnmount(() => {
           </option>
         </select>
       </label>
-      <label class="field stack narrow">
+      <label v-if="mode === 'video'" class="field stack narrow">
+        <span class="field-label">{{ t('stillAi.duration') }}</span>
+        <select
+          v-model.number="duration"
+          class="input"
+          :disabled="busy"
+          data-test="still-ai-duration"
+        >
+          <option v-for="d in VIDEO_DURATIONS" :key="d" :value="d">{{ d }} s</option>
+        </select>
+      </label>
+      <label v-else class="field stack narrow">
         <span class="field-label">{{ t('stillAi.count') }}</span>
         <select v-model.number="count" class="input" :disabled="busy" data-test="still-ai-count">
           <option v-for="n in MAX_IMAGE_COUNT - MIN_IMAGE_COUNT + 1" :key="n" :value="n">
@@ -297,13 +373,22 @@ onBeforeUnmount(() => {
         data-test="still-ai-generate"
         @click="generate"
       >
-        {{
-          phase === 'images'
-            ? t('stillAi.generating', { pct: progress })
-            : variants.length
-              ? t('stillAi.regenerate')
-              : t('stillAi.generate')
-        }}
+        <template v-if="mode === 'video'">
+          {{
+            phase === 'video'
+              ? t('stillAi.generatingVideo', { pct: progress })
+              : t('stillAi.generateVideo')
+          }}
+        </template>
+        <template v-else>
+          {{
+            phase === 'images'
+              ? t('stillAi.generating', { pct: progress })
+              : variants.length
+                ? t('stillAi.regenerate')
+                : t('stillAi.generate')
+          }}
+        </template>
       </button>
       <button v-if="busy" type="button" class="btn ghost" @click="cancel">
         {{ t('stillAi.cancel') }}
@@ -313,7 +398,12 @@ onBeforeUnmount(() => {
     <p v-if="error" class="hint warn" role="alert">{{ error }}</p>
     <p v-if="notice" class="hint">{{ notice }}</p>
 
-    <div v-if="variants.length" class="grid" role="group" :aria-label="t('stillAi.variants')">
+    <div
+      v-if="variants.length && mode === 'image'"
+      class="grid"
+      role="group"
+      :aria-label="t('stillAi.variants')"
+    >
       <div v-for="(v, i) in variants" :key="v.url" class="cell">
         <button
           type="button"
@@ -339,7 +429,9 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-    <p class="hint">{{ t('stillAi.hint') }}</p>
+    <p class="hint" data-test="still-ai-hint">
+      {{ mode === 'video' ? t('stillAi.hintVideo') : t('stillAi.hint') }}
+    </p>
 
     <button
       type="button"
@@ -355,6 +447,7 @@ onBeforeUnmount(() => {
       :disabled="busy || disabled"
       :refresh-key="galleryRefresh"
       @pick="onGalleryPick"
+      @video="emit('video', $event)"
       @prompt="onGalleryPrompt"
     />
   </div>
@@ -370,6 +463,35 @@ onBeforeUnmount(() => {
   border-radius: var(--ds-radius-sm);
   background: var(--ds-surface-1);
 }
+.modes {
+  display: flex;
+  gap: 4px;
+}
+.mode {
+  appearance: none;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-0);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-sm);
+  cursor: pointer;
+}
+.mode.on {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+  color: var(--ds-text);
+  font-weight: var(--ds-weight-semibold);
+}
+.mode:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.mode:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
 .row2 {
   display: flex;
   gap: 8px;
@@ -379,7 +501,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .row2 .field.narrow {
-  flex: 0 0 64px;
+  flex: 0 0 76px;
 }
 .field {
   display: flex;

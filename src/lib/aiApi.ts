@@ -1,5 +1,6 @@
 import { API_BASE } from './apiBase'
 import { fallbackErrorMessage, retryAfterOf } from './httpError'
+import { parseMediaView, type MediaView } from './mediaApi'
 
 /**
  * Client für die KI-Funktionen des Servers (`/api/ai/*`): Transkription
@@ -219,7 +220,13 @@ export function galleryThumbUrl(id: string): string {
 }
 
 function imageExt(type: string): string {
+  if (type === 'video/mp4') return 'mp4'
   return type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+}
+
+/** Ist der Galerie-Eintrag ein KI-Video? */
+export function isGalleryVideo(img: { mime: string }): boolean {
+  return img.mime.startsWith('video/')
 }
 
 /** Dateiname eines Galerie-Bildes: ki-bild-JJJJMMTT-HHMMSS.<ext> (Ortszeit). */
@@ -229,7 +236,7 @@ export function galleryFileName(img: GalleryImage): string {
   const stamp = Number.isNaN(d.getTime())
     ? img.id.slice(0, 8)
     : `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `ki-bild-${stamp}.${imageExt(img.mime)}`
+  return `${isGalleryVideo(img) ? 'ki-video' : 'ki-bild'}-${stamp}.${imageExt(img.mime)}`
 }
 
 /** Lädt das Original eines Galerie-Bildes als Datei. */
@@ -238,6 +245,35 @@ export async function fetchGalleryFile(img: GalleryImage): Promise<File> {
   if (!res.ok) throw await readError(res)
   const blob = await res.blob()
   return new File([blob], galleryFileName(img), { type: blob.type || img.mime })
+}
+
+// --- KI-Videos (Gemini Omni) ---------------------------------------------------------
+
+/** Wählbare Clip-Längen in Sekunden (Server begrenzt auf 3–15). */
+export const VIDEO_DURATIONS = [4, 6, 8, 10, 15] as const
+export const DEFAULT_VIDEO_DURATION = 8
+
+/** Ergebnis von POST /api/ai/video: das neue Bibliotheks-Video. */
+export function parseGeneratedVideo(data: unknown): {
+  media: MediaView
+  saved: number | null
+  galleryError: string
+} {
+  const d = isRecord(data) ? data : {}
+  return {
+    media: parseMediaView(d.media),
+    saved: finite(d.saved) ? d.saved : null,
+    galleryError: typeof d.galleryError === 'string' ? d.galleryError : '',
+  }
+}
+
+/** Holt ein Galerie-Video als (temporäres) Bibliotheks-Video zurück. */
+export async function galleryVideoToMedia(id: string): Promise<MediaView> {
+  const res = await fetch(`${API_BASE}/api/ai/gallery/${encodeURIComponent(id)}/media`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw await readError(res)
+  return parseMediaView(await res.json())
 }
 
 /** Löscht ein Galerie-Bild endgültig vom Server. */
@@ -279,7 +315,15 @@ export interface AiRun<T> {
  * Ergebnis. `parse` prüft das Ergebnis. Abbruch stoppt auch den Server-Job.
  */
 export function runAiJob<T>(
-  action: 'transcribe' | 'subtitles' | 'cuts' | 'translate' | 'image-prompt' | 'images',
+  action:
+    | 'transcribe'
+    | 'subtitles'
+    | 'cuts'
+    | 'translate'
+    | 'image-prompt'
+    | 'images'
+    | 'video-prompt'
+    | 'video',
   body: Record<string, unknown>,
   parse: (data: unknown) => T,
   onProgress?: (percent: number) => void,

@@ -7,9 +7,12 @@ import {
   fetchGallery,
   fetchGalleryFile,
   galleryThumbUrl,
+  galleryVideoToMedia,
+  isGalleryVideo,
   type GalleryImage,
 } from '@/lib/aiApi'
 import { saveFile } from '@/lib/download'
+import type { MediaView } from '@/lib/mediaApi'
 
 /**
  * Galerie der KI-Bilder: Alle erzeugten Bilder liegen dauerhaft auf dem
@@ -24,7 +27,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   pick: [file: File]
-  prompt: [text: string]
+  /** Galerie-Video wurde als Bibliotheks-Video angelegt -> in die Liste einfügen. */
+  video: [media: MediaView]
+  prompt: [text: string, kind: 'image' | 'video']
 }>()
 
 const { t, locale } = useI18n()
@@ -95,7 +100,23 @@ async function withFile(
   }
 }
 
+/** Video: als Clip in die Liste einfügen (Server legt eine Kopie in die Bibliothek). */
+async function useVideo(img: GalleryImage): Promise<void> {
+  if (busyId.value) return
+  busyId.value = img.id
+  error.value = ''
+  confirmId.value = ''
+  try {
+    emit('video', await galleryVideoToMedia(img.id))
+  } catch (e) {
+    error.value = message(e)
+  } finally {
+    busyId.value = ''
+  }
+}
+
 function use(img: GalleryImage): Promise<void> {
+  if (isGalleryVideo(img)) return useVideo(img)
   return withFile(img, (file) => {
     selectedId.value = img.id
     emit('pick', file)
@@ -169,6 +190,7 @@ async function remove(img: GalleryImage): Promise<void> {
           data-test="gallery-use"
           @click="use(img)"
         >
+          <span v-if="isGalleryVideo(img)" class="badge" data-test="gallery-video">▶</span>
           <img
             :src="galleryThumbUrl(img.id)"
             :alt="img.prompt || t('gallery.image')"
@@ -184,7 +206,7 @@ async function remove(img: GalleryImage): Promise<void> {
             :aria-label="t('gallery.usePrompt')"
             :disabled="disabled"
             data-test="gallery-prompt"
-            @click="emit('prompt', img.prompt)"
+            @click="emit('prompt', img.prompt, isGalleryVideo(img) ? 'video' : 'image')"
           >
             ✍
           </button>
@@ -263,8 +285,20 @@ async function remove(img: GalleryImage): Promise<void> {
 .cell.busy {
   opacity: 0.6;
 }
+.badge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 3px 6px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+}
 .thumb {
   appearance: none;
+  position: relative;
   display: block;
   width: 100%;
   padding: 0;

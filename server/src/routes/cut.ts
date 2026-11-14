@@ -103,6 +103,7 @@ export const SERVER_FEATURES = [
   'graphicMotion',
   'aiImage',
   'aiGallery',
+  'aiVideo',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

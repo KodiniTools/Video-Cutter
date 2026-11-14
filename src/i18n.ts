@@ -57,7 +57,14 @@ const messages = {
       hint: 'Der Clip erscheint in der Liste und ist sofort im Editor markiert: Dort Texte, Formen, Emojis und eigene Bilder hinzufügen und einbrennen. Beim Zusammenfügen verhält er sich wie ein Video (Reihenfolge, Übergänge, Musik, stiller Ton).',
     },
     stillAi: {
-      open: '✨ Hintergrundbild mit KI erzeugen …',
+      open: '✨ Bild oder Video mit KI erzeugen …',
+      mode: 'Was soll erzeugt werden?',
+      modes: { image: '🖼 Bild', video: '🎬 Video' },
+      duration: 'Länge',
+      generateVideo: '🎬 Video erzeugen und einfügen',
+      generatingVideo: 'Gemini dreht … {pct} %',
+      hintVideo:
+        'Gemini erzeugt einen kurzen Clip mit Ton im Quer- oder Hochformat (je nach „Größe“) und fügt ihn bei „Einfügen“ als normales Video in die Liste ein. Dauer, Hintergrundbild und Darstellung unten gelten nur für Bild-Clips. Das Erzeugen dauert meist 1–3 Minuten. Jedes Video kostet bei Google deutlich mehr als ein Bild und wird auch in der Galerie gespeichert.',
       close: '✨ KI-Bereich schließen',
       idea: 'Idee / Stichworte',
       ideaPlaceholder: 'z. B. Gitarre, warmes Licht, Kapitel 2',
@@ -97,14 +104,14 @@ const messages = {
       hint: 'Texte nicht ins Bild malen lassen – Titel besser danach im Editor als Text einblenden. ⬇ speichert eine Variante als Bilddatei. Die gewählte Variante wird zum Hintergrundbild; Größe und Seitenverhältnis richten sich nach „Größe“.',
     },
     gallery: {
-      open: '🗂 Galerie: gespeicherte KI-Bilder …',
+      open: '🗂 Galerie: gespeicherte KI-Bilder und -Videos …',
       close: '🗂 Galerie schließen',
       title: 'Galerie',
-      count: '{n} Bilder · {size}',
+      count: '{n} Dateien · {size}',
       reload: 'Aktualisieren',
       loading: 'Galerie wird geladen …',
       empty:
-        'Noch keine Bilder. Jedes erzeugte KI-Bild wird automatisch hier auf dem Server gespeichert.',
+        'Noch nichts gespeichert. Jedes erzeugte KI-Bild und -Video wird automatisch hier auf dem Server gespeichert.',
       image: 'KI-Bild',
       usePrompt: 'Prompt dieses Bildes übernehmen',
       download: 'Herunterladen',
@@ -114,7 +121,7 @@ const messages = {
       failed: 'Die Galerie konnte nicht geladen werden.',
       outdated:
         'Das Backend kennt die Galerie noch nicht (veraltet). Bitte das Backend neu deployen.',
-      hint: 'Bild anklicken: als Hintergrund verwenden. ✍ übernimmt den Prompt, ⬇ lädt herunter, 🗑 löscht das Bild endgültig vom Server (zweiter Klick bestätigt).',
+      hint: 'Bild anklicken: als Hintergrund verwenden. Video (▶) anklicken: als Clip in die Liste einfügen. ✍ übernimmt den Prompt, ⬇ lädt herunter, 🗑 löscht das Bild endgültig vom Server (zweiter Klick bestätigt).',
     },
     projects: {
       title: 'Projekte',
@@ -645,7 +652,14 @@ const messages = {
       hint: 'The clip appears in the list and is selected in the editor right away: add texts, shapes, emojis and your own images there and burn them in. When joining it behaves like a video (order, transitions, music, silent audio).',
     },
     stillAi: {
-      open: '✨ Generate background with AI …',
+      open: '✨ Generate image or video with AI …',
+      mode: 'What should be generated?',
+      modes: { image: '🖼 Image', video: '🎬 Video' },
+      duration: 'Length',
+      generateVideo: '🎬 Generate video and insert',
+      generatingVideo: 'Gemini is filming … {pct} %',
+      hintVideo:
+        'Gemini generates a short clip with sound in landscape or portrait (depending on “Size”) and inserts it at “Insert” as a normal video. Duration, background image and display below only apply to image clips. Generating usually takes 1–3 minutes. Each video costs considerably more at Google than an image and is also saved to the gallery.',
       close: '✨ Close AI section',
       idea: 'Idea / keywords',
       ideaPlaceholder: 'e.g. guitar, warm light, chapter 2',
@@ -683,10 +697,10 @@ const messages = {
       hint: 'Don’t let the AI paint text into the image – add titles afterwards as text overlays in the editor. ⬇ saves a variant as an image file. The chosen variant becomes the background image; size and aspect ratio follow “Size”.',
     },
     gallery: {
-      open: '🗂 Gallery: saved AI images …',
+      open: '🗂 Gallery: saved AI images and videos …',
       close: '🗂 Close gallery',
       title: 'Gallery',
-      count: '{n} images · {size}',
+      count: '{n} files · {size}',
       reload: 'Refresh',
       loading: 'Loading gallery …',
       empty: 'No images yet. Every generated AI image is saved here on the server automatically.',
@@ -698,7 +712,7 @@ const messages = {
       confirmShort: 'Delete?',
       failed: 'The gallery could not be loaded.',
       outdated: 'The backend does not support the gallery yet (outdated). Please redeploy it.',
-      hint: 'Click an image to use it as background. ✍ takes over the prompt, ⬇ downloads, 🗑 deletes the image from the server for good (second click confirms).',
+      hint: 'Click an image to use it as background. Click a video (▶) to insert it into the list as a clip. ✍ takes over the prompt, ⬇ downloads, 🗑 deletes the image from the server for good (second click confirms).',
     },
     projects: {
       title: 'Projects',
