@@ -12,6 +12,7 @@ import {
   mergeSequence,
   mergeTargetSize,
   outputDurationFor,
+  previewTargetSize,
   outputTargetSize,
   audioFadeForcesReencode,
   type AppendClip,
@@ -89,6 +90,7 @@ export const SERVER_FEATURES = [
   'audioFade',
   'projects',
   'stillClip',
+  'mergePreview',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -133,7 +135,9 @@ function parseMediaIdList(raw: unknown, max: number): string[] {
  * `normalizeAudio` die Lautstärke-Angleichung (nur beim Zusammenfügen),
  * `outputFormat` die Übernahme von Seitenverhältnis/Füllmodus, `music` die
  * Hintergrundmusik, `seamTransitions` die Übergänge je Nahtstelle,
- * `audioFade` das Ein-/Ausblenden des Tons (bei Videos ohne Ton wirkungslos).
+ * `audioFade` das Ein-/Ausblenden des Tons (bei Videos ohne Ton wirkungslos),
+ * `preview` eine kleine, schnell kodierte Vorschau (nur beim Zusammenfügen,
+ * Ergebnis per /download abholen, nie in der Bibliothek).
  */
 cutRouter.post(
   '/cut',
@@ -184,7 +188,9 @@ cutRouter.post(
       const appendSrcs: Source[] = appendFiles.length
         ? appendFiles.map((f) => ({ path: f.path, originalname: f.originalname, owned: true }))
         : appendIds.map(fromLibrary)
-      const storeResult = body.storeResult === '1' || body.storeResult === 'true'
+      // Vorschau: klein + schnell kodiert, nur zum Ansehen (nie in der Bibliothek).
+      const preview = body.preview === '1' || body.preview === 'true'
+      const storeResult = !preview && (body.storeResult === '1' || body.storeResult === 'true')
 
       const params = parseCutParams(req.body ?? {}, config.maxDurationSec)
       const appendMeta = parseAppendMeta(req.body ?? {}, appendSrcs.length)
@@ -197,6 +203,9 @@ cutRouter.post(
       const seamInput = appendSrcs.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
       const useMerge = appendSrcs.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
       const audioFade = parseAudioFade(req.body ?? {})
+      if (preview && !useMerge) {
+        throw new ValidationError('Die Vorschau gibt es nur beim Zusammenfügen.')
+      }
 
       if (!jobManager.hasCapacity()) {
         await removeFiles(allPaths)
@@ -268,11 +277,13 @@ cutRouter.post(
           ? (params.transition ?? { preset: 'none' as const, duration: seamInput.duration })
           : params.transition
         const seams = seamInput?.seams
-        const size = outputTargetSize(
+        const fullSize = outputTargetSize(
           mergeTargetSize(mainInfo.width, mainInfo.height, params.crop),
           output.aspect,
         )
-        outExt = isWebm ? 'webm' : 'mp4'
+        const size = preview ? previewTargetSize(fullSize) : fullSize
+        // Vorschau immer als mp4 (H.264 ultrafast) – VP9 wäre viel langsamer.
+        outExt = isWebm && !preview ? 'webm' : 'mp4'
         outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
         args = buildMergeArgs({
           inputPath: mainSrc.path,
@@ -289,6 +300,7 @@ cutRouter.post(
           music,
           seams,
           audioFade,
+          preview,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = mergeOutputDuration(
@@ -333,7 +345,7 @@ cutRouter.post(
 
       // Wiederholtes Schneiden stapelt kein „_cut_cut".
       const baseName = safeBaseName(mainSrc.originalname).replace(/_cut$/, '')
-      const outputName = `${baseName}_cut.${outExt}`
+      const outputName = `${baseName}_${preview ? 'preview' : 'cut'}.${outExt}`
 
       const job = jobManager.create({
         id,
@@ -365,6 +377,7 @@ cutRouter.post(
         seamTransitions: seamInput !== undefined,
         audioFade: audioFade !== undefined,
         storeResult,
+        preview,
       })
     } catch (err) {
       await removeFiles(allPaths)

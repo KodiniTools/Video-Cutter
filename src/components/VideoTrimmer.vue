@@ -16,6 +16,8 @@ import {
   MEDIA_UNSUPPORTED,
   TEXT_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
+  PREVIEW_UNSUPPORTED,
+  type MediaCutRequest,
 } from '@/composables/useServerCut'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
@@ -47,6 +49,7 @@ import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
 import AudioFadePanel from './AudioFadePanel.vue'
 import ProjectPanel from './ProjectPanel.vue'
+import MergePreviewDialog from './MergePreviewDialog.vue'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
@@ -100,6 +103,7 @@ const {
   totalBytes,
   bytesPerSec,
   cutMedia,
+  previewMerge,
   burnText,
   cancel: serverCancel,
 } = useServerCut()
@@ -490,7 +494,7 @@ function msLabel(sec: number): string {
 const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
 /** Laufender Vorgang (für die Fortschrittsanzeige am passenden Button). */
-const activeJob = ref<'cut' | 'merge' | 'text' | null>(null)
+const activeJob = ref<'cut' | 'merge' | 'preview' | 'text' | null>(null)
 /** Zuletzt erzeugtes Ergebnis (für den Hinweis „Fertig"). */
 const lastResultId = ref<number | null>(null)
 
@@ -514,6 +518,7 @@ function showJobError(e: unknown): void {
     [MEDIA_UNSUPPORTED]: 'errors.mediaUnsupported',
     [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
     [GRAPHICS_UNSUPPORTED]: 'errors.graphicsUnsupported',
+    [PREVIEW_UNSUPPORTED]: 'errors.previewUnsupported',
   }
   store.setError(known[msg] ? t(known[msg]) : msg)
 }
@@ -562,39 +567,81 @@ async function onExport(): Promise<void> {
  * Von/Bis), mit Übergängen, Musik, Lautstärke-Angleichung und Ausgabeformat.
  * Das Ergebnis kommt als neues Video in die Liste und wird markiert.
  */
-async function onMerge(): Promise<void> {
+/**
+ * Auftrag fürs Zusammenfügen aus Liste + Einstellungen. Wird von „Vorschau"
+ * und „Zusammenfügen" gleich verwendet, damit die Vorschau genau das zeigt,
+ * was danach entsteht. `null`, wenn das erste Video (noch) nicht auf dem Server liegt.
+ */
+function buildMergeRequest(): MediaCutRequest | null {
   const list = mergeItems.value
-  if (!canMerge.value || busy.value) return
   const [first, ...rest] = list
-  if (!first.mediaId) return
+  if (!first?.mediaId) return null
+  return {
+    mediaId: first.mediaId,
+    segments: [{ start: first.start, duration: itemLength(first) }],
+    mode: 'reencode',
+    operation: 'keep',
+    transition: { preset: animation.value, duration: animDuration.value },
+    appends: rest.map((it) => ({
+      mediaId: it.mediaId ?? undefined,
+      start: it.start,
+      // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende.
+      duration: it.end !== null ? Math.max(0, it.end - it.start) : undefined,
+      position: 'after' as const,
+    })),
+    normalizeAudio: normalizeAudio.value,
+    output: { aspect: outputAspect.value, fill: outputFill.value },
+    music: music.value ?? undefined,
+    seams: library.seamPresets,
+    // Blende nur, wenn überhaupt Ton entsteht (Clip mit Ton oder Musik).
+    audioFade: list.some((it) => it.hasAudio) || music.value ? audioFade.input : undefined,
+  }
+}
+
+async function onMerge(): Promise<void> {
+  if (!canMerge.value || busy.value) return
+  const first = mergeItems.value[0]
+  const req = buildMergeRequest()
+  if (!first || !req) return
+  closeMergePreview()
   store.setError('')
   activeJob.value = 'merge'
   try {
-    const { media, blob } = await cutMedia({
-      mediaId: first.mediaId,
-      segments: [{ start: first.start, duration: itemLength(first) }],
-      mode: 'reencode',
-      operation: 'keep',
-      transition: { preset: animation.value, duration: animDuration.value },
-      appends: rest.map((it) => ({
-        mediaId: it.mediaId ?? undefined,
-        start: it.start,
-        // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende.
-        duration: it.end !== null ? Math.max(0, it.end - it.start) : undefined,
-        position: 'after' as const,
-      })),
-      normalizeAudio: normalizeAudio.value,
-      output: { aspect: outputAspect.value, fill: outputFill.value },
-      music: music.value ?? undefined,
-      seams: library.seamPresets,
-      // Blende nur, wenn überhaupt Ton entsteht (Clip mit Ton oder Musik).
-      audioFade: list.some((it) => it.hasAudio) || music.value ? audioFade.input : undefined,
-    })
+    const { media, blob } = await cutMedia(req)
     const base = first.name.replace(/\.[^.]+$/, '').replace(/_(cut|merged)$/, '') || 'video'
     const ext = media.name.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'mp4'
     const added = library.addResult(media, resultFile(blob, `${base}_merged.${ext}`))
     store.clearMusic()
     lastResultId.value = added.id
+  } catch (e) {
+    showJobError(e)
+  } finally {
+    activeJob.value = null
+  }
+}
+
+/** Objekt-URL der zuletzt erzeugten Vorschau (Dialog offen, solange gesetzt). */
+const mergePreviewUrl = ref<string | null>(null)
+
+function closeMergePreview(): void {
+  if (mergePreviewUrl.value) URL.revokeObjectURL(mergePreviewUrl.value)
+  mergePreviewUrl.value = null
+}
+
+/**
+ * „Vorschau": dieselben Einstellungen wie „Zusammenfügen", aber klein und
+ * schnell kodiert. Nichts landet in der Liste; Musik bleibt gewählt.
+ */
+async function onMergePreview(): Promise<void> {
+  if (!canMerge.value || busy.value) return
+  const req = buildMergeRequest()
+  if (!req) return
+  closeMergePreview()
+  store.setError('')
+  activeJob.value = 'preview'
+  try {
+    const blob = await previewMerge(req)
+    mergePreviewUrl.value = URL.createObjectURL(blob)
   } catch (e) {
     showJobError(e)
   } finally {
@@ -719,7 +766,7 @@ function isTextEntry(el: HTMLElement | null): boolean {
 // Regler, Kontrollkästchen, Auswahllisten und Knöpfe lösen den Editor-Verlauf
 // aus; nur echte Texteingaben behalten ihr eigenes Rückgängig.
 function onKeydown(e: KeyboardEvent): void {
-  if (!hasVideo.value || busy.value) return
+  if (!hasVideo.value || busy.value || mergePreviewUrl.value) return
   const meta = e.ctrlKey || e.metaKey
   if (!meta || e.altKey) return
   const key = e.key.toLowerCase()
@@ -771,6 +818,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', onPointerEnd)
   onPointerEnd()
   holdStop()
+  closeMergePreview()
   store.reset()
 })
 
@@ -1034,6 +1082,18 @@ async function downloadResult(): Promise<void> {
               >
                 <template v-if="activeJob === 'cut'">{{ statusLabel }} {{ progress }}%</template>
                 <template v-else>{{ t('actions.cut') }}</template>
+              </button>
+              <button
+                class="btn primary merge-preview"
+                type="button"
+                :disabled="!canMerge || busy"
+                :title="t('actions.mergePreviewHint')"
+                @click="onMergePreview"
+              >
+                <template v-if="activeJob === 'preview'"
+                  >{{ statusLabel }} {{ progress }}%</template
+                >
+                <template v-else>{{ t('actions.mergePreview') }}</template>
               </button>
               <button
                 class="btn primary merge"
@@ -1620,6 +1680,13 @@ async function downloadResult(): Promise<void> {
         </div>
       </div>
     </div>
+
+    <MergePreviewDialog
+      :src="mergePreviewUrl"
+      :merge-disabled="!canMerge || busy"
+      @close="closeMergePreview"
+      @merge="onMerge"
+    />
   </section>
 </template>
 
