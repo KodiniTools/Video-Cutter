@@ -198,6 +198,8 @@ const messages = {
       hint: 'Schnelle Vorschau in reduzierter Qualität. Zusammenfügen erstellt das Video mit denselben Einstellungen in voller Qualität.',
       close: 'Schließen',
       merge: 'Jetzt zusammenfügen',
+      clips: 'Verwendete Bereiche (Von – Bis · Länge):',
+      trimmed: 'gekürzt',
     },
     text: {
       title: 'Text',
@@ -670,6 +672,8 @@ const messages = {
       hint: 'Quick preview in reduced quality. Joining creates the video in full quality with the same settings.',
       close: 'Close',
       merge: 'Join now',
+      clips: 'Ranges used (from – to · length):',
+      trimmed: 'trimmed',
     },
     text: {
       title: 'Text',
