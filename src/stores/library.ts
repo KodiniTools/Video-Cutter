@@ -11,6 +11,7 @@ import {
 } from '@/lib/mediaApi'
 import { mergeTimeline, type TimelineEntry } from '@/lib/mergeTimeline'
 import { useAnimationPref } from '@/composables/useAnimationPref'
+import { normalizeSpeedStep, speedFactor } from '@/lib/clipSpeed'
 
 /**
  * Video-Bibliothek („Meine Videos"): mehrere Videos werden einmal auf den
@@ -48,6 +49,11 @@ export interface LibraryItem {
    * Clip. Eine Lücke davor füllt das letzte Bild des vorigen Clips.
    */
   at: number | null
+  /**
+   * Wiedergabegeschwindigkeit beim Zusammenfügen als Stufe −2,5 … +2,5
+   * (0 = normal, siehe lib/clipSpeed). Ändert die Länge im Gesamtvideo.
+   */
+  speed: number
   /** Beim Zusammenfügen verwenden? */
   include: boolean
   status: LibraryStatus
@@ -75,6 +81,14 @@ export function seamKey(left: Pick<LibraryItem, 'id'>, right: Pick<LibraryItem, 
 export function itemLength(it: Pick<LibraryItem, 'start' | 'end' | 'duration'>): number {
   const end = it.end ?? it.duration
   return end > 0 ? Math.max(0, end - it.start) : 0
+}
+
+/**
+ * Länge im Gesamtvideo: verwendete Länge geteilt durch die Geschwindigkeit
+ * (0, solange die Dauer unbekannt ist).
+ */
+export function itemSpan(it: Pick<LibraryItem, 'start' | 'end' | 'duration' | 'speed'>): number {
+  return itemLength(it) / speedFactor(it.speed)
 }
 
 /** Ist der verwendete Bereich gekürzt? */
@@ -119,7 +133,7 @@ export interface MergeState {
   order: number[]
   ranges: Record<
     number,
-    { start: number; end: number | null; include: boolean; at?: number | null }
+    { start: number; end: number | null; include: boolean; at?: number | null; speed?: number }
   >
   seams: Record<string, SeamPreset>
   normalizeAudio: boolean
@@ -168,7 +182,7 @@ export const useLibraryStore = defineStore('library', () => {
    */
   const timeline = computed(() =>
     mergeTimeline(
-      mergeItems.value.map((it) => ({ length: itemLength(it), at: it.at })),
+      mergeItems.value.map((it) => ({ length: itemSpan(it), at: it.at })),
       seamPresets.value,
       anim.animation.value as SeamPreset,
       anim.duration.value,
@@ -243,6 +257,7 @@ export const useLibraryStore = defineStore('library', () => {
       start: 0,
       end: null,
       at: null,
+      speed: 0,
       include: true,
       status: 'uploading',
       progress: 0,
@@ -361,7 +376,13 @@ export const useLibraryStore = defineStore('library', () => {
   function mergeState(): MergeState {
     const ranges: MergeState['ranges'] = {}
     for (const it of items.value) {
-      ranges[it.id] = { start: it.start, end: it.end, include: it.include, at: it.at }
+      ranges[it.id] = {
+        start: it.start,
+        end: it.end,
+        include: it.include,
+        at: it.at,
+        speed: it.speed,
+      }
     }
     return {
       order: items.value.map((it) => it.id),
@@ -380,7 +401,14 @@ export const useLibraryStore = defineStore('library', () => {
     items.value = [...known, ...unknown].map((it) => {
       const r = s.ranges[it.id]
       return r
-        ? clampRange({ ...it, start: r.start, end: r.end, include: r.include, at: r.at ?? null })
+        ? clampRange({
+            ...it,
+            start: r.start,
+            end: r.end,
+            include: r.include,
+            at: r.at ?? null,
+            speed: normalizeSpeedStep(r.speed ?? 0),
+          })
         : it
     })
     seamTransitions.value = { ...s.seams }
@@ -449,6 +477,7 @@ export const useLibraryStore = defineStore('library', () => {
       end: number | null
       include: boolean
       at?: number | null
+      speed?: number
     }[],
     opts: {
       selected: number | null
@@ -466,6 +495,7 @@ export const useLibraryStore = defineStore('library', () => {
           end: e.end,
           include: e.include,
           at: e.at ?? null,
+          speed: normalizeSpeedStep(e.speed ?? 0),
         }),
         e.media,
       ),
@@ -510,6 +540,11 @@ export const useLibraryStore = defineStore('library', () => {
   /** Von im Gesamtvideo setzen; `null` = direkt nach dem vorigen Clip. */
   function setAt(id: number, t: number | null): void {
     update(id, (it) => ({ ...it, at: t === null || !Number.isFinite(t) ? null : Math.max(0, t) }))
+  }
+
+  /** Wiedergabegeschwindigkeit (Stufe −2,5 … +2,5, 0 = normal) setzen. */
+  function setSpeed(id: number, step: number): void {
+    update(id, (it) => ({ ...it, speed: normalizeSpeedStep(step) }))
   }
 
   /** Kürzung und Position aufheben (ganzes Video, direkt nach dem vorigen). */
@@ -585,6 +620,7 @@ export const useLibraryStore = defineStore('library', () => {
     setStart,
     setEnd,
     setAt,
+    setSpeed,
     resetRange,
     setInclude,
     move,

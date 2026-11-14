@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { itemLength, isItemTrimmed, MIN_LENGTH, type LibraryItem } from '@/stores/library'
+import { itemLength, itemSpan, isItemTrimmed, MIN_LENGTH, type LibraryItem } from '@/stores/library'
+import {
+  MAX_SPEED_STEP,
+  SPEED_STEP,
+  formatSpeedFactor,
+  formatSpeedStep,
+  speedFactor,
+} from '@/lib/clipSpeed'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 import { MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
 import type { TimelineEntry } from '@/lib/mergeTimeline'
@@ -36,6 +43,8 @@ const emit = defineEmits<{
   (e: 'end', sec: number | null): void
   /** Von im Gesamtvideo; `null` = direkt nach dem vorigen Clip. */
   (e: 'at', sec: number | null): void
+  /** Geschwindigkeit als Stufe −2,5 … +2,5 (0 = normal). */
+  (e: 'speed', step: number): void
   (e: 'reset'): void
   (e: 'move', delta: number): void
   (e: 'remove'): void
@@ -130,7 +139,28 @@ function onHandleDragStart(ev: DragEvent): void {
   emit('drag-start', ev)
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// --- Geschwindigkeit ---------------------------------------------------------
+/** Faktor der eingestellten Stufe (1 = normal). */
+const factor = computed(() => speedFactor(props.item.speed))
+const speedStepText = computed(() => formatSpeedStep(props.item.speed, locale.value))
+const speedFactorText = computed(() => formatSpeedFactor(props.item.speed, locale.value))
+
+/** Mini-Player spielt im eingestellten Tempo (wie im Gesamtvideo). */
+watch(
+  [player, factor],
+  ([el, f]) => {
+    if (!el) return
+    el.defaultPlaybackRate = f
+    el.playbackRate = f
+  },
+  { immediate: true },
+)
+
+function onSpeedInput(ev: Event): void {
+  emit('speed', Number((ev.target as HTMLInputElement).value))
+}
 
 /** „Clip ab": Startpunkt innerhalb des Clips. */
 const startInput = ref('')
@@ -155,6 +185,8 @@ watch(
 
 const trimmed = computed(() => isItemTrimmed(props.item) || props.item.at !== null)
 const usedLength = computed(() => itemLength(props.item))
+/** Länge im Gesamtvideo (nach der Geschwindigkeit). */
+const spanLength = computed(() => itemSpan(props.item))
 const progressPct = computed(() => Math.round(props.item.progress * 100))
 /** Fehlertext (veraltetes Backend übersetzt). */
 const errorText = computed(() =>
@@ -165,7 +197,7 @@ const entryInfo = computed(() => {
   const e = props.entry
   if (!e) return ''
   if (e.hold > 1e-3) return t('append.holdInfo', { sec: formatTimeMs(e.hold) })
-  if (usedLength.value - e.used > 1e-3) return t('append.cutInfo', { at: formatTimeMs(e.end) })
+  if (spanLength.value - e.used > 1e-3) return t('append.cutInfo', { at: formatTimeMs(e.end) })
   return ''
 })
 
@@ -236,16 +268,18 @@ function commitEnd(): void {
       rangeNote.value = t('append.endBeforeStart', { from: formatTimeMs(e.start) })
       emit('end', props.item.start + MIN_LENGTH)
     } else {
-      const maxEnd = dur > 0 ? e.start + (dur - props.item.start) : Infinity
+      // Bis ist Zeit im Gesamtvideo; im Clip zählt sie mal Geschwindigkeit.
+      const f = factor.value
+      const maxEnd = dur > 0 ? e.start + (dur - props.item.start) / f : Infinity
       rangeNote.value =
         sec - maxEnd > 1e-3
           ? t('append.endBeyond', {
               value: formatTimeMs(sec),
               max: formatTimeMs(maxEnd),
-              len: formatTimeMs(dur - props.item.start),
+              len: formatTimeMs((dur - props.item.start) / f),
             })
           : ''
-      emit('end', props.item.start + (Math.min(sec, maxEnd) - e.start))
+      emit('end', props.item.start + (Math.min(sec, maxEnd) - e.start) * f)
     }
   }
   endInput.value = e ? formatTimeMs(e.end) : ''
@@ -303,6 +337,7 @@ function resetRange(): void {
         <small v-else-if="usedLength > 0">
           {{ formatTimeMs(usedLength) }}
           <template v-if="trimmed"> / {{ formatTimeMs(item.duration) }}</template>
+          <template v-if="item.include && item.speed !== 0"> · {{ speedFactorText }}</template>
           <template v-if="selected"> · {{ t('library.inEditor') }}</template>
         </small>
       </button>
@@ -466,6 +501,45 @@ function resetRange(): void {
         />
       </label>
       <small v-if="entryInfo" class="entry-info">{{ entryInfo }}</small>
+    </div>
+    <div v-if="item.include" class="speed" :title="t('append.speedHint')">
+      <div class="speed-head">
+        <label class="speed-label" :for="`clip-speed-${item.id}`">{{ t('append.speed') }}</label>
+        <output
+          class="speed-value"
+          :class="{ changed: item.speed !== 0 }"
+          :for="`clip-speed-${item.id}`"
+        >
+          {{ speedStepText }} · {{ speedFactorText }}
+        </output>
+        <button
+          class="btn tiny ghost"
+          type="button"
+          :disabled="item.speed === 0 || disabled"
+          :title="t('append.speedReset')"
+          :aria-label="t('append.speedReset')"
+          @click="emit('speed', 0)"
+        >
+          ↺
+        </button>
+      </div>
+      <input
+        :id="`clip-speed-${item.id}`"
+        class="speed-range"
+        type="range"
+        :min="-MAX_SPEED_STEP"
+        :max="MAX_SPEED_STEP"
+        :step="SPEED_STEP"
+        :value="item.speed"
+        :disabled="disabled"
+        :aria-valuetext="`${speedStepText} (${speedFactorText})`"
+        @input="onSpeedInput"
+      />
+      <div class="speed-scale" aria-hidden="true">
+        <span>−{{ MAX_SPEED_STEP.toLocaleString(locale) }}</span>
+        <span>0</span>
+        <span>+{{ MAX_SPEED_STEP.toLocaleString(locale) }}</span>
+      </div>
     </div>
     <p v-if="item.include && rangeNote" class="range-note" role="status">{{ rangeNote }}</p>
   </li>
@@ -672,6 +746,44 @@ function resetRange(): void {
 .time.small {
   width: 92px;
   padding: 3px 4px;
+}
+.speed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.speed-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.speed-label {
+  flex: 1;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-text-2);
+}
+.speed-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--ds-accent);
+}
+.speed-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ds-font-mono);
+  font-size: 10px;
+  color: var(--ds-text-2);
+}
+.speed-value {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+}
+.speed-value.changed {
+  color: var(--ds-accent);
+  font-weight: var(--ds-weight-semibold);
 }
 .entry-info {
   flex: 1;

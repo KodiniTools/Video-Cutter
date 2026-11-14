@@ -69,6 +69,8 @@ export interface JobStartResponse {
   preview?: boolean
   /** Kennt der Server Standbilder am Clip-Ende (`hold`/`mainHold`)? */
   mergeHold?: boolean
+  /** Kennt der Server die Geschwindigkeit je Clip (`speed`/`mainSpeed`)? */
+  clipSpeed?: boolean
 }
 
 /**
@@ -90,6 +92,7 @@ export function parseJobStart(text: string): JobStartResponse {
     storeResult?: unknown
     preview?: unknown
     mergeHold?: unknown
+    clipSpeed?: unknown
   }
   let data: Raw
   try {
@@ -115,6 +118,7 @@ export function parseJobStart(text: string): JobStartResponse {
     storeResult: data.storeResult === true,
     preview: data.preview === true,
     mergeHold: data.mergeHold === true,
+    clipSpeed: data.clipSpeed === true,
   }
 }
 
@@ -300,6 +304,8 @@ export interface AppendInput {
   slot?: number
   /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille). */
   hold?: number
+  /** Wiedergabegeschwindigkeit (Faktor, 1 = normal); `duration` ist Quellmaterial. */
+  speed?: number
 }
 
 /** Gewünschtes Ausgabeformat. */
@@ -345,6 +351,8 @@ interface JobRequest {
   preview?: boolean
   /** Standbild (Sekunden) am Ende des Hauptvideos beim Zusammenfügen. */
   mainHold?: number
+  /** Geschwindigkeit des Hauptvideos beim Zusammenfügen (Faktor, 1 = normal). */
+  mainSpeed?: number
 }
 
 /** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
@@ -370,6 +378,12 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
     appends.length > 0 && ((req.mainHold ?? 0) > 0 || appends.some((a) => (a.hold ?? 0) > 0))
   if (appends.length > 0 && (req.mainHold ?? 0) > 0) {
     form.append('mainHold', String(Number((req.mainHold as number).toFixed(3))))
+  }
+  const hasSpeed = (f: number | undefined) => f !== undefined && Math.abs(f - 1) > 1e-6
+  const wantsSpeed =
+    appends.length > 0 && (hasSpeed(req.mainSpeed) || appends.some((a) => hasSpeed(a.speed)))
+  if (appends.length > 0 && hasSpeed(req.mainSpeed)) {
+    form.append('mainSpeed', String(Number((req.mainSpeed as number).toFixed(6))))
   }
   form.append('segments', JSON.stringify(segments))
   form.append('mode', mode)
@@ -415,6 +429,7 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
           position: a.position ?? 'after',
           ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
           ...(a.hold && a.hold > 0 ? { hold: Number(a.hold.toFixed(3)) } : {}),
+          ...(hasSpeed(a.speed) ? { speed: Number((a.speed as number).toFixed(6)) } : {}),
         })),
       ),
     )
@@ -478,6 +493,10 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   // Standbild in einer Lücke verlangt, aber nicht bestätigt -> veralteter Server
   // (würde die Lücke stillschweigend weglassen).
   if (wantsHold && !started.mergeHold) await abortJob(jobId, APPEND_UNSUPPORTED)
+
+  // Geschwindigkeit verlangt, aber nicht bestätigt -> veralteter Server
+  // (würde den Clip stillschweigend in normaler Geschwindigkeit liefern).
+  if (wantsSpeed && !started.clipSpeed) await abortJob(jobId, APPEND_UNSUPPORTED)
 
   // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
   if (wantsFormat && !started.outputFormat) await abortJob(jobId, FORMAT_UNSUPPORTED)
@@ -591,6 +610,8 @@ export interface MediaCutRequest {
   audioFade?: AudioFadeInput
   /** Standbild (Sekunden) am Ende des Hauptvideos (Lücke vor dem nächsten Clip). */
   mainHold?: number
+  /** Geschwindigkeit des Hauptvideos (Faktor, 1 = normal); Segmente in Quellzeit. */
+  mainSpeed?: number
 }
 
 /** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
@@ -621,6 +642,7 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
       audioFade: req.audioFade,
       storeResult: true,
       mainHold: req.mainHold,
+      mainSpeed: req.mainSpeed,
     })
     currentJobId = null
     if (!mediaId) throw new Error(MEDIA_UNSUPPORTED)
@@ -653,6 +675,7 @@ async function previewMerge(req: MediaCutRequest): Promise<Blob> {
       audioFade: req.audioFade,
       preview: true,
       mainHold: req.mainHold,
+      mainSpeed: req.mainSpeed,
     })
     const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
     if (!download.ok) throw new Error(await readError(download))

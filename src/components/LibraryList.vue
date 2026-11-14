@@ -124,6 +124,7 @@ function keyOf(it: LibraryItem): number {
         @start="store.setStart(it.id, $event)"
         @end="store.setEnd(it.id, $event)"
         @at="store.setAt(it.id, $event)"
+        @speed="store.setSpeed(it.id, $event)"
         @reset="store.resetRange(it.id)"
         @move="store.moveBy(it.id, $event)"
         @retry="store.retry(it.id)"

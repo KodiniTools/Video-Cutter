@@ -1,5 +1,7 @@
 import {
   computeKeepRanges,
+  MIN_CLIP_SPEED,
+  MAX_CLIP_SPEED,
   type TrimMode,
   type CutOperation,
   type Segment,
@@ -196,6 +198,8 @@ export interface AppendMeta {
   slot?: number
   /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille); fehlt = 0. */
   hold?: number
+  /** Wiedergabegeschwindigkeit (Faktor); fehlt = 1 (normal). */
+  speed?: number
 }
 
 /** Höchster sinnvoller Slot-Wert (größere Werte bedeuten ohnehin „am Ende"). */
@@ -345,6 +349,8 @@ export function parseAppendMeta(body: Record<string, unknown>, count: number): A
     const meta: AppendMeta =
       slot === undefined ? { start, duration, position } : { start, duration, position, slot }
     if (hold > 0) meta.hold = hold
+    const speed = parseSpeed(m.speed, 'eines angehängten Videos')
+    if (speed !== 1) meta.speed = speed
     return meta
   })
 }
@@ -360,6 +366,26 @@ function parseHold(v: unknown, label: string): number {
     throw new ValidationError(`Ungültiges Standbild ${label} (erlaubt: 0–${MAX_HOLD_SEC} s).`)
   }
   return n
+}
+
+/**
+ * Liest eine Wiedergabegeschwindigkeit (Faktor, fehlt/leer = 1). Erlaubt
+ * MIN_CLIP_SPEED–MAX_CLIP_SPEED; alles andere wird abgelehnt statt still begrenzt.
+ */
+function parseSpeed(v: unknown, label: string): number {
+  if (v === undefined || v === null || v === '') return 1
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < MIN_CLIP_SPEED - 1e-9 || n > MAX_CLIP_SPEED + 1e-9) {
+    throw new ValidationError(
+      `Ungültige Geschwindigkeit ${label} (erlaubt: ${MIN_CLIP_SPEED}–${MAX_CLIP_SPEED}).`,
+    )
+  }
+  return Math.abs(n - 1) < 1e-6 ? 1 : n
+}
+
+/** `mainSpeed`: Wiedergabegeschwindigkeit des Hauptvideos beim Zusammenfügen (Faktor). */
+export function parseMainSpeed(body: Record<string, unknown>): number {
+  return parseSpeed(body.mainSpeed, 'des ersten Videos')
 }
 
 /** `mainHold`: Standbild am Ende des Hauptvideos (letzter behaltener Bereich) beim Zusammenfügen. */

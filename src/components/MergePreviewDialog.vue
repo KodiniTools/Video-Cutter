@@ -9,6 +9,8 @@ export interface MergePreviewClip {
   trimmed: boolean
   /** Standbild danach (Sekunden, Lücke bis zum nächsten Clip). */
   hold?: number
+  /** Geschwindigkeit als Text (z. B. „2×“); fehlt = normal. */
+  speed?: string
 }
 </script>
 
@@ -102,6 +104,9 @@ function onBackdrop(e: MouseEvent): void {
               {{ formatTimeMs(c.start) }} – {{ formatTimeMs(c.end) }}
               <template v-if="c.end > c.start"> · {{ formatTimeMs(c.end - c.start) }} </template>
               <em v-if="c.trimmed" class="clip-tag">{{ t('mergePreview.trimmed') }}</em>
+              <em v-if="c.speed" class="clip-tag">
+                {{ t('mergePreview.speed', { factor: c.speed }) }}
+              </em>
               <em v-if="(c.hold ?? 0) > 0.001" class="clip-tag">
                 {{ t('mergePreview.hold', { sec: formatTimeMs(c.hold ?? 0) }) }}
               </em>
