@@ -49,7 +49,7 @@ import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
 import AudioFadePanel from './AudioFadePanel.vue'
 import ProjectPanel from './ProjectPanel.vue'
-import MergePreviewDialog from './MergePreviewDialog.vue'
+import MergePreviewDialog, { type MergePreviewClip } from './MergePreviewDialog.vue'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
@@ -655,6 +655,8 @@ async function onMerge(): Promise<void> {
 
 /** Objekt-URL der zuletzt erzeugten Vorschau (Dialog offen, solange gesetzt). */
 const mergePreviewUrl = ref<string | null>(null)
+/** Clips der zuletzt erzeugten Vorschau mit dem jeweils verwendeten Bereich (Von/Bis). */
+const mergePreviewClips = ref<MergePreviewClip[]>([])
 
 function closeMergePreview(): void {
   if (mergePreviewUrl.value) URL.revokeObjectURL(mergePreviewUrl.value)
@@ -669,11 +671,19 @@ async function onMergePreview(): Promise<void> {
   if (!canMerge.value || busy.value) return
   const req = buildMergeRequest()
   if (!req) return
+  // Stand der Liste zum Zeitpunkt des Auftrags (genau das zeigt die Vorschau).
+  const clips: MergePreviewClip[] = mergeItems.value.map((it) => ({
+    name: it.name,
+    start: it.start,
+    end: it.end ?? it.duration,
+    trimmed: isItemTrimmed(it),
+  }))
   closeMergePreview()
   store.setError('')
   activeJob.value = 'preview'
   try {
     const blob = await previewMerge(req)
+    mergePreviewClips.value = clips
     mergePreviewUrl.value = URL.createObjectURL(blob)
   } catch (e) {
     showJobError(e)
@@ -1740,6 +1750,7 @@ async function downloadResult(): Promise<void> {
 
     <MergePreviewDialog
       :src="mergePreviewUrl"
+      :clips="mergePreviewClips"
       :merge-disabled="!canMerge || busy"
       @close="closeMergePreview"
       @merge="onMerge"

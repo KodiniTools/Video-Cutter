@@ -1,3 +1,15 @@
+<script lang="ts">
+/** Ein Clip der Vorschau mit dem verwendeten Bereich (Von/Bis aus der Liste). */
+export interface MergePreviewClip {
+  name: string
+  start: number
+  /** Ende des verwendeten Bereichs (Dateiende, wenn nicht gekürzt). */
+  end: number
+  /** In der Liste gekürzt (Von > 0 oder Bis gesetzt)? */
+  trimmed: boolean
+}
+</script>
+
 <script setup lang="ts">
 /**
  * Vorschau des Zusammenfügens: spielt die vom Server erzeugte, kleine
@@ -6,12 +18,15 @@
  */
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatTimeMs } from '@/lib/timeFormat'
 
 const props = defineProps<{
   /** Objekt-URL der Vorschaudatei; `null` = Dialog geschlossen. */
   src: string | null
   /** Zusammenfügen gerade nicht möglich (z. B. Liste geändert, Vorgang läuft). */
   mergeDisabled?: boolean
+  /** Clips in Reihenfolge mit dem Bereich, den diese Vorschau verwendet. */
+  clips?: MergePreviewClip[]
 }>()
 
 const emit = defineEmits<{
@@ -76,6 +91,19 @@ function onBackdrop(e: MouseEvent): void {
         </button>
       </header>
       <video ref="videoEl" class="video" :src="src" controls autoplay playsinline></video>
+      <div v-if="clips?.length" class="clips">
+        <p class="clips-title">{{ t('mergePreview.clips') }}</p>
+        <ol class="clip-list">
+          <li v-for="(c, i) in clips" :key="i" class="clip" :class="{ trimmed: c.trimmed }">
+            <span class="clip-name">{{ c.name }}</span>
+            <span class="clip-range">
+              {{ formatTimeMs(c.start) }} – {{ formatTimeMs(c.end) }}
+              <template v-if="c.end > c.start"> · {{ formatTimeMs(c.end - c.start) }} </template>
+              <em v-if="c.trimmed" class="clip-tag">{{ t('mergePreview.trimmed') }}</em>
+            </span>
+          </li>
+        </ol>
+      </div>
       <p class="hint">{{ t('mergePreview.hint') }}</p>
       <div class="actions">
         <button class="btn" type="button" @click="emit('close')">
@@ -125,9 +153,46 @@ function onBackdrop(e: MouseEvent): void {
 .video {
   display: block;
   width: 100%;
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 320px);
+  min-height: 120px;
   background: #000;
   border-radius: var(--ds-radius-sm);
+}
+.clips {
+  max-height: 110px;
+  overflow-y: auto;
+  font-size: var(--ds-text-sm);
+}
+.clips-title {
+  margin: 0 0 4px;
+  color: var(--ds-text-2);
+}
+.clip-list {
+  margin: 0;
+  padding-left: 22px;
+}
+.clip {
+  line-height: 1.5;
+}
+.clip-name {
+  margin-right: 8px;
+  overflow-wrap: anywhere;
+}
+.clip-range {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-2);
+  white-space: nowrap;
+}
+.clip.trimmed .clip-range {
+  color: var(--ds-text);
+}
+.clip-tag {
+  margin-left: 6px;
+  font-family: inherit;
+  font-style: normal;
+  color: var(--ds-success);
 }
 .hint {
   margin: 0;

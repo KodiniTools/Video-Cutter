@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { i18n } from '@/i18n'
-import MergePreviewDialog from '@/components/MergePreviewDialog.vue'
+import MergePreviewDialog, { type MergePreviewClip } from '@/components/MergePreviewDialog.vue'
 
-function mountDialog(props: { src: string | null; mergeDisabled?: boolean }) {
+function mountDialog(props: {
+  src: string | null
+  mergeDisabled?: boolean
+  clips?: MergePreviewClip[]
+}) {
   return mount(MergePreviewDialog, { props, global: { plugins: [i18n] } })
 }
 
@@ -33,5 +37,27 @@ describe('MergePreviewDialog', () => {
     expect(w.find('.actions .primary').attributes('disabled')).toBeDefined()
     await w.setProps({ src: null })
     expect(w.find('dialog').attributes('open')).toBeUndefined()
+  })
+
+  it('zeigt je Clip den verwendeten Bereich und markiert gekürzte Clips', () => {
+    i18n.global.locale.value = 'de'
+    const w = mountDialog({
+      src: 'blob:x',
+      clips: [
+        { name: 'Bild-Clip_5s.mp4', start: 0, end: 5, trimmed: false },
+        { name: 'video.mp4', start: 6, end: 14.72, trimmed: true },
+      ],
+    })
+    const rows = w.findAll('.clip')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('00:00.000 – 00:05.000')
+    expect(rows[0].find('.clip-tag').exists()).toBe(false)
+    expect(rows[1].text()).toContain('00:06.000 – 00:14.720')
+    expect(rows[1].text()).toContain('00:08.720')
+    expect(rows[1].find('.clip-tag').text()).toBe('gekürzt')
+  })
+
+  it('ohne Clips keine Liste', () => {
+    expect(mountDialog({ src: 'blob:x' }).find('.clips').exists()).toBe(false)
   })
 })
