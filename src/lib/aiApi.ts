@@ -13,7 +13,33 @@ export const AI_UNSUPPORTED = 'AI_UNSUPPORTED'
 /** Fehler-Kennung: Job vom Nutzer abgebrochen. */
 export const AI_CANCELLED = 'AI_CANCELLED'
 
-export type TranscribeLanguage = 'auto' | 'de' | 'en'
+/**
+ * Sprachen für „Sprache erkennen“ (Whisper-Kürzel, wie
+ * server/src/lib/whisper.ts TRANSCRIBE_LANGUAGES). Reihenfolge = Auswahlliste.
+ */
+export const TRANSCRIBE_LANGUAGES = [
+  'auto',
+  'de',
+  'en',
+  'hr',
+  'bs',
+  'sr',
+  'sl',
+  'it',
+  'fr',
+  'es',
+  'pt',
+  'nl',
+  'pl',
+  'cs',
+  'sk',
+  'hu',
+  'ro',
+  'tr',
+  'ru',
+  'uk',
+] as const
+export type TranscribeLanguage = (typeof TRANSCRIBE_LANGUAGES)[number]
 export type SubtitleTarget = 'original' | 'de' | 'en'
 export type TranslateTarget = 'en' | 'de'
 export type CutKind = 'filler' | 'slip' | 'repeat' | 'pause'
