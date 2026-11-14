@@ -17,6 +17,7 @@ import {
   type AiRun,
   type ImageStyle,
 } from '@/lib/aiApi'
+import { saveFile } from '@/lib/download'
 
 /**
  * KI-Hintergrund für einen Bild-Clip: Claude schreibt aus Stichworten, Stil
@@ -173,6 +174,17 @@ function choose(i: number): void {
   emit('pick', v.file)
 }
 
+/** Speichert eine Variante als Bilddatei (Originalgröße von Gemini). */
+async function download(i: number): Promise<void> {
+  const v = variants.value[i]
+  if (!v) return
+  try {
+    await saveFile({ blob: v.file, name: v.file.name })
+  } catch {
+    error.value = t('stillAi.downloadFailed')
+  }
+}
+
 function cancel(): void {
   run.value?.cancel()
 }
@@ -284,22 +296,31 @@ onBeforeUnmount(() => {
     <p v-if="error" class="hint warn" role="alert">{{ error }}</p>
     <p v-if="notice" class="hint">{{ notice }}</p>
 
-    <div v-if="variants.length" class="grid" role="listbox" :aria-label="t('stillAi.variants')">
-      <button
-        v-for="(v, i) in variants"
-        :key="v.url"
-        type="button"
-        role="option"
-        class="thumb"
-        :class="{ on: selected === i }"
-        :aria-selected="selected === i"
-        :title="t('stillAi.useVariant', { n: i + 1 })"
-        :disabled="busy"
-        data-test="still-ai-variant"
-        @click="choose(i)"
-      >
-        <img :src="v.url" :alt="t('stillAi.useVariant', { n: i + 1 })" />
-      </button>
+    <div v-if="variants.length" class="grid" role="group" :aria-label="t('stillAi.variants')">
+      <div v-for="(v, i) in variants" :key="v.url" class="cell">
+        <button
+          type="button"
+          class="thumb"
+          :class="{ on: selected === i }"
+          :aria-pressed="selected === i"
+          :title="t('stillAi.useVariant', { n: i + 1 })"
+          :disabled="busy"
+          data-test="still-ai-variant"
+          @click="choose(i)"
+        >
+          <img :src="v.url" :alt="t('stillAi.useVariant', { n: i + 1 })" />
+        </button>
+        <button
+          type="button"
+          class="dl"
+          :title="t('stillAi.download', { n: i + 1 })"
+          :aria-label="t('stillAi.download', { n: i + 1 })"
+          data-test="still-ai-download"
+          @click="download(i)"
+        >
+          ⬇
+        </button>
+      </div>
     </div>
     <p class="hint">{{ t('stillAi.hint') }}</p>
   </div>
@@ -387,8 +408,37 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
+.cell {
+  position: relative;
+  line-height: 0;
+}
+.dl {
+  appearance: none;
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.dl:hover {
+  border-color: var(--ds-accent);
+}
+.dl:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
 .thumb {
   appearance: none;
+  display: block;
+  width: 100%;
   padding: 0;
   border: 2px solid var(--ds-border);
   border-radius: var(--ds-radius-sm);

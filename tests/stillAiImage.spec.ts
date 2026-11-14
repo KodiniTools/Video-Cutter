@@ -5,6 +5,8 @@ import { i18n } from '@/i18n'
 
 const runAiJob = vi.fn()
 const fetchGeneratedImage = vi.fn()
+const saveFile = vi.fn(async (_f: { blob: Blob; name: string }) => true)
+vi.mock('@/lib/download', () => ({ saveFile: (f: { blob: Blob; name: string }) => saveFile(f) }))
 
 vi.mock('@/lib/aiApi', async (orig) => {
   const real = await orig<typeof import('@/lib/aiApi')>()
@@ -88,6 +90,11 @@ describe('StillAiImage', () => {
     await w.findAll('[data-test=still-ai-variant]')[1].trigger('click')
     expect(w.emitted('pick')?.[1]).toEqual([f2])
     expect(w.emitted('busy')).toEqual([[true], [false]])
+    // ⬇ speichert genau diese Variante, ohne die Auswahl zu ändern
+    await w.findAll('[data-test=still-ai-download]')[0].trigger('click')
+    await flushPromises()
+    expect(saveFile).toHaveBeenCalledWith({ blob: f1, name: 'v1.png' })
+    expect(w.emitted('pick')).toHaveLength(2)
   })
 
   it('zeigt Fehler des Servers', async () => {
