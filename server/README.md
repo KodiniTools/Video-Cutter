@@ -21,7 +21,7 @@ Browser-Variante (FFmpeg.wasm) – das Backend ist ein Zusatz, kein Ersatz.
 - Harte Zeitgrenze pro Job (`FFMPEG_TIMEOUT_SEC`) + Kill.
 - Concurrency-Limit (`MAX_CONCURRENT`) → schützt CPU/RAM; sonst `429`.
 - Temp-Dateien werden **immer** gelöscht (Erfolg, Fehler, Timeout, TTL, Shutdown).
-- CORS auf erlaubte Origins beschränkt, Helmet, Rate-Limiting.
+- CORS auf erlaubte Origins beschränkt, Helmet, Rate-Limiting pro IP (`RATE_LIMIT_WRITE_MAX` für POST, `RATE_LIMIT_READ_MAX` für den Rest, je 15 min; sonst `429` mit `Retry-After`).
 - Graceful Shutdown (SIGTERM/SIGINT) beendet laufende ffmpeg-Prozesse.
 
 ## Lokale Entwicklung

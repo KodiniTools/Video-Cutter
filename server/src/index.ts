@@ -1,7 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
 import { mkdir } from 'node:fs/promises'
 import { MulterError } from 'multer'
 import { config } from './config'
@@ -15,6 +14,7 @@ import { jobManager } from './lib/jobs'
 import { initCustomFonts } from './lib/customFonts'
 import { aiRouter, aiStatus } from './routes/ai'
 import { aiJobs } from './lib/aiJobs'
+import { createApiRateLimit } from './lib/rateLimits'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
@@ -43,13 +43,17 @@ async function bootstrap(): Promise<void> {
     }),
   )
 
+  if (process.env.RATE_LIMIT_MAX !== undefined) {
+    console.warn(
+      'RATE_LIMIT_MAX wird nicht mehr verwendet – stattdessen RATE_LIMIT_WRITE_MAX/RATE_LIMIT_READ_MAX.',
+    )
+  }
   app.use(
     '/api',
-    rateLimit({
+    createApiRateLimit({
       windowMs: 15 * 60 * 1000,
-      max: config.rateLimitMax,
-      standardHeaders: true,
-      legacyHeaders: false,
+      writeMax: config.rateLimitWriteMax,
+      readMax: config.rateLimitReadMax,
     }),
   )
 

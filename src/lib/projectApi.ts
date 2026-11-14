@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase'
+import { fallbackErrorMessage, retryAfterOf } from './httpError'
 import { parseMediaView, type MediaView } from './mediaApi'
 
 /**
@@ -74,7 +75,7 @@ async function failure(res: Response): Promise<Error> {
   if (res.status === 404 && (!body.error || body.error === 'Nicht gefunden.')) {
     return new Error(PROJECTS_UNSUPPORTED)
   }
-  return new Error(body.error || `Serverfehler (${res.status}).`)
+  return new Error(body.error || fallbackErrorMessage(res.status, retryAfterOf(res)))
 }
 
 const url = (p: string) => `${API_BASE}/api/projects${p}`

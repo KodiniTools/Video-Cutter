@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import type { TrimMode } from '@/lib/ffmpegCommand'
 import type { CutOperation, CropRect } from '@/stores/videoEditor'
 import { API_BASE } from '@/lib/apiBase'
+import { fallbackErrorMessage, retryAfterOf } from '@/lib/httpError'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
 import type { TextOverlayData } from '@/lib/textOverlay'
 import type { ServerGraphic } from '@/lib/graphicOverlay'
@@ -146,9 +147,9 @@ let rejectActive: ((reason: Error) => void) | null = null
 async function readError(res: Response): Promise<string> {
   try {
     const data = (await res.json()) as { error?: string }
-    return data.error ?? `Serverfehler (${res.status}).`
+    return data.error ?? fallbackErrorMessage(res.status, retryAfterOf(res))
   } catch {
-    return `Serverfehler (${res.status}).`
+    return fallbackErrorMessage(res.status, retryAfterOf(res))
   }
 }
 
@@ -183,7 +184,7 @@ function uploadForJob(
           reject(err instanceof Error ? err : new Error('Ungültige Serverantwort.'))
         }
       } else {
-        let msg = `Serverfehler (${xhr.status}).`
+        let msg = fallbackErrorMessage(xhr.status, xhr.getResponseHeader?.('Retry-After'))
         try {
           const data = JSON.parse(xhr.responseText) as { error?: string }
           if (data.error) msg = data.error
@@ -709,7 +710,7 @@ export async function startTextJob(
   if (!res.ok) {
     const msg = typeof data.error === 'string' ? data.error : ''
     if (res.status === 404 && (!msg || msg === 'Nicht gefunden.')) throw new Error(TEXT_UNSUPPORTED)
-    throw new Error(msg || `Serverfehler (${res.status}).`)
+    throw new Error(msg || fallbackErrorMessage(res.status, retryAfterOf(res)))
   }
   if (typeof data.jobId !== 'string' || !data.jobId) {
     throw new Error('Ungültige Serverantwort (keine jobId).')

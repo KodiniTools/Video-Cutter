@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase'
+import { fallbackErrorMessage, retryAfterOf } from './httpError'
 
 /**
  * Client für die Video-Bibliothek des Servers (`/api/media`): Videos werden
@@ -39,7 +40,7 @@ export function parseMediaView(data: unknown): MediaView {
 }
 
 /** Fehlermeldung aus einer JSON-Fehlerantwort; 404 auf die Route = altes Backend. */
-function errorFrom(status: number, text: string): Error {
+function errorFrom(status: number, text: string, retryAfter?: string | null): Error {
   let msg = ''
   try {
     msg = (JSON.parse(text) as { error?: string }).error ?? ''
@@ -48,7 +49,7 @@ function errorFrom(status: number, text: string): Error {
   }
   // Altes Backend: Route unbekannt -> generisches „Nicht gefunden." bzw. HTML.
   if (status === 404 && (!msg || msg === 'Nicht gefunden.')) return new Error(MEDIA_UNSUPPORTED)
-  return new Error(msg || `Serverfehler (${status}).`)
+  return new Error(msg || fallbackErrorMessage(status, retryAfter))
 }
 
 /** Laufender Upload: Ergebnis-Promise + Abbruch. */
@@ -79,7 +80,7 @@ export function uploadMedia(file: File, onProgress?: (ratio: number) => void): M
           reject(err instanceof Error ? err : new Error('Ungültige Serverantwort.'))
         }
       } else {
-        reject(errorFrom(xhr.status, xhr.responseText))
+        reject(errorFrom(xhr.status, xhr.responseText, xhr.getResponseHeader?.('Retry-After')))
       }
     }
     xhr.onerror = () => reject(new Error('Upload fehlgeschlagen (Netzwerkfehler).'))
@@ -94,14 +95,14 @@ export function uploadMedia(file: File, onProgress?: (ratio: number) => void): M
 /** Metadaten eines gespeicherten Videos. */
 export async function fetchMediaInfo(id: string): Promise<MediaView> {
   const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}`)
-  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''))
+  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''), retryAfterOf(res))
   return parseMediaView(await res.json())
 }
 
 /** Lädt die Datei eines gespeicherten Videos (Wiedergabe/Download). */
 export async function fetchMediaFile(id: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}/file`)
-  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''))
+  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''), retryAfterOf(res))
   return await res.blob()
 }
 
@@ -111,7 +112,8 @@ export async function fetchMediaFile(id: string): Promise<Blob> {
  */
 export async function deleteMedia(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok && res.status !== 404) throw errorFrom(res.status, await res.text().catch(() => ''))
+  if (!res.ok && res.status !== 404)
+    throw errorFrom(res.status, await res.text().catch(() => ''), retryAfterOf(res))
 }
 
 /** Parameter eines Bild-Clips (POST /api/media/still). */
@@ -142,6 +144,6 @@ export async function createStillClip(
   if (req.name) form.append('name', req.name)
   form.append('image', req.image, 'bild.png')
   const res = await fetch(`${API_BASE}/api/media/still`, { method: 'POST', body: form, signal })
-  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''))
+  if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''), retryAfterOf(res))
   return parseMediaView(await res.json())
 }
