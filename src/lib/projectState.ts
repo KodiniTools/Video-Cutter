@@ -35,6 +35,8 @@ export interface ProjectItemState {
   start: number
   end: number | null
   include: boolean
+  /** Von im Gesamtvideo; fehlt/`null` = direkt nach dem vorigen Clip. */
+  at?: number | null
   texts: TextOverlay[]
   /** Bild-Grafiken verweisen per `image` auf einen Schlüssel in `images`. */
   graphics: GraphicOverlay[]
@@ -162,6 +164,7 @@ export function parseProjectState(raw: unknown): ProjectState {
     start: Math.max(0, fin(it.start)),
     end: typeof it.end === 'number' && Number.isFinite(it.end) ? it.end : null,
     include: it.include !== false,
+    at: typeof it.at === 'number' && Number.isFinite(it.at) && it.at >= 0 ? it.at : null,
     texts: Array.isArray(it.texts)
       ? it.texts.map(parseText).filter((t): t is TextOverlay => t !== null)
       : [],

@@ -9,6 +9,7 @@ import {
   buildServerArgs,
   computeKeepRanges,
   mergeOutputDuration,
+  clipSpan,
   mergeSequence,
   mergeTargetSize,
   outputDurationFor,
@@ -29,6 +30,7 @@ import {
   parseMusicParams,
   parseSeamTransitions,
   resolveAppendRange,
+  parseMainHold,
   safeExt,
   safeBaseName,
   ValidationError,
@@ -91,6 +93,7 @@ export const SERVER_FEATURES = [
   'projects',
   'stillClip',
   'mergePreview',
+  'mergeHold',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -203,6 +206,8 @@ cutRouter.post(
       const seamInput = appendSrcs.length > 0 ? parseSeamTransitions(req.body ?? {}) : undefined
       const useMerge = appendSrcs.length > 0 || output.aspect !== 'auto' || musicFile !== undefined
       const audioFade = parseAudioFade(req.body ?? {})
+      // Standbild am Ende des Hauptvideos (nur beim Zusammenfügen mit angehängten Videos).
+      const mainHold = appendSrcs.length > 0 ? parseMainHold(req.body ?? {}) : 0
       if (preview && !useMerge) {
         throw new ValidationError('Die Vorschau gibt es nur beim Zusammenfügen.')
       }
@@ -265,6 +270,7 @@ cutRouter.post(
             hasAudio: info.hasAudio,
             position: appendMeta[i].position,
             slot: appendMeta[i].slot,
+            ...(appendMeta[i].hold ? { hold: appendMeta[i].hold } : {}),
           }
         })
         // Übergänge je Nahtstelle: Anzahl muss zur Gesamtreihenfolge passen.
@@ -301,10 +307,16 @@ cutRouter.post(
           seams,
           audioFade,
           preview,
+          mainHold,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = mergeOutputDuration(
-          [...keep, ...appends.map((a) => ({ start: 0, duration: a.duration }))],
+          [
+            ...keep.map((r, i) =>
+              i === keep.length - 1 ? { ...r, duration: clipSpan(r.duration, mainHold) } : r,
+            ),
+            ...appends.map((a) => ({ start: 0, duration: clipSpan(a.duration, a.hold) })),
+          ],
           transition,
           seams,
         )
@@ -378,6 +390,7 @@ cutRouter.post(
         audioFade: audioFade !== undefined,
         storeResult,
         preview,
+        mergeHold: appendSrcs.length > 0,
       })
     } catch (err) {
       await removeFiles(allPaths)

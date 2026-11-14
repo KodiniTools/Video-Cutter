@@ -231,6 +231,25 @@ describe('library store – Zusammenfügen', () => {
     expect(isItemTrimmed(lib.items[0])).toBe(false)
   })
 
+  it('Von im Gesamtvideo: Zeitleiste mit Standbild in der Lücke, ↺ hebt alles auf', async () => {
+    const lib = await readyLib(2) // je 10 s
+    const [a, b] = lib.items
+    expect(lib.timeline?.total).toBe(20)
+    lib.setAt(b.id, 12)
+    expect(lib.items[1].at).toBe(12)
+    expect(lib.timelineById.get(a.id)).toMatchObject({ used: 10, hold: 2 })
+    expect(lib.timeline?.total).toBe(22)
+    // Rückgängig/Projekte: in den Zusammenfügen-Einstellungen enthalten
+    const st = lib.mergeState()
+    expect(st.ranges[b.id].at).toBe(12)
+    lib.resetRange(b.id)
+    expect(lib.items[1].at).toBeNull()
+    lib.applyMergeState(st)
+    expect(lib.items[1].at).toBe(12)
+    lib.setAt(b.id, Number.NaN)
+    expect(lib.items[1].at).toBeNull()
+  })
+
   it('Reihenfolge: move/moveBy (Drag & Drop, ↑↓)', async () => {
     const lib = await readyLib(3)
     const [a, b, c] = lib.items.map((i) => i.id)

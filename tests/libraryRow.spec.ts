@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import LibraryRow from '@/components/LibraryRow.vue'
 import { i18n } from '@/i18n'
 import type { LibraryItem } from '@/stores/library'
+import type { TimelineEntry } from '@/lib/mergeTimeline'
 import { MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
 
 const file = new File([new Uint8Array([0])], 'intro.mp4', { type: 'video/mp4' })
@@ -19,6 +20,7 @@ const clip = (over: Partial<LibraryItem> = {}): LibraryItem => ({
   fps: 25,
   start: 2,
   end: 6,
+  at: null,
   include: true,
   status: 'ready',
   progress: 1,
@@ -155,5 +157,132 @@ describe('LibraryRow – Aktionen und Status', () => {
     expect(err.find('.status.error').text()).toContain('Backend ist veraltet')
     await err.find('button.retry').trigger('click')
     expect(err.emitted('retry')).toHaveLength(1)
+  })
+
+  describe('Von/Bis im Gesamtvideo, „Clip ab"', () => {
+    // Wie in der Meldung: Bild-Clip 0–5 s, danach Video 14,729 s lang.
+    const video = (over: Partial<LibraryItem> = {}) =>
+      clip({ duration: 14.729, start: 0, end: null, ...over })
+    const entry = (over: Partial<TimelineEntry> = {}): TimelineEntry => ({
+      start: 5,
+      end: 19.729,
+      used: 14.729,
+      hold: 0,
+      minStart: 0.05,
+      ...over,
+    })
+    function mountWith(item = video(), e: TimelineEntry | null = entry(), first = false) {
+      return mount(LibraryRow, {
+        props: {
+          item,
+          index: 2,
+          selected: false,
+          canUp: true,
+          canDown: false,
+          disabled: false,
+          entry: e,
+          first,
+        },
+        global: { plugins: [i18n] },
+      })
+    }
+    // setValue löst „input" und „change" aus (wie Verlassen des Feldes).
+    const typeInto = (w: ReturnType<typeof mountWith>, which: 0 | 1, value: string) =>
+      w.findAll('.range input')[which].setValue(value)
+    const clipFrom = (w: ReturnType<typeof mountWith>) => w.find('.clip-from input')
+
+    it('zeigt Von/Bis im Gesamtvideo; erster Clip: Von gesperrt', () => {
+      const w = mountWith()
+      const [from, to] = w.findAll('.range input')
+      expect((from.element as HTMLInputElement).value).toBe('00:05.000')
+      expect((to.element as HTMLInputElement).value).toBe('00:19.729')
+      expect(from.attributes('disabled')).toBeUndefined()
+      expect(
+        mountWith(video(), entry({ start: 0 }), true)
+          .find('.range input')
+          .attributes('disabled'),
+      ).toBeDefined()
+    })
+
+    it('Von setzt die Position im Gesamtvideo (auch „mm:ss:mmm"); leer = direkt danach', async () => {
+      const w = mountWith()
+      await typeInto(w, 0, '00:06:000')
+      await typeInto(w, 0, '')
+      expect(w.emitted('at')).toEqual([[6], [null]])
+      expect(w.find('.range-note').exists()).toBe(false)
+    })
+
+    it('Bis im Gesamtvideo wird in das Ende im Clip umgerechnet', async () => {
+      const w = mountWith(video({ start: 2 }), entry({ start: 5, end: 17.729, used: 12.729 }))
+      await typeInto(w, 1, '00:10.000')
+      // 2 s im Clip + (10 − 5) s = 7 s im Clip
+      expect(w.emitted('end')).toEqual([[7]])
+    })
+
+    it('Bis 00:19:729 passt genau (5 s + 14,729 s), kein Hinweis', async () => {
+      const w = mountWith()
+      await typeInto(w, 1, '00:19:729')
+      expect(w.emitted('end')![0][0]).toBeCloseTo(14.729, 6)
+      expect(w.find('.range-note').exists()).toBe(false)
+    })
+
+    it('Bis hinter dem Clip-Ende: Hinweis und auf das Clip-Ende begrenzt', async () => {
+      const w = mountWith()
+      await typeInto(w, 1, '00:25.000')
+      expect(w.emitted('end')![0][0]).toBeCloseTo(14.729, 6)
+      const note = w.find('.range-note').text()
+      expect(note).toContain('00:25.000')
+      expect(note).toContain('00:19.729')
+    })
+
+    it('Bis vor Von, Von vor dem vorigen Clip und ungültige Zeiten werden gemeldet', async () => {
+      const w = mountWith(video(), entry({ minStart: 0.05 }))
+      await typeInto(w, 1, '00:04.000')
+      expect(w.find('.range-note').text()).toContain('00:05.000')
+      await typeInto(w, 0, '00:19:72')
+      expect(w.find('.range-note').text()).toContain('00:19:72')
+      const w2 = mountWith(video(), entry({ minStart: 2.05 }))
+      await typeInto(w2, 0, '1')
+      expect(w2.emitted('at')).toEqual([[1]])
+      expect(w2.find('.range-note').text()).toContain('00:02.050')
+    })
+
+    it('„Clip ab" kürzt den Anfang (Zeit im Clip)', async () => {
+      const w = mountWith()
+      await clipFrom(w).setValue('00:03.500')
+      expect(w.emitted('start')).toEqual([[3.5]])
+      await clipFrom(w).setValue('20')
+      expect(w.find('.range-note').text()).toContain('00:14.729')
+    })
+
+    it('Hinweis auf Standbild bzw. Abschneiden durch den nächsten Clip', () => {
+      expect(
+        mountWith(video(), entry({ hold: 1 }))
+          .find('.entry-info')
+          .text(),
+      ).toContain('00:01.000')
+      expect(
+        mountWith(video(), entry({ used: 10, end: 15 }))
+          .find('.entry-info')
+          .text(),
+      ).toContain('00:15.000')
+      expect(mountWith().find('.entry-info').exists()).toBe(false)
+    })
+
+    it('↺ setzt zurück und löscht den Hinweis; aktiv auch, wenn nur Von gesetzt ist', async () => {
+      const w = mountWith(video({ at: 6 }))
+      const reset = w.find('.range button')
+      expect(reset.attributes('disabled')).toBeUndefined()
+      await typeInto(w, 0, 'abc')
+      expect(w.find('.range-note').exists()).toBe(true)
+      await reset.trigger('click')
+      expect(w.emitted('reset')).toHaveLength(1)
+      expect(w.find('.range-note').exists()).toBe(false)
+    })
+
+    it('ohne Lage (Länge unbekannt) sind Von/Bis gesperrt', () => {
+      const inputs = mountWith(video(), null).findAll('.range input')
+      expect(inputs.every((i) => i.attributes('disabled') !== undefined)).toBe(true)
+    })
   })
 })

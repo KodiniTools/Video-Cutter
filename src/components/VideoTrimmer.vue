@@ -396,8 +396,12 @@ const previewLoop = preview.loop
 /** Fürs Zusammenfügen verwendeter Bereich des Clips im Editor (`null` = ungekürzt). */
 const listRange = computed<ListRange | null>(() => {
   const it = selected.value
-  if (!it || !isItemTrimmed(it)) return null
-  return { from: it.start, to: it.end ?? Infinity }
+  if (!it) return null
+  // Vom nächsten Clip abgeschnitten -> nur bis dorthin.
+  const e = it.include ? library.timelineById.get(it.id) : undefined
+  const cutByNext = e !== undefined && itemLength(it) - e.used > 1e-3
+  if (!isItemTrimmed(it) && !cutByNext) return null
+  return { from: it.start, to: cutByNext ? it.start + e.used : (it.end ?? Infinity) }
 })
 /** Dasselbe für die Zeitleiste (Ende auf die Dauer begrenzt). */
 const listRangeBand = computed(() => {
@@ -608,20 +612,30 @@ async function onExport(): Promise<void> {
 function buildMergeRequest(): MediaCutRequest | null {
   const list = mergeItems.value
   const [first, ...rest] = list
-  if (!first?.mediaId) return null
+  const tl = library.timeline
+  if (!first?.mediaId || !tl) return null
+  // Von/Bis im Gesamtvideo -> je Clip verwendete Länge und Standbild in der Lücke danach.
+  const [e0, ...restEntries] = tl.entries
+  const holdOf = (h: number) => (h > 1e-3 ? h : undefined)
   return {
     mediaId: first.mediaId,
-    segments: [{ start: first.start, duration: itemLength(first) }],
+    segments: [{ start: first.start, duration: e0.used }],
+    mainHold: holdOf(e0.hold),
     mode: 'reencode',
     operation: 'keep',
     transition: { preset: animation.value, duration: animDuration.value },
-    appends: rest.map((it) => ({
-      mediaId: it.mediaId ?? undefined,
-      start: it.start,
-      // Nur ein gesetztes Ende kürzt; sonst bis zum Dateiende.
-      duration: it.end !== null ? Math.max(0, it.end - it.start) : undefined,
-      position: 'after' as const,
-    })),
+    appends: rest.map((it, i) => {
+      const e = restEntries[i]
+      // Gekürzt (Ende gesetzt oder vom nächsten Clip abgeschnitten)? Sonst bis zum Dateiende.
+      const cut = it.end !== null || itemLength(it) - e.used > 1e-3
+      return {
+        mediaId: it.mediaId ?? undefined,
+        start: it.start,
+        duration: cut ? e.used : undefined,
+        hold: holdOf(e.hold),
+        position: 'after' as const,
+      }
+    }),
     normalizeAudio: normalizeAudio.value,
     output: { aspect: outputAspect.value, fill: outputFill.value },
     music: music.value ?? undefined,
@@ -672,11 +686,13 @@ async function onMergePreview(): Promise<void> {
   const req = buildMergeRequest()
   if (!req) return
   // Stand der Liste zum Zeitpunkt des Auftrags (genau das zeigt die Vorschau).
-  const clips: MergePreviewClip[] = mergeItems.value.map((it) => ({
+  const entries = library.timeline?.entries ?? []
+  const clips: MergePreviewClip[] = mergeItems.value.map((it, i) => ({
     name: it.name,
-    start: it.start,
-    end: it.end ?? it.duration,
-    trimmed: isItemTrimmed(it),
+    start: entries[i]?.start ?? 0,
+    end: entries[i]?.end ?? 0,
+    trimmed: isItemTrimmed(it) || itemLength(it) - (entries[i]?.used ?? 0) > 1e-3,
+    hold: entries[i]?.hold ?? 0,
   }))
   closeMergePreview()
   store.setError('')

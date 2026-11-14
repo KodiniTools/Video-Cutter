@@ -9,6 +9,8 @@ import {
   type MediaUpload,
   type MediaView,
 } from '@/lib/mediaApi'
+import { mergeTimeline, type TimelineEntry } from '@/lib/mergeTimeline'
+import { useAnimationPref } from '@/composables/useAnimationPref'
 
 /**
  * Video-Bibliothek („Meine Videos"): mehrere Videos werden einmal auf den
@@ -35,9 +37,17 @@ export interface LibraryItem {
   hasAudio: boolean
   /** Bildrate (Bilder/s) laut Server, 0 = unbekannt. */
   fps: number
-  /** Verwendeter Bereich beim Zusammenfügen: Start (s) … Ende (s); `null` = bis zum Ende. */
+  /**
+   * Verwendeter Bereich des Clips beim Zusammenfügen („Clip ab" … Clip-Ende),
+   * Zeit innerhalb des Clips; `end = null` = bis zum Ende des Clips.
+   */
   start: number
   end: number | null
+  /**
+   * Von: Beginn im Gesamtvideo (Sekunden); `null` = direkt nach dem vorigen
+   * Clip. Eine Lücke davor füllt das letzte Bild des vorigen Clips.
+   */
+  at: number | null
   /** Beim Zusammenfügen verwenden? */
   include: boolean
   status: LibraryStatus
@@ -54,7 +64,7 @@ export type SeamPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
 export const MAX_MERGE_ITEMS = 6
 
 /** Mindestlänge eines verwendeten Bereichs in Sekunden. */
-const MIN_LENGTH = 0.05
+export const MIN_LENGTH = 0.05
 
 /** Schlüssel einer Nahtstelle aus ihren beiden Nachbarn. */
 export function seamKey(left: Pick<LibraryItem, 'id'>, right: Pick<LibraryItem, 'id'>): string {
@@ -107,7 +117,10 @@ export interface ItemVersion {
 /** Zusammenfügen-Einstellungen (Reihenfolge, Von/Bis, Auswahl, Übergänge). */
 export interface MergeState {
   order: number[]
-  ranges: Record<number, { start: number; end: number | null; include: boolean }>
+  ranges: Record<
+    number,
+    { start: number; end: number | null; include: boolean; at?: number | null }
+  >
   seams: Record<string, SeamPreset>
   normalizeAudio: boolean
 }
@@ -147,6 +160,27 @@ export const useLibraryStore = defineStore('library', () => {
       .slice(1)
       .map((it, i) => seamTransitions.value[seamKey(mergeItems.value[i], it)] ?? null),
   )
+
+  const anim = useAnimationPref()
+  /**
+   * Zeitleiste des Gesamtvideos (Von/Bis, Kürzung, Standbild je Clip) in
+   * Reihenfolge von `mergeItems`; `null`, solange eine Länge unbekannt ist.
+   */
+  const timeline = computed(() =>
+    mergeTimeline(
+      mergeItems.value.map((it) => ({ length: itemLength(it), at: it.at })),
+      seamPresets.value,
+      anim.animation.value as SeamPreset,
+      anim.duration.value,
+    ),
+  )
+  /** Lage je Video-ID (nur zusammenzufügende Videos). */
+  const timelineById = computed(() => {
+    const m = new Map<number, TimelineEntry>()
+    const tl = timeline.value
+    if (tl) mergeItems.value.forEach((it, i) => m.set(it.id, tl.entries[i]))
+    return m
+  })
 
   function find(id: number): LibraryItem | undefined {
     return items.value.find((it) => it.id === id)
@@ -208,6 +242,7 @@ export const useLibraryStore = defineStore('library', () => {
       fps: 0,
       start: 0,
       end: null,
+      at: null,
       include: true,
       status: 'uploading',
       progress: 0,
@@ -326,7 +361,7 @@ export const useLibraryStore = defineStore('library', () => {
   function mergeState(): MergeState {
     const ranges: MergeState['ranges'] = {}
     for (const it of items.value) {
-      ranges[it.id] = { start: it.start, end: it.end, include: it.include }
+      ranges[it.id] = { start: it.start, end: it.end, include: it.include, at: it.at }
     }
     return {
       order: items.value.map((it) => it.id),
@@ -344,7 +379,9 @@ export const useLibraryStore = defineStore('library', () => {
     known.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
     items.value = [...known, ...unknown].map((it) => {
       const r = s.ranges[it.id]
-      return r ? clampRange({ ...it, start: r.start, end: r.end, include: r.include }) : it
+      return r
+        ? clampRange({ ...it, start: r.start, end: r.end, include: r.include, at: r.at ?? null })
+        : it
     })
     seamTransitions.value = { ...s.seams }
     normalizeAudio.value = s.normalizeAudio
@@ -411,6 +448,7 @@ export const useLibraryStore = defineStore('library', () => {
       start: number
       end: number | null
       include: boolean
+      at?: number | null
     }[],
     opts: {
       selected: number | null
@@ -422,7 +460,13 @@ export const useLibraryStore = defineStore('library', () => {
     const old = items.value
     const next = entries.map((e) =>
       applyMedia(
-        newItem(e.file, { name: e.name, start: e.start, end: e.end, include: e.include }),
+        newItem(e.file, {
+          name: e.name,
+          start: e.start,
+          end: e.end,
+          include: e.include,
+          at: e.at ?? null,
+        }),
         e.media,
       ),
     )
@@ -463,9 +507,14 @@ export const useLibraryStore = defineStore('library', () => {
     update(id, (it) => clampRange({ ...it, end: t === null || !Number.isFinite(t) ? null : t }))
   }
 
-  /** Kürzung aufheben (ganzes Video verwenden). */
+  /** Von im Gesamtvideo setzen; `null` = direkt nach dem vorigen Clip. */
+  function setAt(id: number, t: number | null): void {
+    update(id, (it) => ({ ...it, at: t === null || !Number.isFinite(t) ? null : Math.max(0, t) }))
+  }
+
+  /** Kürzung und Position aufheben (ganzes Video, direkt nach dem vorigen). */
   function resetRange(id: number): void {
-    update(id, (it) => ({ ...it, start: 0, end: null }))
+    update(id, (it) => ({ ...it, start: 0, end: null, at: null }))
   }
 
   function setInclude(id: number, on: boolean): void {
@@ -516,6 +565,8 @@ export const useLibraryStore = defineStore('library', () => {
     isUploading,
     canMerge,
     seamPresets,
+    timeline,
+    timelineById,
     // actions
     addFiles,
     retry,
@@ -533,6 +584,7 @@ export const useLibraryStore = defineStore('library', () => {
     setDuration,
     setStart,
     setEnd,
+    setAt,
     resetRange,
     setInclude,
     move,

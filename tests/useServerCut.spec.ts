@@ -28,6 +28,7 @@ describe('parseJobStart', () => {
       audioFade: false,
       storeResult: false,
       preview: false,
+      mergeHold: false,
     })
   })
 
@@ -45,6 +46,7 @@ describe('parseJobStart', () => {
       audioFade: false,
       storeResult: false,
       preview: false,
+      mergeHold: false,
     })
   })
 

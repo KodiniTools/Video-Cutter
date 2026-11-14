@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useLibraryStore, seamKey, type LibraryItem, type SeamPreset } from '@/stores/library'
 import { ANIMATIONS, useAnimationPref } from '@/composables/useAnimationPref'
+import { formatTimeMs } from '@/lib/timeFormat'
 import LibraryRow from './LibraryRow.vue'
 
 /**
@@ -21,7 +22,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const store = useLibraryStore()
-const { items, selectedId, seamTransitions } = storeToRefs(store)
+const { items, selectedId, seamTransitions, mergeItems, timeline, timelineById } =
+  storeToRefs(store)
 const { animation } = useAnimationPref()
 
 // --- Übergang je Nahtstelle --------------------------------------------------
@@ -112,6 +114,8 @@ function keyOf(it: LibraryItem): number {
         :can-down="i < items.length - 1"
         :disabled="disabled"
         :dragging="dragId === it.id"
+        :entry="timelineById.get(it.id) ?? null"
+        :first="mergeItems[0]?.id === it.id"
         @dragover="onDragOver($event, i)"
         @drag-start="dragId = it.id"
         @drag-end="resetDrag"
@@ -119,6 +123,7 @@ function keyOf(it: LibraryItem): number {
         @include="store.setInclude(it.id, $event)"
         @start="store.setStart(it.id, $event)"
         @end="store.setEnd(it.id, $event)"
+        @at="store.setAt(it.id, $event)"
         @reset="store.resetRange(it.id)"
         @move="store.moveBy(it.id, $event)"
         @retry="store.retry(it.id)"
@@ -141,6 +146,9 @@ function keyOf(it: LibraryItem): number {
         <span class="seam-line" aria-hidden="true" />
       </li>
     </template>
+    <li v-if="timeline && mergeItems.length > 1" class="merge-total">
+      {{ t('append.total', { total: formatTimeMs(timeline.total) }) }}
+    </li>
   </ol>
 </template>
 
@@ -182,6 +190,13 @@ function keyOf(it: LibraryItem): number {
 .seam-select:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
+}
+/* Gesamtdauer des zusammengefügten Videos. */
+.merge-total {
+  padding: 2px 2px 0;
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 /* Einfügemarke beim Ziehen. */
 .drop-before {

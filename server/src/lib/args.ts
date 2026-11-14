@@ -620,6 +620,8 @@ export interface AppendClip {
    * Hauptvideos einfügen (1-basiert). Fehlt oder ≥ Anzahl Bereiche = ganz am Ende.
    */
   slot?: number
+  /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille). Standard 0. */
+  hold?: number
 }
 
 /**
@@ -682,6 +684,13 @@ export interface MergeArgsInput {
   audioFade?: AudioFade
   /** Schnelle Vorschau: H.264 ultrafast statt der normalen Codecs (Ausgabe .mp4). */
   preview?: boolean
+  /** Standbild (Sekunden) am Ende des letzten behaltenen Bereichs des Hauptvideos. */
+  mainHold?: number
+}
+
+/** Länge eines Clips im Ergebnis: verwendete Länge plus Standbild am Ende. */
+export function clipSpan(duration: number, hold?: number): number {
+  return duration + (hold && hold > 0 ? hold : 0)
 }
 
 /**
@@ -920,6 +929,7 @@ export function buildMergeArgs({
   seams,
   audioFade,
   preview = false,
+  mainHold = 0,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -932,11 +942,13 @@ export function buildMergeArgs({
       '-i',
       a.path,
     ],
-    duration: a.duration,
+    duration: clipSpan(a.duration, a.hold),
+    hold: a.hold && a.hold > 0 ? a.hold : 0,
     hasAudio: a.hasAudio,
     crop: undefined as CropRect | undefined,
   })
-  const mainClip = (r: Segment) => ({
+  const lastKeep = keep.length - 1
+  const mainClip = (r: Segment, index: number) => ({
     inputArgs: [
       '-ss',
       formatFfmpegTime(r.start),
@@ -945,13 +957,14 @@ export function buildMergeArgs({
       '-i',
       inputPath,
     ],
-    duration: r.duration,
+    duration: index === lastKeep ? clipSpan(r.duration, mainHold) : r.duration,
+    hold: index === lastKeep && mainHold > 0 ? mainHold : 0,
     hasAudio: mainHasAudio,
     crop,
   })
 
   const clips = mergeSequence(keep.length, appends).map((item) =>
-    item.kind === 'main' ? mainClip(keep[item.index]) : appendClip(appends[item.index]),
+    item.kind === 'main' ? mainClip(keep[item.index], item.index) : appendClip(appends[item.index]),
   )
 
   const ranges: Segment[] = clips.map((c) => ({ start: 0, duration: c.duration }))
@@ -977,6 +990,12 @@ export function buildMergeArgs({
       AUDIO_NORM,
       'asetpts=PTS-STARTPTS',
     ]
+    // Standbild am Ende: letztes Bild klonen, Ton mit Stille auffüllen
+    // (anullsrc hat die volle Länge schon).
+    if (c.hold > 0) {
+      vfx.push(`tpad=stop_mode=clone:stop_duration=${c.hold.toFixed(3)}`)
+      if (c.hasAudio) afx.push(`apad=pad_dur=${c.hold.toFixed(3)}`)
+    }
     const dipIn = i > 0 ? dipAt(i - 1) : 0
     const dipOut = i < clips.length - 1 ? dipAt(i) : 0
     if (dipIn > 0) {
