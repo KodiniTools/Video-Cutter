@@ -74,6 +74,14 @@ export const config = {
   /** Obergrenze für alle Projekte zusammen. */
   maxProjectsTotalBytes: num('MAX_PROJECTS_TOTAL_MB', 100 * 1024) * 1024 * 1024,
 
+  /**
+   * Galerie der KI-Bilder (dauerhaft, wie die Projekte außerhalb des
+   * Backend-Ordners, damit Deploys sie nicht löschen).
+   */
+  galleryDir: process.env.GALLERY_DIR ?? path.join(os.homedir(), '.video-cutter', 'gallery'),
+  /** Obergrenze für alle Galerie-Bilder zusammen. */
+  maxGalleryTotalBytes: num('MAX_GALLERY_TOTAL_MB', 10 * 1024) * 1024 * 1024,
+
   /** Erlaubte Origins für CORS. */
   allowedOrigins: list('ALLOWED_ORIGINS', [
     'https://kodinitools.com',

@@ -90,6 +90,9 @@ Höchstens eine Transkription gleichzeitig (belegt `WHISPER_THREADS` Kerne).
 Stichworten, Stil und den Nachbarclips (Standbild + Transkript, falls vorhanden) einen Prompt
 schreiben; `POST /api/ai/images { prompt, width, height, count }` erzeugt 1–4 Varianten, die
 unter `GET /api/ai/images/:id` 30 Minuten abrufbar sind.
+Jedes erzeugte Bild landet zusätzlich dauerhaft in der **Galerie** (`GALLERY_DIR`, Standard
+`~/.video-cutter/gallery`, Limit `MAX_GALLERY_TOTAL_MB`): `GET /api/ai/gallery`,
+`GET /api/ai/gallery/:id/file|thumb`, `DELETE /api/ai/gallery/:id`.
 
 ## Frontend anbinden
 

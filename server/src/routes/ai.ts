@@ -1,4 +1,4 @@
-import express, { Router, type Request, type Response } from 'express'
+import express, { Router, type NextFunction, type Request, type Response } from 'express'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readFile, rm } from 'node:fs/promises'
@@ -39,6 +39,7 @@ import {
   nearestAspect,
 } from '../lib/gemini'
 import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
+import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } from '../lib/gallery'
 
 /**
  * KI-Funktionen:
@@ -50,6 +51,9 @@ import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
  *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
  * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
  * - GET  /api/ai/images/:id                         -> erzeugtes Bild (30 min abrufbar)
+ * - GET  /api/ai/gallery                            -> dauerhaft gespeicherte KI-Bilder
+ * - GET  /api/ai/gallery/:id/file | /thumb          -> Original bzw. Vorschau
+ * - DELETE /api/ai/gallery/:id                      -> Bild vom Server löschen
  * Alle Aufrufe starten einen Job: 202 { jobId }. Status/Ergebnis per SSE unter
  * GET /api/ai/jobs/:id/events, Abbruch per DELETE /api/ai/jobs/:id.
  */
@@ -344,10 +348,96 @@ aiRouter.post('/ai/images', json, (req: Request, res: Response) => {
   requireGemini()
   if (!capacity('image', res)) return
   const aspect = nearestAspect(size.width, size.height)
-  const job = aiJobs.start('image', (signal, progress) =>
-    generateImages(prompt, aspect, imageSizeFor(size.width, size.height), count, signal, progress),
-  )
+  const job = aiJobs.start('image', async (signal, progress) => {
+    const r = await generateImages(
+      prompt,
+      aspect,
+      imageSizeFor(size.width, size.height),
+      count,
+      signal,
+      progress,
+    )
+    return { ...r, ...(await saveToGallery(r.images, prompt)) }
+  })
   started(res, job)
+})
+
+/**
+ * Legt die erzeugten Bilder in der Galerie ab. Ein Fehler dabei (z. B. Galerie
+ * voll) lässt die Erzeugung nicht scheitern: `galleryError` meldet ihn.
+ */
+export async function saveToGallery(
+  images: { id: string }[],
+  prompt: string,
+  target: Gallery = gallery,
+): Promise<{ saved: number; galleryError: string }> {
+  let saved = 0
+  let galleryError = ''
+  for (const ref of images) {
+    const img = getImage(ref.id)
+    if (!img) continue
+    try {
+      await target.add(img.data, img.mime, prompt)
+      saved++
+    } catch (err) {
+      galleryError ||=
+        err instanceof GalleryFullError
+          ? err.message
+          : 'Das Bild konnte nicht in der Galerie gespeichert werden.'
+      if (!(err instanceof GalleryFullError)) console.error('Galerie:', err)
+    }
+  }
+  return { saved, galleryError }
+}
+
+// --- Galerie der KI-Bilder (dauerhaft auf dem Server) ------------------------------
+
+function galleryView(i: GalleryImage): GalleryImage {
+  return { id: i.id, mime: i.mime, prompt: i.prompt, createdAt: i.createdAt, size: i.size }
+}
+
+aiRouter.get('/ai/gallery', (_req: Request, res: Response, next: NextFunction) => {
+  gallery
+    .init()
+    .then(() =>
+      res.json({
+        images: gallery.list().map(galleryView),
+        totalBytes: gallery.totalBytes,
+        maxBytes: config.maxGalleryTotalBytes,
+      }),
+    )
+    .catch(next)
+})
+
+function sendGalleryFile(thumb: boolean) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const id = req.params.id
+    void (async () => {
+      const f = isGalleryId(id) ? await gallery.pathOf(id, thumb) : null
+      if (!f) {
+        res.status(404).json({ error: 'Bild nicht in der Galerie.' })
+        return
+      }
+      res.setHeader('Content-Type', f.mime)
+      // Inhalt je ID unveränderlich -> lange cachen.
+      res.setHeader('Cache-Control', 'private, max-age=86400, immutable')
+      // Der Standardordner liegt unter ~/.video-cutter (Punkt-Ordner).
+      res.sendFile(f.path, { dotfiles: 'allow' }, (err) => {
+        if (err && !res.headersSent) res.status(404).end()
+      })
+    })().catch(next)
+  }
+}
+
+aiRouter.get('/ai/gallery/:id/file', sendGalleryFile(false))
+aiRouter.get('/ai/gallery/:id/thumb', sendGalleryFile(true))
+
+aiRouter.delete('/ai/gallery/:id', (req: Request, res: Response, next: NextFunction) => {
+  const id = req.params.id
+  void (async () => {
+    const ok = isGalleryId(id) && (await gallery.remove(id))
+    res.status(ok ? 200 : 404).json({ deleted: ok })
+  })().catch(next)
 })
 
 aiRouter.get('/ai/images/:id', (req: Request, res: Response) => {
