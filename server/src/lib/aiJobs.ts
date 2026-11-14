@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
  * Fortschritt per SSE (/api/ai/jobs/:id/events), Abbruch per AbortSignal.
  */
 
-export type AiJobKind = 'transcribe' | 'claude'
+export type AiJobKind = 'transcribe' | 'claude' | 'image'
 export type AiJobState = 'processing' | 'done' | 'error'
 
 export interface AiJobSnapshot {
@@ -24,8 +24,11 @@ interface AiJob extends AiJobSnapshot {
   listeners: Set<(s: AiJobSnapshot) => void>
 }
 
-/** Gleichzeitige Läufe je Art: Whisper belegt viele Kerne, Claude kaum etwas. */
-const LIMITS: Record<AiJobKind, number> = { transcribe: 1, claude: 3 }
+/**
+ * Gleichzeitige Läufe je Art: Whisper belegt viele Kerne, Claude kaum etwas;
+ * Gemini-Bilder kosten Geld und halten große Antworten im Speicher.
+ */
+const LIMITS: Record<AiJobKind, number> = { transcribe: 1, claude: 3, image: 2 }
 /** Fertige Jobs werden nach dieser Zeit vergessen. */
 const TTL_MS = 30 * 60 * 1000
 

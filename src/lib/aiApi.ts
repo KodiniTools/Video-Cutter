@@ -20,6 +20,8 @@ export type CutKind = 'filler' | 'slip' | 'repeat' | 'pause'
 export interface AiStatus {
   transcribe: boolean
   claude: boolean
+  /** Bilderzeugung (Gemini) für Bild-Clips eingerichtet? */
+  image: boolean
 }
 
 export interface TranscriptInfo {
@@ -51,7 +53,11 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 /** Status aus /api/health; `null` = Backend kennt die KI noch nicht (veraltet). */
 export function parseAiStatus(data: unknown): AiStatus | null {
   if (!isRecord(data) || !isRecord(data.ai)) return null
-  return { transcribe: data.ai.transcribe === true, claude: data.ai.claude === true }
+  return {
+    transcribe: data.ai.transcribe === true,
+    claude: data.ai.claude === true,
+    image: data.ai.image === true,
+  }
 }
 
 export function parseTranscript(data: unknown): TranscriptInfo {
@@ -108,6 +114,60 @@ export function parseSuggestions(data: unknown): CutSuggestion[] {
     }))
 }
 
+// --- KI-Bilder für Bild-Clips ----------------------------------------------------
+
+/** Stilvorlagen (wie server/src/lib/claude.ts IMAGE_STYLES). */
+export const IMAGE_STYLES = [
+  'auto',
+  'photo',
+  'illustration',
+  'minimal',
+  'gradient',
+  'cinematic',
+  '3d',
+] as const
+export type ImageStyle = (typeof IMAGE_STYLES)[number]
+
+export const MAX_IMAGE_IDEA = 500
+export const MAX_IMAGE_PROMPT = 2000
+export const MIN_IMAGE_COUNT = 1
+export const MAX_IMAGE_COUNT = 4
+
+export interface GeneratedImageRef {
+  id: string
+  mime: string
+}
+
+export function parseImagePrompt(data: unknown): string {
+  const p = isRecord(data) && typeof data.prompt === 'string' ? data.prompt.trim() : ''
+  if (!p) throw new Error('Ungültiges Ergebnis (kein Prompt).')
+  return p
+}
+
+export function parseGeneratedImages(data: unknown): {
+  images: GeneratedImageRef[]
+  failed: number
+} {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.images) ? d.images : []
+  const images = list
+    .filter(isRecord)
+    .filter((i) => typeof i.id === 'string' && i.id !== '')
+    .map((i) => ({ id: i.id as string, mime: typeof i.mime === 'string' ? i.mime : 'image/png' }))
+  if (images.length === 0) throw new Error('Ungültiges Ergebnis (keine Bilder).')
+  return { images, failed: finite(d.failed) ? d.failed : 0 }
+}
+
+/** Lädt ein erzeugtes Bild als Datei (für Vorschau und Bild-Clip). */
+export async function fetchGeneratedImage(ref: GeneratedImageRef, name: string): Promise<File> {
+  const res = await fetch(`${API_BASE}/api/ai/images/${encodeURIComponent(ref.id)}`)
+  if (!res.ok) throw await readError(res)
+  const blob = await res.blob()
+  const type = blob.type || ref.mime
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+  return new File([blob], `${name}.${ext}`, { type })
+}
+
 async function readError(res: Response): Promise<Error> {
   let msg = ''
   try {
@@ -138,7 +198,7 @@ export interface AiRun<T> {
  * Ergebnis. `parse` prüft das Ergebnis. Abbruch stoppt auch den Server-Job.
  */
 export function runAiJob<T>(
-  action: 'transcribe' | 'subtitles' | 'cuts' | 'translate',
+  action: 'transcribe' | 'subtitles' | 'cuts' | 'translate' | 'image-prompt' | 'images',
   body: Record<string, unknown>,
   parse: (data: unknown) => T,
   onProgress?: (percent: number) => void,

@@ -1,6 +1,9 @@
 import express, { Router, type Request, type Response } from 'express'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { readFile, rm } from 'node:fs/promises'
 import { config } from '../config'
+import { runFfmpeg } from '../lib/ffmpeg'
 import { isMediaId, mediaStore, type MediaItem } from '../lib/media'
 import { ValidationError } from '../lib/validate'
 import { aiJobs, type AiJobKind, type AiJobSnapshot } from '../lib/aiJobs'
@@ -15,12 +18,26 @@ import {
   SUBTITLE_TARGETS,
   TRANSLATE_TARGETS,
   claudeReady,
+  IMAGE_STYLES,
   createCutSuggestions,
+  createImagePrompt,
   createSubtitles,
   translateTexts,
+  type ImageContextScene,
+  type ImageStyle,
   type SubtitleTarget,
   type TranslateTarget,
 } from '../lib/claude'
+import {
+  MAX_IMAGE_COUNT,
+  MAX_PROMPT_LENGTH,
+  MIN_IMAGE_COUNT,
+  geminiReady,
+  generateImages,
+  getImage,
+  imageSizeFor,
+  nearestAspect,
+} from '../lib/gemini'
 import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
 
 /**
@@ -29,6 +46,10 @@ import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
  * - POST /api/ai/subtitles  { mediaId, target }    -> Untertitel (Claude)
  * - POST /api/ai/cuts       { mediaId, minPause }  -> Schnittvorschläge (Claude + Pausen)
  * - POST /api/ai/translate  { texts, target }      -> vorhandene Texte übersetzen (Claude)
+ * - POST /api/ai/image-prompt { idea, style, width, height, language, before?, after? }
+ *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
+ * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
+ * - GET  /api/ai/images/:id                         -> erzeugtes Bild (30 min abrufbar)
  * Alle Aufrufe starten einen Job: 202 { jobId }. Status/Ergebnis per SSE unter
  * GET /api/ai/jobs/:id/events, Abbruch per DELETE /api/ai/jobs/:id.
  */
@@ -43,8 +64,8 @@ const sweeper = setInterval(() => {
 sweeper.unref?.()
 
 /** Stand der Einrichtung (für /api/health). */
-export function aiStatus(): { transcribe: boolean; claude: boolean } {
-  return { transcribe: whisperReady(), claude: claudeReady() }
+export function aiStatus(): { transcribe: boolean; claude: boolean; image: boolean } {
+  return { transcribe: whisperReady(), claude: claudeReady(), image: geminiReady() }
 }
 
 function requireMedia(body: Record<string, unknown>): MediaItem {
@@ -176,6 +197,169 @@ aiRouter.post(
     started(res, job)
   },
 )
+
+// --- KI-Bilder für Bild-Clips ---------------------------------------------------------
+
+function requireGemini(): void {
+  if (!geminiReady()) {
+    throw new ValidationError(
+      'Die Bilderzeugung ist nicht eingerichtet (GEMINI_API_KEY fehlt in der Server-.env).',
+      503,
+    )
+  }
+}
+
+export const MAX_IDEA_LENGTH = 500
+
+/** Zielgröße des Bild-Clips (für Seitenverhältnis und Auflösung). */
+export function parseTargetSize(body: Record<string, unknown>): { width: number; height: number } {
+  const w = Number(body.width)
+  const h = Number(body.height)
+  if (!(Number.isFinite(w) && Number.isFinite(h) && w >= 16 && h >= 16 && w <= 8192 && h <= 8192)) {
+    throw new ValidationError('Ungültige Bildgröße.')
+  }
+  return { width: Math.round(w), height: Math.round(h) }
+}
+
+/** Nachbarclip für den Kontext: { mediaId, time } – unbekannte Videos werden übergangen. */
+export function parseSceneRef(v: unknown): { item: MediaItem; time: number } | null {
+  if (typeof v !== 'object' || v === null) return null
+  const r = v as Record<string, unknown>
+  if (!isMediaId(r.mediaId)) return null
+  const item = mediaStore.get(r.mediaId)
+  if (!item) return null
+  const dur = item.info.duration > 0 ? item.info.duration : 0
+  const raw = Number(r.time)
+  const time = Number.isFinite(raw) ? Math.max(0, dur > 0 ? Math.min(raw, dur - 0.05) : raw) : 0
+  return { item, time: Math.max(0, time) }
+}
+
+/** Transkript-Ausschnitt (max. 30 s / 120 Wörter) vor bzw. nach `time`. */
+export function transcriptExcerpt(mediaId: string, time: number, role: 'before' | 'after'): string {
+  const t = transcripts.get(mediaId)
+  if (!t) return ''
+  const words =
+    role === 'before'
+      ? t.words.filter((w) => w.end <= time + 0.05 && w.start >= time - 30).slice(-120)
+      : t.words.filter((w) => w.start >= time - 0.05 && w.end <= time + 30).slice(0, 120)
+  return words.map((w) => w.text).join(' ')
+}
+
+/** Ein verkleinertes Standbild (JPEG, max. 768 px) aus einem Video. */
+async function grabFrame(item: MediaItem, time: number): Promise<Buffer | null> {
+  if (!(item.info.width > 0)) return null
+  const out = path.join(config.tmpDir, `${randomUUID()}-frame.jpg`)
+  try {
+    await runFfmpeg(
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-ss',
+        time.toFixed(3),
+        '-i',
+        item.path,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=768:768:force_original_aspect_ratio=decrease',
+        '-q:v',
+        '5',
+        '-y',
+        out,
+      ],
+      0,
+      () => {},
+    ).promise
+    return await readFile(out)
+  } catch {
+    // Ohne Standbild geht es auch (z. B. Zeit hinter dem letzten Bild).
+    return null
+  } finally {
+    await rm(out, { force: true }).catch(() => {})
+  }
+}
+
+aiRouter.post('/ai/image-prompt', json, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const idea = typeof body.idea === 'string' ? body.idea.trim() : ''
+  if (idea.length > MAX_IDEA_LENGTH) {
+    throw new ValidationError(`Die Stichworte sind zu lang (max. ${MAX_IDEA_LENGTH} Zeichen).`)
+  }
+  const size = parseTargetSize(body)
+  const style = (IMAGE_STYLES as readonly unknown[]).includes(body.style)
+    ? (body.style as ImageStyle)
+    : 'auto'
+  const language = body.language === 'en' ? 'en' : 'de'
+  const refs = [
+    { role: 'before' as const, ref: parseSceneRef(body.before) },
+    { role: 'after' as const, ref: parseSceneRef(body.after) },
+  ].filter((r) => r.ref !== null) as {
+    role: 'before' | 'after'
+    ref: { item: MediaItem; time: number }
+  }[]
+  if (!idea && refs.length === 0) {
+    throw new ValidationError('Bitte Stichworte eingeben oder Nachbarclips einbeziehen.')
+  }
+  requireClaude()
+  if (!capacity('claude', res)) return
+
+  const ids = refs.map((r) => r.ref.item.id)
+  mediaStore.acquire(ids)
+  const job = aiJobs.start('claude', async (signal, progress) => {
+    let scenes: ImageContextScene[]
+    try {
+      scenes = await Promise.all(
+        refs.map(async ({ role, ref }) => ({
+          role,
+          name: ref.item.name,
+          jpeg: await grabFrame(ref.item, ref.time),
+          transcript: transcriptExcerpt(ref.item.id, ref.time, role),
+        })),
+      )
+    } finally {
+      await mediaStore.release(ids)
+    }
+    progress(20)
+    return createImagePrompt(
+      { idea, style, aspect: nearestAspect(size.width, size.height), language, scenes },
+      signal,
+    )
+  })
+  started(res, job)
+})
+
+aiRouter.post('/ai/images', json, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
+  if (!prompt) throw new ValidationError('Bitte einen Prompt eingeben.')
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    throw new ValidationError(`Der Prompt ist zu lang (max. ${MAX_PROMPT_LENGTH} Zeichen).`)
+  }
+  const size = parseTargetSize(body)
+  const rawCount = Math.round(Number(body.count))
+  const count = Number.isFinite(rawCount)
+    ? Math.min(MAX_IMAGE_COUNT, Math.max(MIN_IMAGE_COUNT, rawCount))
+    : 2
+  requireGemini()
+  if (!capacity('image', res)) return
+  const aspect = nearestAspect(size.width, size.height)
+  const job = aiJobs.start('image', (signal, progress) =>
+    generateImages(prompt, aspect, imageSizeFor(size.width, size.height), count, signal, progress),
+  )
+  started(res, job)
+})
+
+aiRouter.get('/ai/images/:id', (req: Request, res: Response) => {
+  const img = getImage(req.params.id)
+  if (!img) {
+    res.status(404).json({ error: 'Bild nicht (mehr) vorhanden. Bitte neu erzeugen.' })
+    return
+  }
+  res.setHeader('Content-Type', img.mime)
+  res.setHeader('Cache-Control', 'private, max-age=1800')
+  res.end(img.data)
+})
 
 /** GET /api/ai/jobs/:id/events (Server-Sent Events) – bis fertig/fehlerhaft. */
 aiRouter.get('/ai/jobs/:id/events', (req: Request, res: Response) => {

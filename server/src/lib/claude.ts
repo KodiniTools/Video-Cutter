@@ -174,10 +174,13 @@ async function askClaude(
   )
 }
 
-/** Wie askClaude, aber mit eigenem System-Prompt und Eingabetext. */
+/**
+ * Wie askClaude, aber mit eigenem System-Prompt und Eingabe. Ein Text wird
+ * gecacht; eine Blockliste (z. B. mit Standbildern) geht unverändert mit.
+ */
 async function askClaudeWith(
   system: string,
-  input: string,
+  input: string | Anthropic.Beta.BetaContentBlockParam[],
   task: string,
   schema: Record<string, unknown>,
   signal: AbortSignal,
@@ -201,11 +204,15 @@ async function askClaudeWith(
             content: [
               // Transkript zuerst und gecacht: Untertitel + Vorschläge für
               // dasselbe Video teilen sich diesen Teil.
-              {
-                type: 'text',
-                text: input,
-                cache_control: { type: 'ephemeral' },
-              },
+              ...(typeof input === 'string'
+                ? [
+                    {
+                      type: 'text' as const,
+                      text: input,
+                      cache_control: { type: 'ephemeral' as const },
+                    },
+                  ]
+                : input),
               { type: 'text', text: task },
             ],
           },
@@ -496,4 +503,117 @@ export async function translateTexts(
     signal,
   )
   return buildTranslations(texts, raw)
+}
+
+// --- Prompt für KI-Bilder (Bild-Clip) ------------------------------------------------
+
+/** Stilvorlagen für KI-Bilder (einheitlicher Look aller Bild-Clips). */
+export const IMAGE_STYLES = [
+  'auto',
+  'photo',
+  'illustration',
+  'minimal',
+  'gradient',
+  'cinematic',
+  '3d',
+] as const
+export type ImageStyle = (typeof IMAGE_STYLES)[number]
+
+const STYLE_HINTS: Record<ImageStyle, string> = {
+  auto: 'Choose the style that best fits the context; if there are video frames, match their look.',
+  photo: 'Photorealistic photograph, natural light, shallow depth of field, high detail.',
+  illustration: 'Clean modern flat illustration, harmonious limited color palette, soft shapes.',
+  minimal: 'Minimalist composition, lots of calm negative space, one simple subject, muted colors.',
+  gradient:
+    'Abstract smooth color gradient background with soft light and subtle shapes, no objects.',
+  cinematic: 'Cinematic film still, dramatic lighting, rich color grading, wide composition.',
+  '3d': 'Soft 3D render, clay-like materials, studio lighting, gentle shadows.',
+}
+
+/** Eine Nachbarszene: Standbild (JPEG) und/oder Transkript-Ausschnitt. */
+export interface ImageContextScene {
+  role: 'before' | 'after'
+  name: string
+  jpeg: Buffer | null
+  transcript: string
+}
+
+export interface ImagePromptRequest {
+  idea: string
+  style: ImageStyle
+  aspect: string
+  /** Sprache des Prompts (der Nutzer sieht und bearbeitet ihn). */
+  language: 'de' | 'en'
+  scenes: ImageContextScene[]
+}
+
+const IMAGE_PROMPT_SYSTEM = `You write prompts for an AI image generator (Google Gemini). The image becomes the full-screen background of a still clip in a video, inserted between two video clips. Titles and labels are added later as separate overlays, so the image itself must never contain text, letters, numbers, captions, logos, watermarks or user-interface elements. Answer only with the requested JSON.`
+
+function imagePromptTask(r: ImagePromptRequest): string {
+  const lang = r.language === 'de' ? 'German' : 'English'
+  return `Write one image prompt for the background of the still clip.
+
+Inputs:
+- The user's idea or keywords: ${r.idea ? `"${r.idea}"` : '(none: derive the subject from the context)'}
+- Style: ${STYLE_HINTS[r.style]}
+- Aspect ratio: ${r.aspect}
+
+Rules:
+- If video frames or transcript excerpts are given, the image should bridge or introduce what happens around it (for example a calm visual for the next chapter), and match the colors and mood of the frames. Do not copy people from the frames.
+- Describe subject, setting, composition, lighting, colors and mood in 2 to 5 sentences.
+- Leave calm space (for example in the center or lower third) so text overlays stay readable.
+- End with: no text, no letters, no logos, no watermark.
+- Write the prompt in ${lang}.`
+}
+
+const IMAGE_PROMPT_SCHEMA = {
+  type: 'object',
+  properties: { prompt: { type: 'string' } },
+  required: ['prompt'],
+  additionalProperties: false,
+}
+
+/** Eingabe-Blöcke: je Szene Überschrift, Standbild, Transkript. */
+export function buildImagePromptInput(
+  scenes: ImageContextScene[],
+): Anthropic.Beta.BetaContentBlockParam[] {
+  const blocks: Anthropic.Beta.BetaContentBlockParam[] = []
+  for (const s of scenes) {
+    const where =
+      s.role === 'before'
+        ? 'End of the clip BEFORE the still clip'
+        : 'Start of the clip AFTER the still clip'
+    blocks.push({ type: 'text', text: `${where} ("${s.name}"):` })
+    if (s.jpeg) {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: s.jpeg.toString('base64') },
+      })
+    }
+    if (s.transcript)
+      blocks.push({ type: 'text', text: `<transcript>${s.transcript}</transcript>` })
+  }
+  if (blocks.length === 0) blocks.push({ type: 'text', text: 'No video context is available.' })
+  return blocks
+}
+
+/** Prüft Claudes Antwort: ein nicht leerer Prompt, gekürzt. */
+export function parseImagePrompt(raw: unknown, maxLength = 2000): string {
+  const p = isRecord(raw) && typeof raw.prompt === 'string' ? raw.prompt.trim() : ''
+  if (!p) throw new Error('Claude hat keinen Prompt geliefert.')
+  return p.slice(0, maxLength)
+}
+
+export async function createImagePrompt(
+  r: ImagePromptRequest,
+  signal: AbortSignal,
+): Promise<{ prompt: string }> {
+  const raw = await askClaudeWith(
+    IMAGE_PROMPT_SYSTEM,
+    buildImagePromptInput(r.scenes),
+    imagePromptTask(r),
+    IMAGE_PROMPT_SCHEMA,
+    signal,
+  )
+  return { prompt: parseImagePrompt(raw) }
 }
