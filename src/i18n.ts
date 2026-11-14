@@ -10,6 +10,7 @@ const messages = {
     drop: {
       title: 'Videos hierher ziehen oder klicken',
       hint: 'MP4, WebM, MOV … Mehrere Videos möglich. Sie werden einmal auf den Server geladen und dort gespeichert, bis du sie löschst.',
+      noVideo: 'Noch kein Video – lade eines hoch, um loszulegen.',
     },
     library: {
       title: 'Meine Videos',
@@ -481,6 +482,7 @@ const messages = {
     drop: {
       title: 'Drop videos here or click',
       hint: 'MP4, WebM, MOV … Several videos at once. They are uploaded once and kept on the server until you delete them.',
+      noVideo: 'No video yet – upload one to get started.',
     },
     library: {
       title: 'My videos',

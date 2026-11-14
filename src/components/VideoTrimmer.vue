@@ -339,13 +339,22 @@ function onTimeUpdate(): void {
 
 // Quelle gewechselt (neues Video ODER Schnitt-Ergebnis) -> Element sicher neu
 // laden, damit loadedmetadata/durationchange erneut feuern und die Dauer stimmt.
-// Ohne URL (Video gelöscht) gibt es nichts zu laden: Der Player wird dann
-// ausgehängt und trüge noch die alte src – ein load() darauf würde die
-// bereits freigegebene Blob-URL erneut anfordern (ERR_FILE_NOT_FOUND).
+// Ohne URL (letztes Video gelöscht) bleibt der Player eingehängt (nur
+// versteckt): Vorschau stoppen und den Player leeren. Erst nach dem DOM-Update
+// ist das src-Attribut entfernt – ein load() davor würde die bereits
+// freigegebene Blob-URL erneut anfordern (ERR_FILE_NOT_FOUND).
 watch(objectUrl, (url) => {
   seekingForDuration = false
   const el = videoEl.value
-  if (!el || !url) return
+  if (!el) return
+  if (!url) {
+    preview.stop()
+    el.pause()
+    nextTick(() => {
+      if (el.isConnected && !el.hasAttribute('src')) el.load()
+    })
+    return
+  }
   nextTick(() => {
     if (el.isConnected) el.load()
   })
@@ -844,30 +853,14 @@ async function downloadResult(): Promise<void> {
 
 <template>
   <section class="trimmer">
-    <!-- Upload / Dropzone (+ gespeicherte Projekte öffnen) -->
-    <template v-if="!hasVideo">
-      <label
-        class="dropzone"
-        :class="{ over: isDragOver }"
-        @dragover.prevent="isDragOver = true"
-        @dragleave.prevent="isDragOver = false"
-        @drop.prevent="onDrop"
-      >
-        <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
-        <div class="dz-icon" aria-hidden="true">▶</div>
-        <p class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</p>
-        <p class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</p>
-      </label>
-      <div class="start-projects">
-        <ProjectPanel :disabled="busy" />
-      </div>
-    </template>
-
-    <!-- Editor -->
-    <div v-else class="editor">
+    <!-- Editor: von Anfang an sichtbar; Videos kommen über „Videos hochladen"
+         oder die Ablagefläche im Player hinzu. Ohne Video sind die
+         videobezogenen Bereiche gesperrt (inert). -->
+    <div class="editor">
       <div class="filebar">
         <span class="fileinfo">
-          <span class="filename" :title="fileName">{{ fileName }}</span>
+          <span v-if="hasVideo" class="filename" :title="fileName">{{ fileName }}</span>
+          <span v-else class="filename">{{ t('drop.noVideo') }}</span>
           <span v-if="fileSizeLabel" class="filesize">{{ fileSizeLabel }}</span>
         </span>
         <div class="filebar-actions">
@@ -897,7 +890,12 @@ async function downloadResult(): Promise<void> {
             <input type="file" accept="video/*" multiple class="sr-only" @change="onInputChange" />
             {{ t('library.add') }}
           </label>
-          <button class="btn ghost danger" type="button" @click="onDeleteVideo">
+          <button
+            class="btn ghost danger"
+            type="button"
+            :disabled="!selected"
+            @click="onDeleteVideo"
+          >
             🗑 {{ t('actions.removeVideo') }}
           </button>
         </div>
@@ -1064,6 +1062,7 @@ async function downloadResult(): Promise<void> {
               <button
                 class="btn crop-toggle"
                 type="button"
+                :disabled="!hasVideo"
                 :class="{ active: hasCrop }"
                 :aria-pressed="hasCrop"
                 @click="onToggleCrop"
@@ -1141,10 +1140,31 @@ async function downloadResult(): Promise<void> {
           <p v-if="error" class="error" role="alert">{{ error }}</p>
 
           <div class="video-wrap">
+            <!-- Leerzustand: Ablagefläche statt Player -->
+            <label
+              v-if="!hasVideo"
+              class="dropzone player-empty"
+              :class="{ over: isDragOver }"
+              @dragover.prevent="isDragOver = true"
+              @dragleave.prevent="isDragOver = false"
+              @drop.prevent="onDrop"
+            >
+              <input
+                type="file"
+                accept="video/*"
+                multiple
+                class="sr-only"
+                @change="onInputChange"
+              />
+              <span class="dz-icon" aria-hidden="true">▶</span>
+              <span class="dz-title" data-slot="drop.title">{{ t('drop.title') }}</span>
+              <span class="dz-hint" data-slot="drop.hint">{{ t('drop.hint') }}</span>
+            </label>
             <video
+              v-show="hasVideo"
               ref="videoEl"
               class="player"
-              :src="objectUrl"
+              :src="objectUrl || undefined"
               controls
               preload="metadata"
               @loadedmetadata="onLoadedMetadata"
@@ -1180,7 +1200,7 @@ async function downloadResult(): Promise<void> {
           </div>
 
           <!-- Live-Werte: Gesamtdauer · Auswahl · Cursor · Restdauer -->
-          <div class="live-row">
+          <div class="live-row" :class="{ idle: !hasVideo }" :inert="!hasVideo">
             <div class="live-cell">
               <span class="live-label">{{ t('live.total') }}</span>
               <span class="live-value strong">{{ msLabel(duration) }}</span>
@@ -1200,7 +1220,7 @@ async function downloadResult(): Promise<void> {
           </div>
 
           <!-- Cursor: aktuelle Wiedergabeposition als Anfang/Ende übernehmen -->
-          <div class="cursor-row">
+          <div class="cursor-row" :class="{ idle: !hasVideo }" :inert="!hasVideo">
             <span class="cursor-at">
               {{ t('player.cursorAt') }} <b>{{ formatTimeMs(cursorFrameTime) }}</b>
               <small v-if="fps > 0" class="cursor-frame">
@@ -1222,6 +1242,8 @@ async function downloadResult(): Promise<void> {
           </div>
 
           <Timeline
+            :class="{ idle: !hasVideo }"
+            :inert="!hasVideo"
             :duration="duration"
             :start="startTime"
             :end="endTime"
@@ -1234,7 +1256,7 @@ async function downloadResult(): Promise<void> {
           />
 
           <!-- Vorschau nur des ausgewählten Bereichs (im Player oben, mit Overlays) -->
-          <div class="preview-row">
+          <div class="preview-row" :class="{ idle: !hasVideo }" :inert="!hasVideo">
             <button
               class="btn tiny preview-play"
               :class="{ active: previewActive }"
@@ -1262,7 +1284,7 @@ async function downloadResult(): Promise<void> {
         </div>
 
         <!-- RECHTS: Auswahl, Ausschnitte & Hintergrundmusik -->
-        <div class="panel panel-right">
+        <div class="panel panel-right" :class="{ idle: !hasVideo }" :inert="!hasVideo">
           <!-- Auswahl: numerisch eingeben; Slider reagiert automatisch -->
           <section class="card">
             <h3 class="panel-title">{{ t('labels.selection') }}</h3>
@@ -1433,7 +1455,7 @@ async function downloadResult(): Promise<void> {
                   <span class="sel-total"> / {{ formatTimeMs(duration) }}</span>
                 </span>
                 <span v-if="canAddSegment" class="sel-valid">{{ t('time.valid') }}</span>
-                <span v-else class="sel-invalid">{{ t('time.invalid') }}</span>
+                <span v-else-if="hasVideo" class="sel-invalid">{{ t('time.invalid') }}</span>
                 <button
                   class="btn tiny ghost"
                   type="button"
@@ -1729,10 +1751,15 @@ async function downloadResult(): Promise<void> {
     border-color var(--ds-duration) var(--ds-ease),
     background var(--ds-duration) var(--ds-ease);
 }
-.start-projects {
-  width: 100%;
-  max-width: 680px;
-  margin: 16px auto 0;
+/* Ablagefläche an Stelle des Players (noch kein Video) */
+.dropzone.player-empty {
+  max-width: none;
+  min-height: 280px;
+  line-height: var(--ds-leading, 1.5);
+}
+/* Ohne Video gesperrte Bereiche (zusätzlich `inert`) */
+.idle {
+  opacity: 0.5;
 }
 .dropzone.over {
   border-color: var(--ds-accent);
