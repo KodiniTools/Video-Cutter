@@ -11,6 +11,7 @@ import {
   mergeOutputDuration,
   clipSpan,
   spedDuration,
+  buildSpeedArgs,
   mergeSequence,
   mergeTargetSize,
   outputDurationFor,
@@ -33,6 +34,7 @@ import {
   resolveAppendRange,
   parseMainHold,
   parseMainSpeed,
+  parseVideoSpeed,
   safeExt,
   safeBaseName,
   ValidationError,
@@ -97,6 +99,7 @@ export const SERVER_FEATURES = [
   'mergePreview',
   'mergeHold',
   'clipSpeed',
+  'videoSpeed',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -213,6 +216,9 @@ cutRouter.post(
       const mainHold = appendSrcs.length > 0 ? parseMainHold(req.body ?? {}) : 0
       // Geschwindigkeit je Clip (nur beim Zusammenfügen mit angehängten Videos).
       const mainSpeed = appendSrcs.length > 0 ? parseMainSpeed(req.body ?? {}) : 1
+      // Tempo eines einzelnen Videos (eigenständig): nur ohne Zusammenfügen,
+      // Musik, Format, Zuschnitt und Übergänge, genau ein Bereich.
+      const videoSpeed = parseVideoSpeed(req.body ?? {})
       if (preview && !useMerge) {
         throw new ValidationError('Die Vorschau gibt es nur beim Zusammenfügen.')
       }
@@ -241,7 +247,33 @@ cutRouter.post(
       let outputPath: string
       let outputDuration: number
 
-      if (useMerge) {
+      if (videoSpeed !== 1) {
+        if (
+          useMerge ||
+          preview ||
+          params.crop ||
+          params.operation !== 'keep' ||
+          keep.length !== 1 ||
+          audioFade
+        ) {
+          throw new ValidationError(
+            'Tempo ändern geht nur für ein einzelnes Video ohne weitere Bearbeitung.',
+          )
+        }
+        const info = mainSrc.info ?? (await probeMedia(mainSrc.path))
+        const r = keep[0]
+        outExt = isWebm ? 'webm' : 'mp4'
+        outputPath = path.join(config.tmpDir, `${id}-out.${outExt}`)
+        args = buildSpeedArgs({
+          inputPath: mainSrc.path,
+          outputPath,
+          start: r.start,
+          duration: r.duration,
+          speed: videoSpeed,
+          hasAudio: info.hasAudio,
+        })
+        outputDuration = spedDuration(r.duration, videoSpeed)
+      } else if (useMerge) {
         // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
         // die Clips auf ein gemeinsames Format normiert werden können.
         const [mainInfo, musicInfo, ...appendInfos] = await Promise.all([
@@ -367,8 +399,9 @@ cutRouter.post(
       }
 
       // Wiederholtes Schneiden stapelt kein „_cut_cut".
-      const baseName = safeBaseName(mainSrc.originalname).replace(/_cut$/, '')
-      const outputName = `${baseName}_${preview ? 'preview' : 'cut'}.${outExt}`
+      const baseName = safeBaseName(mainSrc.originalname).replace(/_(cut|tempo)$/, '')
+      const suffix = preview ? 'preview' : videoSpeed !== 1 ? 'tempo' : 'cut'
+      const outputName = `${baseName}_${suffix}.${outExt}`
 
       const job = jobManager.create({
         id,
@@ -402,6 +435,7 @@ cutRouter.post(
         storeResult,
         preview,
         mergeHold: appendSrcs.length > 0,
+        videoSpeed: videoSpeed !== 1,
         clipSpeed: appendSrcs.length > 0,
       })
     } catch (err) {

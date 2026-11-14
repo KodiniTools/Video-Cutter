@@ -661,6 +661,51 @@ export function atempoFilters(speed: number): string[] {
 }
 
 /**
+ * Tempo eines einzelnen Videos ändern (eigenständige Funktion, ohne
+ * Zusammenfügen): Bereich [start, start+duration] einlesen, Zeitstempel durch
+ * den Faktor teilen, Ton per atempo (Tonhöhe bleibt). Die Bildrate des
+ * Ausgangsvideos bleibt (schneller = Bilder fallen weg, langsamer = doppelt).
+ * Immer Re-Encode.
+ */
+export function buildSpeedArgs({
+  inputPath,
+  outputPath,
+  start,
+  duration,
+  speed,
+  hasAudio,
+}: {
+  inputPath: string
+  outputPath: string
+  start: number
+  duration: number
+  speed: number
+  hasAudio: boolean
+}): string[] {
+  const f = clipSpeed(speed)
+  const afx = atempoFilters(f)
+  return [
+    ...PROGRESS,
+    '-ss',
+    formatFfmpegTime(start),
+    // -t VOR -i = Länge des Quellmaterials (nach -i wäre es die Ausgabelänge
+    // und würde eine Zeitlupe abschneiden).
+    '-t',
+    formatFfmpegTime(Math.max(0, duration)),
+    '-i',
+    inputPath,
+    '-vf',
+    `setpts=(PTS-STARTPTS)/${f.toFixed(6)}`,
+    // Ausgabe auf die neue Länge begrenzen (Bildraten-Rundung am Ende).
+    '-t',
+    formatFfmpegTime(Math.max(0, duration) / f),
+    ...(hasAudio && afx.length ? ['-af', ['asetpts=PTS-STARTPTS', ...afx].join(',')] : []),
+    ...reencodeCodecs(outputPath),
+    outputPath,
+  ]
+}
+
+/**
  * Effektive Einfügestelle eines angehängten Videos: Anzahl der Bereiche des
  * Hauptvideos, die VOR ihm laufen (0 = ganz vorne, `mainCount` = ganz hinten).
  */

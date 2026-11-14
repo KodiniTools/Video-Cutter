@@ -30,6 +30,7 @@ describe('parseJobStart', () => {
       preview: false,
       mergeHold: false,
       clipSpeed: false,
+      videoSpeed: false,
     })
   })
 
@@ -49,6 +50,7 @@ describe('parseJobStart', () => {
       preview: false,
       mergeHold: false,
       clipSpeed: false,
+      videoSpeed: false,
     })
   })
 

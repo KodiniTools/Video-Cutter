@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { atempoFilters, buildMergeArgs, clipSpeed, spedDuration } from '../src/lib/args'
-import { parseAppendMeta, parseMainSpeed } from '../src/lib/validate'
+import {
+  atempoFilters,
+  buildMergeArgs,
+  buildSpeedArgs,
+  clipSpeed,
+  spedDuration,
+} from '../src/lib/args'
+import { parseAppendMeta, parseMainSpeed, parseVideoSpeed } from '../src/lib/validate'
 
 const base = {
   inputPath: '/tmp/in.mp4',
@@ -86,5 +92,48 @@ describe('Geschwindigkeit je Clip beim Zusammenfügen', () => {
     expect(parseMainSpeed({})).toBe(1)
     expect(parseMainSpeed({ mainSpeed: '0.285714' })).toBeCloseTo(0.285714)
     expect(() => parseMainSpeed({ mainSpeed: '0.2' })).toThrow()
+  })
+})
+
+describe('Tempo eines einzelnen Videos (eigenständig)', () => {
+  const argOf = (args: string[], flag: string) => args[args.indexOf(flag) + 1]
+
+  it('setpts + atempo, -t = ganzes Quellmaterial, Re-Encode', () => {
+    const args = buildSpeedArgs({
+      inputPath: '/tmp/in.mp4',
+      outputPath: '/tmp/out.mp4',
+      start: 0,
+      duration: 6,
+      speed: 3.5,
+      hasAudio: true,
+    })
+    // -t vor -i = Quellmaterial, -t danach = neue Länge
+    const ts = args.flatMap((a, i) => (a === '-t' ? [args[i + 1]] : []))
+    expect(ts).toEqual(['00:00:06.000', '00:00:01.714'])
+    expect(args.indexOf('-t')).toBeLessThan(args.indexOf('-i'))
+    expect(argOf(args, '-vf')).toBe('setpts=(PTS-STARTPTS)/3.500000')
+    expect(argOf(args, '-af')).toBe('asetpts=PTS-STARTPTS,atempo=2,atempo=1.750000')
+    expect(args).toContain('libx264')
+    expect(args.at(-1)).toBe('/tmp/out.mp4')
+  })
+
+  it('ohne Tonspur kein -af (würde FFmpeg abbrechen); WebM bleibt WebM', () => {
+    const args = buildSpeedArgs({
+      inputPath: '/tmp/in.webm',
+      outputPath: '/tmp/out.webm',
+      start: 0,
+      duration: 4,
+      speed: 0.5,
+      hasAudio: false,
+    })
+    expect(args).not.toContain('-af')
+    expect(argOf(args, '-vf')).toBe('setpts=(PTS-STARTPTS)/0.500000')
+    expect(args).toContain('libvpx-vp9')
+  })
+
+  it('parseVideoSpeed', () => {
+    expect(parseVideoSpeed({})).toBe(1)
+    expect(parseVideoSpeed({ speed: '2' })).toBe(2)
+    expect(() => parseVideoSpeed({ speed: '8' })).toThrow()
   })
 })
