@@ -100,6 +100,11 @@ kommt als normales Video in die Bibliothek und dauerhaft in die Galerie
 (`POST /api/ai/gallery/:id/media` holt es später wieder in die Bibliothek). Modell:
 `GEMINI_VIDEO_MODEL` (Standard `gemini-omni-1.2-flash`).
 
+**Modellauswahl:** `GET /api/ai/models` liefert die Bild- und Videomodelle, die der Schlüssel
+nutzen darf (live von Google, 1 h gemerkt; ohne Verbindung eine feste Ersatzliste).
+`POST /api/ai/images` und `POST /api/ai/video` nehmen optional `model` entgegen; ohne Angabe
+gilt die Voreinstellung aus der `.env`. Das verwendete Modell steht im Ergebnis und in der Galerie.
+
 ## Frontend anbinden
 
 Beim Build der SPA `VITE_API_BASE=/video-cutter` setzen; dann nutzt der

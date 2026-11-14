@@ -139,7 +139,11 @@ export function extractImage(raw: unknown): { data: Buffer; mime: string } {
 }
 
 /** Übersetzt HTTP-Fehler von Gemini in verständliche Meldungen. */
-export function geminiHttpError(status: number, body: unknown): Error {
+export function geminiHttpError(
+  status: number,
+  body: unknown,
+  model: string = config.geminiImageModel,
+): Error {
   const err = isRecord(body) && isRecord(body.error) ? body.error : {}
   const msg = typeof err.message === 'string' ? err.message : ''
   if (status === 400 && /api key/i.test(msg)) {
@@ -150,7 +154,7 @@ export function geminiHttpError(status: number, body: unknown): Error {
   }
   if (status === 404) {
     return new Error(
-      `Gemini-Bildmodell „${config.geminiImageModel}“ nicht gefunden (GEMINI_IMAGE_MODEL prüfen).`,
+      `Gemini-Bildmodell „${model}“ nicht gefunden (anderes Modell wählen bzw. GEMINI_IMAGE_MODEL prüfen).`,
     )
   }
   if (status === 429) {
@@ -164,10 +168,13 @@ export function buildImageRequest(
   prompt: string,
   aspect: ImageAspect,
   size: '1K' | '2K' | '4K',
+  model: string = config.geminiImageModel,
 ): Record<string, unknown> {
   const imageConfig: Record<string, unknown> = { aspectRatio: aspect }
-  // Ältere Modelle kennen imageSize nicht; GEMINI_IMAGE_SIZE=off lässt es weg.
-  if (config.geminiImageSize !== 'off') imageConfig.imageSize = config.geminiImageSize || size
+  // Ältere Modelle (2.5) kennen imageSize nicht; GEMINI_IMAGE_SIZE=off lässt es immer weg.
+  if (config.geminiImageSize !== 'off' && !model.startsWith('gemini-2.')) {
+    imageConfig.imageSize = config.geminiImageSize || size
+  }
   return {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { responseModalities: ['IMAGE'], imageConfig },
@@ -179,9 +186,10 @@ async function generateOne(
   aspect: ImageAspect,
   size: '1K' | '2K' | '4K',
   signal: AbortSignal,
+  model: string,
 ): Promise<{ data: Buffer; mime: string }> {
   const url = `${config.geminiBaseUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(
-    config.geminiImageModel,
+    model,
   )}:generateContent`
   let res: globalThis.Response
   try {
@@ -191,7 +199,7 @@ async function generateOne(
         'Content-Type': 'application/json',
         'x-goog-api-key': process.env.GEMINI_API_KEY ?? '',
       },
-      body: JSON.stringify(buildImageRequest(prompt, aspect, size)),
+      body: JSON.stringify(buildImageRequest(prompt, aspect, size, model)),
       signal: AbortSignal.any([signal, AbortSignal.timeout(config.geminiTimeoutMs)]),
     })
   } catch (err) {
@@ -207,7 +215,7 @@ async function generateOne(
   } catch {
     /* keine JSON-Antwort */
   }
-  if (!res.ok) throw geminiHttpError(res.status, body)
+  if (!res.ok) throw geminiHttpError(res.status, body, model)
   return extractImage(body)
 }
 
@@ -227,11 +235,12 @@ export async function generateImages(
   count: number,
   signal: AbortSignal,
   progress: (p: number) => void,
+  model: string = config.geminiImageModel,
 ): Promise<{ images: GeneratedImage[]; failed: number; error: string }> {
   let done = 0
   const results = await Promise.allSettled(
     Array.from({ length: count }, async () => {
-      const img = await generateOne(prompt, aspect, size, signal)
+      const img = await generateOne(prompt, aspect, size, signal, model)
       done++
       progress((done / count) * 100)
       return img

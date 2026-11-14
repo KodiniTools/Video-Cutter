@@ -12,11 +12,13 @@ import {
   MAX_IMAGE_PROMPT,
   MIN_IMAGE_COUNT,
   VIDEO_DURATIONS,
+  fetchAiModels,
   fetchGeneratedImage,
   parseGeneratedImages,
   parseGeneratedVideo,
   parseImagePrompt,
   runAiJob,
+  type AiModels,
   type AiRun,
   type ImageStyle,
 } from '@/lib/aiApi'
@@ -83,7 +85,52 @@ interface Variant {
 const variants = ref<Variant[]>([])
 const selected = ref(-1)
 
-onMounted(() => void ai.loadStatus())
+// --- Modellauswahl (je Modus, im Browser gemerkt) ---
+const MODEL_KEY = 'vc.aiModel.'
+const models = ref<AiModels | null>(null)
+const chosen = ref({ image: '', video: '' })
+const modelOptions = computed(() => models.value?.[mode.value].models ?? [])
+const model = computed({
+  get: () => chosen.value[mode.value],
+  set: (v: string) => {
+    chosen.value[mode.value] = v
+    try {
+      localStorage.setItem(MODEL_KEY + mode.value, v)
+    } catch {
+      /* Speicher gesperrt – Auswahl gilt nur für diese Sitzung */
+    }
+  },
+})
+
+async function loadModels(): Promise<void> {
+  try {
+    const m = await fetchAiModels()
+    if (!m) return
+    for (const kind of ['image', 'video'] as const) {
+      let saved = ''
+      try {
+        saved = localStorage.getItem(MODEL_KEY + kind) ?? ''
+      } catch {
+        /* ohne gemerkte Auswahl */
+      }
+      // Gemerktes Modell nur, wenn Google es noch anbietet.
+      chosen.value[kind] = m[kind].models.includes(saved) ? saved : m[kind].default
+    }
+    models.value = m
+  } catch {
+    /* ohne Liste gilt die Voreinstellung des Servers */
+  }
+}
+
+/** Zusatz für die Aufträge: gewähltes Modell (leer = Voreinstellung des Servers). */
+const modelParam = computed(() => (model.value ? { model: model.value } : {}))
+/** Zuletzt tatsächlich verwendetes Modell (Anzeige nach dem Erzeugen). */
+const usedModel = ref('')
+
+onMounted(() => {
+  void ai.loadStatus()
+  void loadModels()
+})
 
 const claudeOk = computed(() => ai.status?.claude === true)
 const imageOk = computed(() => ai.status?.image === true)
@@ -167,6 +214,7 @@ async function generateVideo(): Promise<void> {
       width: props.width,
       height: props.height,
       duration: duration.value,
+      ...modelParam.value,
     },
     parseGeneratedVideo,
     (p) => (progress.value = p),
@@ -175,6 +223,7 @@ async function generateVideo(): Promise<void> {
   try {
     const res = await r.promise
     notice.value = res.galleryError
+    usedModel.value = res.model
     if (res.saved) galleryRefresh.value++
     emit('video', res.media)
   } catch (e) {
@@ -193,7 +242,13 @@ async function generate(): Promise<void> {
   setPhase('images')
   const r = runAiJob(
     'images',
-    { prompt: prompt.value.trim(), width: props.width, height: props.height, count: count.value },
+    {
+      prompt: prompt.value.trim(),
+      width: props.width,
+      height: props.height,
+      count: count.value,
+      ...modelParam.value,
+    },
     parseGeneratedImages,
     (p) => (progress.value = p),
   )
@@ -209,6 +264,7 @@ async function generate(): Promise<void> {
     notice.value = [res.failed > 0 ? t('stillAi.partial', { n: res.failed }) : '', res.galleryError]
       .filter(Boolean)
       .join(' ')
+    usedModel.value = res.model
     if (res.saved) galleryRefresh.value++
     choose(0)
   } catch (e) {
@@ -329,6 +385,15 @@ onBeforeUnmount(() => {
       </label>
     </div>
 
+    <label v-if="modelOptions.length" class="field stack">
+      <span class="field-label">{{ t('stillAi.model') }}</span>
+      <select v-model="model" class="input" :disabled="busy" data-test="still-ai-model">
+        <option v-for="m in modelOptions" :key="m" :value="m">
+          {{ m === models?.[mode].default ? t('stillAi.modelDefault', { model: m }) : m }}
+        </option>
+      </select>
+    </label>
+
     <label class="check" :class="{ off: !hasContext }">
       <input v-model="useContext" type="checkbox" :disabled="busy || !hasContext" />
       <span>
@@ -397,6 +462,9 @@ onBeforeUnmount(() => {
 
     <p v-if="error" class="hint warn" role="alert">{{ error }}</p>
     <p v-if="notice" class="hint">{{ notice }}</p>
+    <p v-if="usedModel" class="hint" data-test="still-ai-used-model">
+      {{ t('stillAi.usedModel', { model: usedModel }) }}
+    </p>
 
     <div
       v-if="variants.length && mode === 'image'"

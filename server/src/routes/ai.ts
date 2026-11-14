@@ -6,6 +6,7 @@ import { config } from '../config'
 import { runFfmpeg } from '../lib/ffmpeg'
 import { isMediaId, mediaStore, mediaView, StorageFullError, type MediaItem } from '../lib/media'
 import { probeMedia } from '../lib/probe'
+import { listModels, resolveModel, type ModelKind } from '../lib/geminiModels'
 import { clampVideoDuration, generateVideo, videoAspectFor } from '../lib/geminiVideo'
 import { ValidationError } from '../lib/validate'
 import { aiJobs, type AiJobKind, type AiJobSnapshot } from '../lib/aiJobs'
@@ -57,6 +58,7 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  * - POST /api/ai/video-prompt (wie image-prompt, + duration) -> Video-Prompt (Claude)
  * - POST /api/ai/video      { prompt, width, height, duration } -> KI-Video (Gemini Omni)
  * - POST /api/ai/gallery/:id/media                  -> Galerie-Video in die Bibliothek
+ * - GET  /api/ai/models                             -> wählbare Gemini-Modelle (Bild/Video)
  * - GET  /api/ai/gallery                            -> dauerhaft gespeicherte KI-Bilder
  * - GET  /api/ai/gallery/:id/file | /thumb          -> Original bzw. Vorschau
  * - DELETE /api/ai/gallery/:id                      -> Bild vom Server löschen
@@ -219,6 +221,20 @@ function requireGemini(): void {
   }
 }
 
+/** Gewähltes Modell prüfen (leer = Voreinstellung der Server-.env). */
+function requireModel(kind: ModelKind, wanted: unknown): string {
+  const model = resolveModel(kind, wanted)
+  if (!model) throw new ValidationError('Unbekanntes oder unpassendes Gemini-Modell.')
+  return model
+}
+
+/** GET /api/ai/models -> wählbare Bild- und Videomodelle (live von Google, 1 h gemerkt). */
+aiRouter.get('/ai/models', (_req: Request, res: Response, next: NextFunction) => {
+  listModels()
+    .then((m) => res.json(m))
+    .catch(next)
+})
+
 export const MAX_IDEA_LENGTH = 500
 
 /** Zielgröße des Bild-Clips (für Seitenverhältnis und Auflösung). */
@@ -379,6 +395,7 @@ aiRouter.post('/ai/video', json, (req: Request, res: Response) => {
   }
   const size = parseTargetSize(body)
   const duration = clampVideoDuration(body.duration)
+  const model = requireModel('video', body.model)
   requireGemini()
   if (!capacity('video', res)) return
   const job = aiJobs.start('video', async (signal, progress) => {
@@ -388,12 +405,14 @@ aiRouter.post('/ai/video', json, (req: Request, res: Response) => {
       duration,
       signal,
       progress,
+      undefined,
+      model,
     )
     // Zuerst in die Galerie: Das bezahlte Video soll nie verloren gehen.
     let saved = 0
     let galleryError = ''
     try {
-      await gallery.add(data, 'video/mp4', prompt)
+      await gallery.add(data, 'video/mp4', prompt, model)
       saved = 1
     } catch (err) {
       galleryError =
@@ -411,7 +430,7 @@ aiRouter.post('/ai/video', json, (req: Request, res: Response) => {
       })
       const item = await mediaStore.add(file, aiVideoName(info.duration || duration), info)
       stored = true
-      return { media: mediaView(item), saved, galleryError }
+      return { media: mediaView(item), saved, galleryError, model }
     } catch (err) {
       if (err instanceof StorageFullError && saved) {
         throw new Error(`${err.message} Das Video liegt in der Galerie.`)
@@ -436,6 +455,7 @@ aiRouter.post('/ai/images', json, (req: Request, res: Response) => {
   const count = Number.isFinite(rawCount)
     ? Math.min(MAX_IMAGE_COUNT, Math.max(MIN_IMAGE_COUNT, rawCount))
     : 2
+  const model = requireModel('image', body.model)
   requireGemini()
   if (!capacity('image', res)) return
   const aspect = nearestAspect(size.width, size.height)
@@ -447,8 +467,9 @@ aiRouter.post('/ai/images', json, (req: Request, res: Response) => {
       count,
       signal,
       progress,
+      model,
     )
-    return { ...r, ...(await saveToGallery(r.images, prompt)) }
+    return { ...r, ...(await saveToGallery(r.images, prompt, gallery, model)), model }
   })
   started(res, job)
 })
@@ -461,6 +482,7 @@ export async function saveToGallery(
   images: { id: string }[],
   prompt: string,
   target: Gallery = gallery,
+  model = '',
 ): Promise<{ saved: number; galleryError: string }> {
   let saved = 0
   let galleryError = ''
@@ -468,7 +490,7 @@ export async function saveToGallery(
     const img = getImage(ref.id)
     if (!img) continue
     try {
-      await target.add(img.data, img.mime, prompt)
+      await target.add(img.data, img.mime, prompt, model)
       saved++
     } catch (err) {
       galleryError ||=
@@ -484,7 +506,14 @@ export async function saveToGallery(
 // --- Galerie der KI-Bilder (dauerhaft auf dem Server) ------------------------------
 
 function galleryView(i: GalleryImage): GalleryImage {
-  return { id: i.id, mime: i.mime, prompt: i.prompt, createdAt: i.createdAt, size: i.size }
+  return {
+    id: i.id,
+    mime: i.mime,
+    prompt: i.prompt,
+    createdAt: i.createdAt,
+    size: i.size,
+    model: i.model,
+  }
 }
 
 aiRouter.get('/ai/gallery', (_req: Request, res: Response, next: NextFunction) => {

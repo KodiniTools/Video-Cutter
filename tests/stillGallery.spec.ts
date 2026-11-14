@@ -25,8 +25,22 @@ vi.mock('@/lib/download', () => ({
 import StillGallery from '@/components/StillGallery.vue'
 import { galleryFileName, parseGallery, parseGeneratedImages } from '@/lib/aiApi'
 
-const A = { id: 'a', mime: 'image/png', prompt: 'Berg', createdAt: 1_800_000_000_000, size: 2048 }
-const B = { id: 'b', mime: 'image/jpeg', prompt: '', createdAt: 1_700_000_000_000, size: 1024 }
+const A = {
+  id: 'a',
+  mime: 'image/png',
+  prompt: 'Berg',
+  createdAt: 1_800_000_000_000,
+  size: 2048,
+  model: 'gemini-3-pro-image',
+}
+const B = {
+  id: 'b',
+  mime: 'image/jpeg',
+  prompt: '',
+  createdAt: 1_700_000_000_000,
+  size: 1024,
+  model: '',
+}
 const file = new File(['x'], 'ki-bild.png', { type: 'image/png' })
 
 const mountIt = (over: Record<string, unknown> = {}) =>
@@ -50,6 +64,10 @@ describe('StillGallery', () => {
     expect(w.find('[data-test=gallery-count]').text()).toContain('2')
     // Nur Bilder mit Prompt haben ✍
     expect(w.findAll('[data-test=gallery-prompt]')).toHaveLength(1)
+    // Modell steht im Tooltip
+    expect(w.findAll('[data-test=gallery-use]')[0].attributes('title')).toContain(
+      'gemini-3-pro-image',
+    )
     await w.findAll('[data-test=gallery-use]')[0].trigger('click')
     await flushPromises()
     expect(fetchGalleryFile).toHaveBeenCalledWith(A)
@@ -63,7 +81,14 @@ describe('StillGallery', () => {
   })
 
   it('Video (▶): Klick legt es in die Bibliothek und meldet das Video; ✍ meldet „video“', async () => {
-    const V = { id: 'v', mime: 'video/mp4', prompt: 'Flug', createdAt: 1_800_000_000_000, size: 9 }
+    const V = {
+      id: 'v',
+      mime: 'video/mp4',
+      prompt: 'Flug',
+      createdAt: 1_800_000_000_000,
+      size: 9,
+      model: 'gemini-omni-1.2-flash',
+    }
     const media = { id: 'm1', name: 'KI-Video_8s.mp4' }
     fetchGallery.mockResolvedValue({ images: [V], totalBytes: 9 })
     galleryVideoToMedia.mockResolvedValue(media)

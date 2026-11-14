@@ -80,7 +80,7 @@ function dateOf(img: GalleryImage): string {
 }
 
 function tooltip(img: GalleryImage): string {
-  return [dateOf(img), img.prompt].filter(Boolean).join(' · ')
+  return [dateOf(img), img.model, img.prompt].filter(Boolean).join(' · ')
 }
 
 async function withFile(
