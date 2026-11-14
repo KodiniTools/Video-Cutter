@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase'
+import { fallbackErrorMessage, retryAfterOf } from './httpError'
 
 /**
  * Client für die KI-Funktionen des Servers (`/api/ai/*`): Transkription
@@ -116,13 +117,13 @@ async function readError(res: Response): Promise<Error> {
   }
   // Altes Backend: Route unbekannt.
   if (res.status === 404 && (!msg || msg === 'Nicht gefunden.')) return new Error(AI_UNSUPPORTED)
-  return new Error(msg || `Serverfehler (${res.status}).`)
+  return new Error(msg || fallbackErrorMessage(res.status, retryAfterOf(res)))
 }
 
 /** Einrichtungsstand der KI auf dem Server. */
 export async function fetchAiStatus(): Promise<AiStatus | null> {
   const res = await fetch(`${API_BASE}/api/health`)
-  if (!res.ok) throw new Error(`Serverfehler (${res.status}).`)
+  if (!res.ok) throw new Error(fallbackErrorMessage(res.status, retryAfterOf(res)))
   return parseAiStatus(await res.json())
 }
 

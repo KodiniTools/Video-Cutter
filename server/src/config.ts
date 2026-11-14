@@ -80,8 +80,10 @@ export const config = {
     'https://www.kodinitools.com',
   ]),
 
-  /** Requests pro IP je 15 Minuten. */
-  rateLimitMax: num('RATE_LIMIT_MAX', 60),
+  /** POST-Anfragen (Uploads, Schneiden, Speichern, KI) pro IP je 15 Minuten. */
+  rateLimitWriteMax: num('RATE_LIMIT_WRITE_MAX', 300),
+  /** Übrige Anfragen (Status, Fortschritt, Downloads, Löschen) pro IP je 15 Minuten. */
+  rateLimitReadMax: num('RATE_LIMIT_READ_MAX', 3000),
 
   // --- KI (Untertitel, Schnittvorschläge) ---
   /** whisper.cpp-CLI (Pfad oder Name im PATH). */
