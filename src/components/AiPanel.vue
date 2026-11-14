@@ -8,6 +8,7 @@ import { useVideoEditorStore } from '@/stores/videoEditor'
 import {
   AI_CANCELLED,
   AI_UNSUPPORTED,
+  TRANSCRIBE_LANGUAGES,
   type SubtitleTarget,
   type TranscribeLanguage,
   type TranslateTarget,
@@ -201,11 +202,12 @@ const taskLabel = computed(() => {
       <label class="field-col">
         <span class="field-label">{{ t('ai.language') }}</span>
         <select v-model="language" class="input" :disabled="disabled">
-          <option value="auto">{{ t('ai.lang.auto') }}</option>
-          <option value="de">{{ t('ai.lang.de') }}</option>
-          <option value="en">{{ t('ai.lang.en') }}</option>
+          <option v-for="code in TRANSCRIBE_LANGUAGES" :key="code" :value="code">
+            {{ t(`ai.lang.${code}`) }}
+          </option>
         </select>
       </label>
+      <p v-if="language === 'auto'" class="hint">{{ t('ai.languageHint') }}</p>
       <button
         class="btn block"
         type="button"

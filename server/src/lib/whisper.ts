@@ -25,8 +25,34 @@ export interface Transcript {
   words: Word[]
 }
 
-/** Erlaubte Sprachangaben für die Erkennung. */
-export const TRANSCRIBE_LANGUAGES = ['auto', 'de', 'en'] as const
+/**
+ * Erlaubte Sprachangaben für die Erkennung (Whisper-Kürzel, wie
+ * src/lib/aiApi.ts TRANSCRIBE_LANGUAGES). Eine feste Sprache ist zuverlässiger
+ * als 'auto': Whisper erkennt nur anhand der ersten 30 Sekunden und
+ * verwechselt nah verwandte Sprachen (z. B. Kroatisch/Bosnisch/Serbisch).
+ */
+export const TRANSCRIBE_LANGUAGES = [
+  'auto',
+  'de',
+  'en',
+  'hr',
+  'bs',
+  'sr',
+  'sl',
+  'it',
+  'fr',
+  'es',
+  'pt',
+  'nl',
+  'pl',
+  'cs',
+  'sk',
+  'hu',
+  'ro',
+  'tr',
+  'ru',
+  'uk',
+] as const
 export type TranscribeLanguage = (typeof TRANSCRIBE_LANGUAGES)[number]
 
 /** Liegt das Programm im PATH bzw. unter dem angegebenen Pfad? */

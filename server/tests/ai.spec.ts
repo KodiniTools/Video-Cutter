@@ -3,6 +3,7 @@ import {
   buildAudioExtractArgs,
   buildWhisperArgs,
   parseWhisperJson,
+  TRANSCRIBE_LANGUAGES,
   type Word,
 } from '../src/lib/whisper'
 import {
@@ -50,6 +51,11 @@ describe('Prozess-Argumente', () => {
     expect(a).toEqual(expect.arrayContaining(['-ml', '1', '-sow', '-oj', '-pp']))
     expect(a[a.indexOf('-l') + 1]).toBe('de')
     expect(a[a.indexOf('-of') + 1]).toBe('/out')
+  })
+  it('whisper: Kroatisch wird als feste Sprache weitergegeben', () => {
+    expect(TRANSCRIBE_LANGUAGES).toContain('hr')
+    const a = buildWhisperArgs('/x.wav', '/out', 'hr')
+    expect(a[a.indexOf('-l') + 1]).toBe('hr')
   })
 })
 

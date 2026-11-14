@@ -63,7 +63,27 @@ export function formatWords(words: Word[]): string {
   return words.map((w, i) => `${i} ${w.start.toFixed(2)}-${w.end.toFixed(2)} ${w.text}`).join('\n')
 }
 
-const LANG_NAMES: Record<string, string> = { de: 'German', en: 'English' }
+const LANG_NAMES: Record<string, string> = {
+  de: 'German',
+  en: 'English',
+  hr: 'Croatian',
+  bs: 'Bosnian',
+  sr: 'Serbian',
+  sl: 'Slovenian',
+  it: 'Italian',
+  fr: 'French',
+  es: 'Spanish',
+  pt: 'Portuguese',
+  nl: 'Dutch',
+  pl: 'Polish',
+  cs: 'Czech',
+  sk: 'Slovak',
+  hu: 'Hungarian',
+  ro: 'Romanian',
+  tr: 'Turkish',
+  ru: 'Russian',
+  uk: 'Ukrainian',
+}
 
 function subtitleTask(target: SubtitleTarget, language: string): string {
   const lang =

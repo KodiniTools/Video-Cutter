@@ -197,3 +197,23 @@ describe('parseTranslation', () => {
     expect(() => parseTranslation(null, 1)).toThrow()
   })
 })
+
+describe('Sprachauswahl für die Transkription', () => {
+  it('jede Sprache hat einen Namen (de + en), Kroatisch ist dabei', async () => {
+    const { TRANSCRIBE_LANGUAGES } = await import('@/lib/aiApi')
+    expect(TRANSCRIBE_LANGUAGES).toContain('hr')
+    for (const locale of ['de', 'en'] as const) {
+      for (const code of TRANSCRIBE_LANGUAGES) {
+        expect(i18n.global.te(`ai.lang.${code}`, locale), `${locale}: ${code}`).toBe(true)
+      }
+    }
+  })
+  it('Liste stimmt mit dem Server überein', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { TRANSCRIBE_LANGUAGES } = await import('@/lib/aiApi')
+    const src = readFileSync('server/src/lib/whisper.ts', 'utf8')
+    const block = /TRANSCRIBE_LANGUAGES = \[([^\]]*)\]/.exec(src)?.[1] ?? ''
+    const server = [...block.matchAll(/'([a-z]+)'/g)].map((m) => m[1])
+    expect(server).toEqual([...TRANSCRIBE_LANGUAGES])
+  })
+})
