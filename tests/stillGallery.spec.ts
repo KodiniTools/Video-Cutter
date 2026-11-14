@@ -5,6 +5,7 @@ import { i18n } from '@/i18n'
 const fetchGallery = vi.fn()
 const fetchGalleryFile = vi.fn()
 const deleteGalleryImage = vi.fn()
+const galleryVideoToMedia = vi.fn()
 const saveFile = vi.fn(async (_f: { blob: Blob; name: string }) => true)
 
 vi.mock('@/lib/aiApi', async (orig) => {
@@ -14,6 +15,7 @@ vi.mock('@/lib/aiApi', async (orig) => {
     fetchGallery: () => fetchGallery(),
     fetchGalleryFile: (i: unknown) => fetchGalleryFile(i),
     deleteGalleryImage: (id: string) => deleteGalleryImage(id),
+    galleryVideoToMedia: (id: string) => galleryVideoToMedia(id),
   }
 })
 vi.mock('@/lib/download', () => ({
@@ -53,11 +55,30 @@ describe('StillGallery', () => {
     expect(fetchGalleryFile).toHaveBeenCalledWith(A)
     expect(w.emitted('pick')).toEqual([[file]])
     await w.find('[data-test=gallery-prompt]').trigger('click')
-    expect(w.emitted('prompt')).toEqual([['Berg']])
+    expect(w.emitted('prompt')).toEqual([['Berg', 'image']])
     await w.findAll('[data-test=gallery-download]')[1].trigger('click')
     await flushPromises()
     expect(saveFile).toHaveBeenCalledWith({ blob: file, name: 'ki-bild.png' })
     expect(w.emitted('pick')).toHaveLength(1)
+  })
+
+  it('Video (▶): Klick legt es in die Bibliothek und meldet das Video; ✍ meldet „video“', async () => {
+    const V = { id: 'v', mime: 'video/mp4', prompt: 'Flug', createdAt: 1_800_000_000_000, size: 9 }
+    const media = { id: 'm1', name: 'KI-Video_8s.mp4' }
+    fetchGallery.mockResolvedValue({ images: [V], totalBytes: 9 })
+    galleryVideoToMedia.mockResolvedValue(media)
+    const w = mountIt()
+    await flushPromises()
+    expect(w.find('[data-test=gallery-video]').exists()).toBe(true)
+    await w.find('[data-test=gallery-use]').trigger('click')
+    await flushPromises()
+    expect(galleryVideoToMedia).toHaveBeenCalledWith('v')
+    expect(fetchGalleryFile).not.toHaveBeenCalled()
+    expect(w.emitted('video')).toEqual([[media]])
+    expect(w.emitted('pick')).toBeUndefined()
+    await w.find('[data-test=gallery-prompt]').trigger('click')
+    expect(w.emitted('prompt')).toEqual([['Flug', 'video']])
+    expect(galleryFileName(V)).toMatch(/^ki-video-\d{8}-\d{6}\.mp4$/)
   })
 
   it('Löschen erst nach zweitem Klick; Bild verschwindet aus der Liste', async () => {

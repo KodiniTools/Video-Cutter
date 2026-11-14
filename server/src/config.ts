@@ -116,6 +116,16 @@ export const config = {
   geminiImageSize: process.env.GEMINI_IMAGE_SIZE ?? '',
   /** Zeitgrenze pro Bild. */
   geminiTimeoutMs: num('GEMINI_TIMEOUT_SEC', 120) * 1000,
+
+  // --- KI-Videos (Gemini Omni, gleicher GEMINI_API_KEY) ---
+  /** Gemini-Videomodell (Veo ist in der Gemini-API abgeschaltet). */
+  geminiVideoModel: process.env.GEMINI_VIDEO_MODEL ?? 'gemini-omni-1.2-flash',
+  /** Auflösung: leer = Standard des Modells (720p), sonst 360p | 720p | 1080p | 4k. */
+  geminiVideoResolution: process.env.GEMINI_VIDEO_RESOLUTION ?? '',
+  /** „off“ = Dauer nicht mitschicken (für Modelle ohne Dauer-Angabe). */
+  geminiVideoDuration: process.env.GEMINI_VIDEO_DURATION ?? '',
+  /** Zeitgrenze pro Video. */
+  geminiVideoTimeoutMs: num('GEMINI_VIDEO_TIMEOUT_SEC', 15 * 60) * 1000,
 } as const
 
 export type AppConfig = typeof config

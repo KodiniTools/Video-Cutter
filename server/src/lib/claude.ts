@@ -617,3 +617,55 @@ export async function createImagePrompt(
   )
   return { prompt: parseImagePrompt(raw) }
 }
+
+// --- Prompt für KI-Videos (KI-Video-Clip) --------------------------------------------
+
+const VIDEO_PROMPT_SYSTEM = `You write prompts for an AI video generator (Google Gemini Omni). The generated short clip is inserted between two video clips of a longer video. Titles and labels are added later as separate overlays, so the clip itself must never contain text, letters, numbers, captions, logos, watermarks or user-interface elements. Answer only with the requested JSON.`
+
+const VIDEO_STYLE_HINTS: Record<ImageStyle, string> = {
+  auto: 'Choose the look that best fits the context; if there are video frames, match their look.',
+  photo: 'Photorealistic live-action footage, natural light, shallow depth of field.',
+  illustration: 'Clean modern flat 2D animation, harmonious limited color palette, soft shapes.',
+  minimal:
+    'Minimalist motion design, lots of calm negative space, one simple subject, muted colors.',
+  gradient: 'Abstract slowly flowing color gradients with soft light, no objects.',
+  cinematic: 'Cinematic footage, dramatic lighting, rich color grading, wide composition.',
+  '3d': 'Soft 3D animation, clay-like materials, studio lighting, gentle shadows.',
+}
+
+export interface VideoPromptRequest extends ImagePromptRequest {
+  /** Länge des Clips in Sekunden. */
+  duration: number
+}
+
+function videoPromptTask(r: VideoPromptRequest): string {
+  const lang = r.language === 'de' ? 'German' : 'English'
+  return `Write one video prompt for a single continuous shot of about ${r.duration} seconds.
+
+Inputs:
+- The user's idea or keywords: ${r.idea ? `"${r.idea}"` : '(none: derive the subject from the context)'}
+- Style: ${VIDEO_STYLE_HINTS[r.style]}
+- Aspect ratio: ${r.aspect}
+
+Rules:
+- If video frames or transcript excerpts are given, the clip should bridge or introduce what happens around it and match the colors and mood of the frames. Do not copy people from the frames.
+- Describe subject, setting, what moves and how, the camera movement (for example slow push-in, pan, static), lighting, colors and mood in 3 to 6 sentences. Keep the action simple enough for ${r.duration} seconds: one shot, no cuts.
+- Describe the sound: fitting ambient sound or soft music only, no speech, no voice-over.
+- Leave calm space so text overlays stay readable.
+- End with: no text, no letters, no logos, no watermark.
+- Write the prompt in ${lang}.`
+}
+
+export async function createVideoPrompt(
+  r: VideoPromptRequest,
+  signal: AbortSignal,
+): Promise<{ prompt: string }> {
+  const raw = await askClaudeWith(
+    VIDEO_PROMPT_SYSTEM,
+    buildImagePromptInput(r.scenes),
+    videoPromptTask(r),
+    IMAGE_PROMPT_SCHEMA,
+    signal,
+  )
+  return { prompt: parseImagePrompt(raw) }
+}

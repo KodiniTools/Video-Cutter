@@ -94,6 +94,12 @@ Jedes erzeugte Bild landet zusätzlich dauerhaft in der **Galerie** (`GALLERY_DI
 `~/.video-cutter/gallery`, Limit `MAX_GALLERY_TOTAL_MB`): `GET /api/ai/gallery`,
 `GET /api/ai/gallery/:id/file|thumb`, `DELETE /api/ai/gallery/:id`.
 
+**KI-Videos (Gemini Omni, gleicher Schlüssel):** `POST /api/ai/video-prompt` (Claude) und
+`POST /api/ai/video { prompt, width, height, duration }` (3–15 s, 16:9 oder 9:16). Das Video
+kommt als normales Video in die Bibliothek und dauerhaft in die Galerie
+(`POST /api/ai/gallery/:id/media` holt es später wieder in die Bibliothek). Modell:
+`GEMINI_VIDEO_MODEL` (Standard `gemini-omni-1.2-flash`).
+
 ## Frontend anbinden
 
 Beim Build der SPA `VITE_API_BASE=/video-cutter` setzen; dann nutzt der

@@ -97,6 +97,53 @@ describe('StillAiImage', () => {
     expect(w.emitted('pick')).toHaveLength(2)
   })
 
+  it('Modus Video: eigener Prompt-Auftrag mit Länge; fertiges Video wird gemeldet', async () => {
+    const media = {
+      id: 'm1',
+      name: 'KI-Video_6s.mp4',
+      size: 1,
+      duration: 6,
+      width: 1280,
+      height: 720,
+      hasAudio: true,
+      fps: 24,
+    }
+    runAiJob
+      .mockReturnValueOnce({ promise: Promise.resolve('Kamerafahrt über Berge'), cancel: vi.fn() })
+      .mockReturnValueOnce({
+        promise: Promise.resolve({ media, saved: 1, galleryError: '' }),
+        cancel: vi.fn(),
+      })
+    const w = mountIt()
+    await flushPromises()
+    await w.find('[data-test=still-ai-prompt]').setValue('Bild-Prompt')
+    await w.find('[data-test=still-ai-mode-video]').trigger('click')
+    // Jeder Modus hat seinen eigenen Prompt; statt Varianten gibt es die Länge.
+    expect((w.find('[data-test=still-ai-prompt]').element as HTMLTextAreaElement).value).toBe('')
+    expect(w.find('[data-test=still-ai-count]').exists()).toBe(false)
+    await w.find('[data-test=still-ai-duration]').setValue('6')
+    await w.find('[data-test=still-ai-idea]').setValue('Berge')
+    await w.find('[data-test=still-ai-write]').trigger('click')
+    await flushPromises()
+    expect(runAiJob.mock.calls[0][0]).toBe('video-prompt')
+    expect(runAiJob.mock.calls[0][1]).toMatchObject({ idea: 'Berge', duration: 6 })
+    await w.find('[data-test=still-ai-generate]').trigger('click')
+    await flushPromises()
+    expect(runAiJob.mock.calls[1][0]).toBe('video')
+    expect(runAiJob.mock.calls[1][1]).toEqual({
+      prompt: 'Kamerafahrt über Berge',
+      width: 1920,
+      height: 1080,
+      duration: 6,
+    })
+    expect(w.emitted('video')).toEqual([[media]])
+    expect(w.emitted('pick')).toBeUndefined()
+    await w.find('[data-test=still-ai-mode-image]').trigger('click')
+    expect((w.find('[data-test=still-ai-prompt]').element as HTMLTextAreaElement).value).toBe(
+      'Bild-Prompt',
+    )
+  })
+
   it('zeigt Fehler des Servers', async () => {
     runAiJob.mockImplementation(() => ({
       promise: Promise.reject(new Error('Die Bilderzeugung ist nicht eingerichtet')),
