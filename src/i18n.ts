@@ -86,13 +86,15 @@ const messages = {
       cancel: 'Abbrechen',
       variants: 'Erzeugte Varianten',
       useVariant: 'Variante {n} verwenden',
+      download: 'Variante {n} herunterladen',
+      downloadFailed: 'Das Bild konnte nicht gespeichert werden.',
       partial: '{n} Variante(n) sind fehlgeschlagen.',
       failed: 'Die KI-Anfrage ist fehlgeschlagen.',
       outdated:
         'Das Backend kennt die KI-Bilder noch nicht (veraltet). Bitte das Backend neu deployen.',
       noImageKey:
         'Die Bilderzeugung ist auf dem Server nicht eingerichtet: GEMINI_API_KEY in die Backend-.env eintragen (oder Backend veraltet).',
-      hint: 'Texte nicht ins Bild malen lassen – Titel besser danach im Editor als Text einblenden. Die gewählte Variante wird zum Hintergrundbild; Größe und Seitenverhältnis richten sich nach „Größe“.',
+      hint: 'Texte nicht ins Bild malen lassen – Titel besser danach im Editor als Text einblenden. ⬇ speichert eine Variante als Bilddatei. Die gewählte Variante wird zum Hintergrundbild; Größe und Seitenverhältnis richten sich nach „Größe“.',
     },
     projects: {
       title: 'Projekte',
@@ -651,12 +653,14 @@ const messages = {
       cancel: 'Cancel',
       variants: 'Generated variants',
       useVariant: 'Use variant {n}',
+      download: 'Download variant {n}',
+      downloadFailed: 'The image could not be saved.',
       partial: '{n} variant(s) failed.',
       failed: 'The AI request failed.',
       outdated: 'The backend does not support AI images yet (outdated). Please redeploy it.',
       noImageKey:
         'Image generation is not set up on the server: add GEMINI_API_KEY to the backend .env (or the backend is outdated).',
-      hint: 'Don’t let the AI paint text into the image – add titles afterwards as text overlays in the editor. The chosen variant becomes the background image; size and aspect ratio follow “Size”.',
+      hint: 'Don’t let the AI paint text into the image – add titles afterwards as text overlays in the editor. ⬇ saves a variant as an image file. The chosen variant becomes the background image; size and aspect ratio follow “Size”.',
     },
     projects: {
       title: 'Projects',

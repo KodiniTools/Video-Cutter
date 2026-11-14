@@ -91,7 +91,12 @@ async function savePickerDownload(blob: Blob, name: string): Promise<boolean> {
   const mime = blob.type || 'video/mp4'
   const ext = fileExtension(name)
   const types: SavePickerType[] = ext
-    ? [{ description: 'Video', accept: { [mime]: [`.${ext}`] } }]
+    ? [
+        {
+          description: mime.startsWith('image/') ? 'Bild' : 'Video',
+          accept: { [mime]: [`.${ext}`] },
+        },
+      ]
     : []
 
   try {
