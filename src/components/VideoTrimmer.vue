@@ -24,6 +24,7 @@ import {
   TEXT_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
   PREVIEW_UNSUPPORTED,
+  SPEED_UNSUPPORTED,
   type MediaCutRequest,
 } from '@/composables/useServerCut'
 import { useTextOverlayStore } from '@/stores/textOverlays'
@@ -55,6 +56,7 @@ import GraphicOverlayLayer from './GraphicOverlayLayer.vue'
 import GraphicPanel from './GraphicPanel.vue'
 import AiPanel from './AiPanel.vue'
 import AudioFadePanel from './AudioFadePanel.vue'
+import SpeedPanel from './SpeedPanel.vue'
 import ProjectPanel from './ProjectPanel.vue'
 import MergePreviewDialog, { type MergePreviewClip } from './MergePreviewDialog.vue'
 import { useAudioFadeStore } from '@/stores/audioFade'
@@ -417,9 +419,32 @@ const listRange = computed<ListRange | null>(() => {
 
 // --- Tempo aus der Liste: Editor-Player spielt so schnell wie im Gesamtvideo --
 /** Stufe des markierten Clips (nur, wenn er zusammengefügt wird). */
-const editorSpeedStep = computed(() => (selected.value?.include ? (selected.value.speed ?? 0) : 0))
+const listSpeedStep = computed(() => (selected.value?.include ? (selected.value.speed ?? 0) : 0))
+/**
+ * Karte „Tempo" (eigenständig, ganzes Video): gewählte, noch nicht
+ * angewendete Stufe. Gilt nur für das markierte Video; Wechsel setzt zurück.
+ */
+const videoSpeedStep = ref(0)
+/** Video, dessen Tempo gerade angewendet wurde (Hinweis „Herunterladen"). */
+const speedDoneId = ref<number | null>(null)
+watch(
+  () => selected.value?.id ?? null,
+  () => {
+    videoSpeedStep.value = 0
+    speedDoneId.value = null
+  },
+)
+watch(videoSpeedStep, (s) => {
+  if (s !== 0) speedDoneId.value = null
+})
+/** Player-Tempo: Vorschau der Karte „Tempo" hat Vorrang vor dem Listen-Tempo. */
+const editorSpeedStep = computed(() =>
+  videoSpeedStep.value !== 0 ? videoSpeedStep.value : listSpeedStep.value,
+)
 const editorSpeedText = computed(() =>
-  editorSpeedStep.value !== 0 ? formatSpeedFactor(editorSpeedStep.value, locale.value) : '',
+  videoSpeedStep.value === 0 && listSpeedStep.value !== 0
+    ? formatSpeedFactor(listSpeedStep.value, locale.value)
+    : '',
 )
 watch(
   [videoEl, editorSpeedStep],
@@ -560,7 +585,7 @@ function msLabel(sec: number): string {
 const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
 /** Laufender Vorgang (für die Fortschrittsanzeige am passenden Button). */
-const activeJob = ref<'cut' | 'merge' | 'preview' | 'text' | null>(null)
+const activeJob = ref<'cut' | 'merge' | 'preview' | 'text' | 'speed' | null>(null)
 /** Zuletzt erzeugtes Ergebnis (für den Hinweis „Fertig"). */
 const lastResultId = ref<number | null>(null)
 
@@ -585,6 +610,7 @@ function showJobError(e: unknown): void {
     [TEXT_UNSUPPORTED]: 'errors.textUnsupported',
     [GRAPHICS_UNSUPPORTED]: 'errors.graphicsUnsupported',
     [PREVIEW_UNSUPPORTED]: 'errors.previewUnsupported',
+    [SPEED_UNSUPPORTED]: 'errors.speedUnsupported',
   }
   store.setError(known[msg] ? t(known[msg]) : msg)
 }
@@ -620,6 +646,43 @@ async function onExport(): Promise<void> {
     // Alte Fassung behalten: Schneiden lässt sich rückgängig machen.
     library.replaceWithResult(item.id, media, resultFile(blob, media.name), { keepOld: true })
     store.clearMusic() // ist jetzt Teil des Ergebnisses
+    lastResultId.value = item.id
+  } catch (e) {
+    showJobError(e)
+  } finally {
+    activeJob.value = null
+  }
+}
+
+/** Markiertes Video ist fertig hochgeladen (Karte „Tempo"). */
+const canChangeSpeed = computed(
+  () => selected.value?.status === 'ready' && !!selected.value.mediaId && videoLength.value > 0,
+)
+/** Länge des markierten Videos (Server, sonst Player). */
+const videoLength = computed(() => selected.value?.duration || duration.value || 0)
+
+/**
+ * „Tempo anwenden": das ganze markierte Video im gewählten Tempo neu
+ * erzeugen (eigenständig, ohne Schneiden/Zusammenfügen). Das Ergebnis ersetzt
+ * es in der Liste (rückgängig machbar), danach „Herunterladen".
+ */
+async function onApplySpeed(): Promise<void> {
+  const item = selected.value
+  const step = videoSpeedStep.value
+  if (!item?.mediaId || !canChangeSpeed.value || busy.value || step === 0) return
+  store.setError('')
+  activeJob.value = 'speed'
+  try {
+    const { media, blob } = await cutMedia({
+      mediaId: item.mediaId,
+      segments: [{ start: 0, duration: videoLength.value }],
+      mode: 'reencode',
+      operation: 'keep',
+      speed: speedFactor(step),
+    })
+    library.replaceWithResult(item.id, media, resultFile(blob, media.name), { keepOld: true })
+    videoSpeedStep.value = 0
+    speedDoneId.value = item.id
     lastResultId.value = item.id
   } catch (e) {
     showJobError(e)
@@ -1653,6 +1716,18 @@ async function downloadResult(): Promise<void> {
 
             <p class="segments-hint">{{ t('segments.hint') }}</p>
           </section>
+
+          <!-- Tempo des ganzen Videos (eigenständig) -->
+          <SpeedPanel
+            v-model:step="videoSpeedStep"
+            :duration="videoLength"
+            :can-apply="canChangeSpeed"
+            :busy="busy"
+            :applying="activeJob === 'speed'"
+            :progress-label="`${statusLabel} ${progress}%`"
+            :done="speedDoneId !== null && speedDoneId === selected?.id"
+            @apply="onApplySpeed"
+          />
 
           <!-- KI: Sprache erkennen, Untertitel, Schnittvorschläge -->
           <AiPanel

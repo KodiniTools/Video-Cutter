@@ -35,6 +35,9 @@ export const MUSIC_UNSUPPORTED = 'MUSIC_UNSUPPORTED'
 /** Fehler-Kennung: Ton ein-/ausblenden verlangt, aber vom Backend nicht bestätigt. */
 export const AUDIO_FADE_UNSUPPORTED = 'AUDIO_FADE_UNSUPPORTED'
 
+/** Fehler-Kennung: Tempo eines einzelnen Videos verlangt, aber vom Backend nicht bestätigt. */
+export const SPEED_UNSUPPORTED = 'SPEED_UNSUPPORTED'
+
 /** Fehler-Kennung: Vorschau des Zusammenfügens verlangt, aber vom Backend nicht bestätigt. */
 export const PREVIEW_UNSUPPORTED = 'PREVIEW_UNSUPPORTED'
 
@@ -71,6 +74,8 @@ export interface JobStartResponse {
   mergeHold?: boolean
   /** Kennt der Server die Geschwindigkeit je Clip (`speed`/`mainSpeed`)? */
   clipSpeed?: boolean
+  /** Hat der Server das Tempo eines einzelnen Videos (`speed`) übernommen? */
+  videoSpeed?: boolean
 }
 
 /**
@@ -93,6 +98,7 @@ export function parseJobStart(text: string): JobStartResponse {
     preview?: unknown
     mergeHold?: unknown
     clipSpeed?: unknown
+    videoSpeed?: unknown
   }
   let data: Raw
   try {
@@ -119,6 +125,7 @@ export function parseJobStart(text: string): JobStartResponse {
     preview: data.preview === true,
     mergeHold: data.mergeHold === true,
     clipSpeed: data.clipSpeed === true,
+    videoSpeed: data.videoSpeed === true,
   }
 }
 
@@ -353,6 +360,8 @@ interface JobRequest {
   mainHold?: number
   /** Geschwindigkeit des Hauptvideos beim Zusammenfügen (Faktor, 1 = normal). */
   mainSpeed?: number
+  /** Tempo eines einzelnen Videos ändern (Faktor, 1 = normal; ohne Anhänge). */
+  speed?: number
 }
 
 /** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
@@ -385,6 +394,8 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   if (appends.length > 0 && hasSpeed(req.mainSpeed)) {
     form.append('mainSpeed', String(Number((req.mainSpeed as number).toFixed(6))))
   }
+  const wantsVideoSpeed = appends.length === 0 && hasSpeed(req.speed)
+  if (wantsVideoSpeed) form.append('speed', String(Number((req.speed as number).toFixed(6))))
   form.append('segments', JSON.stringify(segments))
   form.append('mode', mode)
   form.append('operation', operation)
@@ -497,6 +508,10 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   // Geschwindigkeit verlangt, aber nicht bestätigt -> veralteter Server
   // (würde den Clip stillschweigend in normaler Geschwindigkeit liefern).
   if (wantsSpeed && !started.clipSpeed) await abortJob(jobId, APPEND_UNSUPPORTED)
+
+  // Tempo eines einzelnen Videos verlangt, aber nicht bestätigt -> veralteter
+  // Server (würde sonst eine unveränderte Kopie liefern).
+  if (wantsVideoSpeed && !started.videoSpeed) await abortJob(jobId, SPEED_UNSUPPORTED)
 
   // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
   if (wantsFormat && !started.outputFormat) await abortJob(jobId, FORMAT_UNSUPPORTED)
@@ -612,6 +627,8 @@ export interface MediaCutRequest {
   mainHold?: number
   /** Geschwindigkeit des Hauptvideos (Faktor, 1 = normal); Segmente in Quellzeit. */
   mainSpeed?: number
+  /** Tempo des Videos selbst ändern (eigenständig, ohne Anhänge; Faktor). */
+  speed?: number
 }
 
 /** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
@@ -643,6 +660,7 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
       storeResult: true,
       mainHold: req.mainHold,
       mainSpeed: req.mainSpeed,
+      speed: req.speed,
     })
     currentJobId = null
     if (!mediaId) throw new Error(MEDIA_UNSUPPORTED)

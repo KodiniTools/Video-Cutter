@@ -408,6 +408,19 @@ const messages = {
       outdated:
         'Das Server-Backend ist veraltet und kennt die KI-Funktionen noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
     },
+    videoSpeed: {
+      title: 'Tempo',
+      intro:
+        'Ganzes Video schneller oder langsamer machen, ohne Schneiden oder Zusammenfügen. Der Player oben spielt sofort im gewählten Tempo.',
+      label: 'Tempo',
+      reset: 'Normales Tempo',
+      newLength: 'Neue Länge: {len} (bisher {old})',
+      apply: 'Tempo anwenden',
+      applyHint:
+        'Erstellt das Video im gewählten Tempo (Ton läuft mit, Tonhöhe bleibt). Es ersetzt das Video in der Liste und lässt sich rückgängig machen; danach „Herunterladen“.',
+      noVideo: 'Erst ein Video hochladen oder in der Liste markieren.',
+      done: 'Fertig: Das Video läuft jetzt im neuen Tempo. Mit „Herunterladen“ speichern.',
+    },
     audioFade: {
       title: 'Ton ein- und ausblenden',
       fadeIn: 'Am Anfang einblenden',
@@ -491,6 +504,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann den Ton noch nicht ein- und ausblenden. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder „Ton ein- und ausblenden“ abschalten.',
       mediaUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Videos speichern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      speedUnsupported:
+        'Das Server-Backend ist veraltet und kann das Tempo eines Videos noch nicht ändern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       previewUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Vorschau des Zusammenfügens erstellen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder direkt zusammenfügen.',
       textUnsupported:
@@ -900,6 +915,19 @@ const messages = {
       outdated:
         'The server backend is outdated and does not know the AI features yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
     },
+    videoSpeed: {
+      title: 'Speed',
+      intro:
+        'Make the whole video faster or slower, without cutting or joining. The player above plays at the chosen speed right away.',
+      label: 'Speed',
+      reset: 'Normal speed',
+      newLength: 'New length: {len} (was {old})',
+      apply: 'Apply speed',
+      applyHint:
+        'Creates the video at the chosen speed (audio follows, pitch is kept). It replaces the video in the list and can be undone; then use “Download”.',
+      noVideo: 'Upload a video or select one in the list first.',
+      done: 'Done: the video now plays at the new speed. Save it with “Download”.',
+    },
     audioFade: {
       title: 'Fade audio in and out',
       fadeIn: 'Fade in at the start',
@@ -982,6 +1010,8 @@ const messages = {
         'The server backend is outdated and cannot fade the audio yet. Please update the backend (deploy/deploy.sh without SKIP_API) or switch off “Fade audio in and out”.',
       mediaUnsupported:
         'The server backend is outdated and cannot store videos yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      speedUnsupported:
+        'The server backend is outdated and cannot change the speed of a video yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       previewUnsupported:
         'The server backend is outdated and cannot create a join preview yet. Please update the backend (deploy/deploy.sh without SKIP_API) or join directly.',
       textUnsupported:

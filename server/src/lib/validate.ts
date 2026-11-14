@@ -383,6 +383,11 @@ function parseSpeed(v: unknown, label: string): number {
   return Math.abs(n - 1) < 1e-6 ? 1 : n
 }
 
+/** `speed`: Tempo eines einzelnen Videos ändern (eigenständig, Faktor; fehlt = 1). */
+export function parseVideoSpeed(body: Record<string, unknown>): number {
+  return parseSpeed(body.speed, 'des Videos')
+}
+
 /** `mainSpeed`: Wiedergabegeschwindigkeit des Hauptvideos beim Zusammenfügen (Faktor). */
 export function parseMainSpeed(body: Record<string, unknown>): number {
   return parseSpeed(body.mainSpeed, 'des ersten Videos')

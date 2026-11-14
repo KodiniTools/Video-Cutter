@@ -68,6 +68,10 @@ Zusammenfügen laden nichts erneut hoch.
   (`setpts` + `atempo`, Tonhöhe bleibt) und in der Vorschau; Editor- und
   Zeilen-Player spielen im eingestellten Tempo. Von/Bis rechnen mit der
   Länge nach dem Tempo.
+- **Karte „Tempo“** (eigenständig): ganzes markiertes Video schneller oder
+  langsamer machen, ohne Schneiden/Zusammenfügen. Gleiche Skala; der Player
+  zeigt das Tempo sofort, „Tempo anwenden“ ersetzt das Video (rückgängig
+  machbar), danach „Herunterladen“. Server-Feld `speed` an `/api/cut`.
 - **🗑** löscht ein Video sofort vom Server (ein laufender Upload wird abgebrochen).
 - **Auto-Aufräumen:** Videos, die `MEDIA_TTL_SEC` (Standard 2 h) nicht benutzt
   wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`
