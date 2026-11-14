@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseMediaView, fetchMediaInfo, deleteMedia, MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
+import {
+  parseMediaView,
+  fetchMediaInfo,
+  deleteMedia,
+  createStillClip,
+  MEDIA_UNSUPPORTED,
+} from '@/lib/mediaApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -38,5 +44,28 @@ describe('mediaApi', () => {
     await expect(deleteMedia('a')).resolves.toBeUndefined()
     expect(fetchMock).toHaveBeenCalledWith('/api/media/a', { method: 'DELETE' })
     await expect(deleteMedia('a')).rejects.toThrow('kaputt')
+  })
+
+  it('createStillClip sendet Formular; altes Backend -> MEDIA_UNSUPPORTED', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('{"id":"m1","name":"Bild-Clip_5s.mp4","duration":5,"hasAudio":true}', {
+          status: 201,
+        }),
+      )
+      .mockResolvedValueOnce(new Response('{"error":"Nicht gefunden."}', { status: 404 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const req = { image: new Blob(['x']), duration: 5, width: 1280, height: 720, fps: 30 }
+    const m = await createStillClip(req)
+    expect(m).toMatchObject({ id: 'm1', duration: 5, hasAudio: true })
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/media/still')
+    const form = init.body as FormData
+    expect(form.get('duration')).toBe('5')
+    expect(form.get('width')).toBe('1280')
+    expect(form.get('fps')).toBe('30')
+    expect(form.get('image')).toBeInstanceOf(Blob)
+    await expect(createStillClip(req)).rejects.toThrow(MEDIA_UNSUPPORTED)
   })
 })

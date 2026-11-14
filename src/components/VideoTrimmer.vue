@@ -39,6 +39,7 @@ import Timeline from './Timeline.vue'
 import DropdownMenu from './DropdownMenu.vue'
 import CropOverlay from './CropOverlay.vue'
 import LibraryList from './LibraryList.vue'
+import StillClipPanel from './StillClipPanel.vue'
 import TextOverlayLayer from './TextOverlayLayer.vue'
 import TextPanel from './TextPanel.vue'
 import GraphicOverlayLayer from './GraphicOverlayLayer.vue'
@@ -877,6 +878,7 @@ async function downloadResult(): Promise<void> {
               />
               {{ t('library.add') }}
             </label>
+            <StillClipPanel :disabled="busy" />
 
             <LibraryList :disabled="busy" @remove="onRemoveItem" />
 

@@ -363,6 +363,23 @@ export const useLibraryStore = defineStore('library', () => {
   }
 
   /**
+   * Fügt einen erzeugten Clip (z. B. Bild-Clip) an Listenposition `index` ein
+   * (0 = ganz vorn, ≥ Länge = am Ende), merkt ihn fürs Zusammenfügen vor und markiert ihn,
+   * damit er sofort im Editor gestaltet werden kann.
+   */
+  function insertResult(media: MediaView, file: File, index: number): LibraryItem {
+    const item = applyMedia(newItem(file, { name: media.name || file.name }), media)
+    const next = [...items.value]
+    const at = Number.isFinite(index)
+      ? Math.min(Math.max(0, Math.trunc(index)), next.length)
+      : next.length
+    next.splice(at, 0, item)
+    items.value = next
+    selectedId.value = item.id
+    return item
+  }
+
+  /**
    * Lädt ein Video erneut hoch (z. B. weil es auf dem Server aufgeräumt wurde).
    * Löst auf, sobald es wieder bereit ist; wirft bei Fehler/Löschen.
    */
@@ -510,6 +527,7 @@ export const useLibraryStore = defineStore('library', () => {
     mergeState,
     applyMergeState,
     addResult,
+    insertResult,
     reupload,
     replaceAll,
     setDuration,
