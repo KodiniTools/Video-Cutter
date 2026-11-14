@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { itemLength, isItemTrimmed, MIN_LENGTH, type LibraryItem } from '@/stores/library'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 import { MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
+import type { TimelineEntry } from '@/lib/mergeTimeline'
 
 /**
  * Eine Zeile der Liste „Meine Videos": Vorschaubild, Name/Dauer, Markieren
@@ -22,6 +23,10 @@ const props = defineProps<{
   disabled: boolean
   /** Wird diese Zeile gerade gezogen? (nur Optik) */
   dragging?: boolean
+  /** Lage im Gesamtvideo (Von/Bis, Standbild); `null`/fehlt = (noch) nicht bekannt. */
+  entry?: TimelineEntry | null
+  /** Erster Clip des Gesamtvideos? (Von ist dann immer 0) */
+  first?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +34,8 @@ const emit = defineEmits<{
   (e: 'include', on: boolean): void
   (e: 'start', sec: number): void
   (e: 'end', sec: number | null): void
+  /** Von im Gesamtvideo; `null` = direkt nach dem vorigen Clip. */
+  (e: 'at', sec: number | null): void
   (e: 'reset'): void
   (e: 'move', delta: number): void
   (e: 'remove'): void
@@ -125,43 +132,56 @@ function onHandleDragStart(ev: DragEvent): void {
 
 const { t } = useI18n()
 
+/** „Clip ab": Startpunkt innerhalb des Clips. */
 const startInput = ref('')
+/** Von/Bis: Zeit im Gesamtvideo. */
+const atInput = ref('')
 const endInput = ref('')
 watch(
   () => props.item.start,
   (v) => (startInput.value = formatTimeMs(v)),
   { immediate: true },
 )
-// Ende leer = „bis zum Dateiende"; Platzhalter zeigt dann die Gesamtdauer.
 watch(
-  () => props.item.end,
-  (v) => (endInput.value = v === null ? '' : formatTimeMs(v)),
+  () => props.entry?.start,
+  (v) => (atInput.value = v === undefined ? '' : formatTimeMs(v)),
+  { immediate: true },
+)
+watch(
+  () => props.entry?.end,
+  (v) => (endInput.value = v === undefined ? '' : formatTimeMs(v)),
   { immediate: true },
 )
 
-const endPlaceholder = computed(() =>
-  props.item.duration > 0 ? formatTimeMs(props.item.duration) : t('append.toEnd'),
-)
-const trimmed = computed(() => isItemTrimmed(props.item))
+const trimmed = computed(() => isItemTrimmed(props.item) || props.item.at !== null)
 const usedLength = computed(() => itemLength(props.item))
 const progressPct = computed(() => Math.round(props.item.progress * 100))
 /** Fehlertext (veraltetes Backend übersetzt). */
 const errorText = computed(() =>
   props.item.error === MEDIA_UNSUPPORTED ? t('errors.mediaUnsupported') : props.item.error,
 )
+/** Hinweis zur Lage: Standbild in der Lücke danach bzw. vom nächsten Clip abgeschnitten. */
+const entryInfo = computed(() => {
+  const e = props.entry
+  if (!e) return ''
+  if (e.hold > 1e-3) return t('append.holdInfo', { sec: formatTimeMs(e.hold) })
+  if (usedLength.value - e.used > 1e-3) return t('append.cutInfo', { at: formatTimeMs(e.end) })
+  return ''
+})
 
-/** Rückmeldung zur letzten Von/Bis-Eingabe (statt die Eingabe still zu verwerfen). */
+/** Rückmeldung zur letzten Eingabe (statt die Eingabe still zu verwerfen). */
 const rangeNote = ref('')
 
 /**
- * Liest eine Zeit aus Von/Bis. „mm:ss:mmm" (Doppelpunkt statt Punkt vor den
- * drei Millisekunden-Ziffern) wird wie „mm:ss.mmm" verstanden.
+ * Liest eine Zeit. „mm:ss:mmm" (Doppelpunkt statt Punkt vor den drei
+ * Millisekunden-Ziffern) wird wie „mm:ss.mmm" verstanden.
  */
 function readTime(raw: string): number | null {
   const s = raw.trim()
   return parseTimeInput(/^(\d{1,2}:)?\d{1,2}:\d{3}$/.test(s) ? s.replace(/:(\d{3})$/, '.$1') : s)
 }
 
+/** „Clip ab" (Zeit im Clip). */
 function commitStart(): void {
   const raw = startInput.value.trim()
   const sec = readTime(raw)
@@ -178,31 +198,57 @@ function commitStart(): void {
   startInput.value = formatTimeMs(props.item.start)
 }
 
+/** Von (Zeit im Gesamtvideo); leer = direkt nach dem vorigen Clip. */
+function commitAt(): void {
+  const raw = atInput.value.trim()
+  const e = props.entry
+  if (!raw) {
+    rangeNote.value = ''
+    emit('at', null)
+  } else {
+    const sec = readTime(raw)
+    if (sec === null) {
+      rangeNote.value = t('append.timeInvalid', { value: raw })
+    } else {
+      rangeNote.value =
+        e && sec < e.minStart - 1e-3
+          ? t('append.atBeforePrev', { value: formatTimeMs(sec), min: formatTimeMs(e.minStart) })
+          : ''
+      emit('at', sec)
+    }
+  }
+  atInput.value = e ? formatTimeMs(e.start) : ''
+}
+
+/** Bis (Zeit im Gesamtvideo) -> Ende im Clip; leer = Clip bis zu seinem Ende. */
 function commitEnd(): void {
   const raw = endInput.value.trim()
+  const e = props.entry
   if (!raw) {
     rangeNote.value = ''
     emit('end', null)
-    return
-  }
-  const sec = readTime(raw)
-  const dur = props.item.duration
-  if (sec === null) {
-    rangeNote.value = t('append.timeInvalid', { value: raw })
-  } else {
-    if (dur > 0 && sec - dur > 1e-3) {
-      rangeNote.value = t('append.endBeyond', {
-        value: formatTimeMs(sec),
-        dur: formatTimeMs(dur),
-      })
-    } else if (sec < props.item.start + MIN_LENGTH) {
-      rangeNote.value = t('append.endBeforeStart', { from: formatTimeMs(props.item.start) })
+  } else if (e) {
+    const sec = readTime(raw)
+    const dur = props.item.duration
+    if (sec === null) {
+      rangeNote.value = t('append.timeInvalid', { value: raw })
+    } else if (sec < e.start + MIN_LENGTH) {
+      rangeNote.value = t('append.endBeforeStart', { from: formatTimeMs(e.start) })
+      emit('end', props.item.start + MIN_LENGTH)
     } else {
-      rangeNote.value = ''
+      const maxEnd = dur > 0 ? e.start + (dur - props.item.start) : Infinity
+      rangeNote.value =
+        sec - maxEnd > 1e-3
+          ? t('append.endBeyond', {
+              value: formatTimeMs(sec),
+              max: formatTimeMs(maxEnd),
+              len: formatTimeMs(dur - props.item.start),
+            })
+          : ''
+      emit('end', props.item.start + (Math.min(sec, maxEnd) - e.start))
     }
-    emit('end', sec)
   }
-  endInput.value = props.item.end === null ? '' : formatTimeMs(props.item.end)
+  endInput.value = e ? formatTimeMs(e.end) : ''
 }
 
 function resetRange(): void {
@@ -309,7 +355,7 @@ function resetRange(): void {
           :title="t('append.setFrom')"
           @click="setFromPlayer('start')"
         >
-          {{ t('append.from') }} ⇤
+          {{ t('append.clipFrom') }} ⇤
         </button>
         <span class="player-time">{{ formatTimeMs(playerTime) }}</span>
         <button
@@ -319,7 +365,7 @@ function resetRange(): void {
           :title="t('append.setTo')"
           @click="setFromPlayer('end')"
         >
-          ⇥ {{ t('append.to') }}
+          ⇥ {{ t('append.clipTo') }}
         </button>
         <button
           class="btn tiny ghost"
@@ -368,14 +414,15 @@ function resetRange(): void {
       <label class="range-field">
         <span>{{ t('append.from') }}</span>
         <input
-          v-model="startInput"
+          v-model="atInput"
           class="time"
           type="text"
           inputmode="decimal"
           :placeholder="t('time.placeholder')"
-          :disabled="disabled"
-          @change="commitStart"
-          @keydown.enter.prevent="commitStart"
+          :title="t('append.fromHint')"
+          :disabled="disabled || first || !entry"
+          @change="commitAt"
+          @keydown.enter.prevent="commitAt"
         />
       </label>
       <label class="range-field">
@@ -385,8 +432,9 @@ function resetRange(): void {
           class="time"
           type="text"
           inputmode="decimal"
-          :placeholder="endPlaceholder"
-          :disabled="disabled"
+          :placeholder="t('time.placeholder')"
+          :title="t('append.toHint')"
+          :disabled="disabled || !entry"
           @change="commitEnd"
           @keydown.enter.prevent="commitEnd"
         />
@@ -401,6 +449,23 @@ function resetRange(): void {
       >
         ↺
       </button>
+    </div>
+    <div v-if="item.include" class="clip-from">
+      <label class="clip-from-field">
+        <span>{{ t('append.clipFrom') }}</span>
+        <input
+          v-model="startInput"
+          class="time small"
+          type="text"
+          inputmode="decimal"
+          :placeholder="t('time.placeholder')"
+          :title="t('append.clipFromHint')"
+          :disabled="disabled"
+          @change="commitStart"
+          @keydown.enter.prevent="commitStart"
+        />
+      </label>
+      <small v-if="entryInfo" class="entry-info">{{ entryInfo }}</small>
     </div>
     <p v-if="item.include && rangeNote" class="range-note" role="status">{{ rangeNote }}</p>
   </li>
@@ -588,6 +653,31 @@ function resetRange(): void {
   display: flex;
   align-items: flex-end;
   gap: 6px;
+}
+.clip-from {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.clip-from-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-text-2);
+}
+.time.small {
+  width: 92px;
+  padding: 3px 4px;
+}
+.entry-info {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
 }
 .range-note {
   margin: 0;

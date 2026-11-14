@@ -66,6 +66,8 @@ export interface JobStartResponse {
   storeResult?: boolean
   /** Wird eine kleine Vorschau statt des endgültigen Ergebnisses erzeugt? */
   preview?: boolean
+  /** Kennt der Server Standbilder am Clip-Ende (`hold`/`mainHold`)? */
+  mergeHold?: boolean
 }
 
 /**
@@ -86,6 +88,7 @@ export function parseJobStart(text: string): JobStartResponse {
     audioFade?: unknown
     storeResult?: unknown
     preview?: unknown
+    mergeHold?: unknown
   }
   let data: Raw
   try {
@@ -110,6 +113,7 @@ export function parseJobStart(text: string): JobStartResponse {
     audioFade: data.audioFade === true,
     storeResult: data.storeResult === true,
     preview: data.preview === true,
+    mergeHold: data.mergeHold === true,
   }
 }
 
@@ -293,6 +297,8 @@ export interface AppendInput {
   position?: 'before' | 'after'
   /** Nur bei 'after': hinter dem n-ten Teil des Hauptvideos einfügen (1-basiert). */
   slot?: number
+  /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille). */
+  hold?: number
 }
 
 /** Gewünschtes Ausgabeformat. */
@@ -336,6 +342,8 @@ interface JobRequest {
   storeResult?: boolean
   /** Nur eine kleine, schnell kodierte Vorschau erzeugen (zum Download bereitgehalten). */
   preview?: boolean
+  /** Standbild (Sekunden) am Ende des Hauptvideos beim Zusammenfügen. */
+  mainHold?: number
 }
 
 /** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
@@ -357,6 +365,11 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   if (!(req.source instanceof File)) form.append('mediaId', req.source.mediaId)
   if (req.storeResult) form.append('storeResult', '1')
   if (req.preview) form.append('preview', '1')
+  const wantsHold =
+    appends.length > 0 && ((req.mainHold ?? 0) > 0 || appends.some((a) => (a.hold ?? 0) > 0))
+  if (appends.length > 0 && (req.mainHold ?? 0) > 0) {
+    form.append('mainHold', String(Number((req.mainHold as number).toFixed(3))))
+  }
   form.append('segments', JSON.stringify(segments))
   form.append('mode', mode)
   form.append('operation', operation)
@@ -400,6 +413,7 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
           ...(a.duration !== undefined ? { duration: a.duration } : {}),
           position: a.position ?? 'after',
           ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
+          ...(a.hold && a.hold > 0 ? { hold: Number(a.hold.toFixed(3)) } : {}),
         })),
       ),
     )
@@ -459,6 +473,10 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   ) {
     await abortJob(jobId, APPEND_UNSUPPORTED)
   }
+
+  // Standbild in einer Lücke verlangt, aber nicht bestätigt -> veralteter Server
+  // (würde die Lücke stillschweigend weglassen).
+  if (wantsHold && !started.mergeHold) await abortJob(jobId, APPEND_UNSUPPORTED)
 
   // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
   if (wantsFormat && !started.outputFormat) await abortJob(jobId, FORMAT_UNSUPPORTED)
@@ -570,6 +588,8 @@ export interface MediaCutRequest {
   seams?: (string | null)[]
   /** Ton am Anfang/Ende ein-/ausblenden (nur bei Videos mit Ton übergeben). */
   audioFade?: AudioFadeInput
+  /** Standbild (Sekunden) am Ende des Hauptvideos (Lücke vor dem nächsten Clip). */
+  mainHold?: number
 }
 
 /** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
@@ -599,6 +619,7 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
       seams: req.seams,
       audioFade: req.audioFade,
       storeResult: true,
+      mainHold: req.mainHold,
     })
     currentJobId = null
     if (!mediaId) throw new Error(MEDIA_UNSUPPORTED)
@@ -630,6 +651,7 @@ async function previewMerge(req: MediaCutRequest): Promise<Blob> {
       seams: req.seams,
       audioFade: req.audioFade,
       preview: true,
+      mainHold: req.mainHold,
     })
     const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
     if (!download.ok) throw new Error(await readError(download))

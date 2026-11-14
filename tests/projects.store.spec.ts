@@ -360,4 +360,16 @@ describe('parseProjectState', () => {
     expect(s.music).toBeNull()
     expect(() => parseProjectState(null)).toThrow()
   })
+
+  it('Von im Gesamtvideo: Zahl ≥ 0 übernommen, sonst direkt nach dem vorigen', () => {
+    const s = parseProjectState({
+      items: [
+        { media: 'a', at: 6 },
+        { media: 'b', at: -1 },
+        { media: 'c', at: 'x' },
+        { media: 'd' },
+      ],
+    })
+    expect(s.items.map((it) => it.at)).toEqual([6, null, null, null])
+  })
 })

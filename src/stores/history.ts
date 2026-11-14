@@ -432,7 +432,8 @@ export const useHistoryStore = defineStore('history', () => {
       () => (itemId.value === null ? null : graphics.listFor(itemId.value)),
       // Nur bearbeitbare Felder (nicht Upload-Fortschritt, der sonst die
       // Verzögerung ständig neu startet).
-      () => library.items.map((it) => `${it.id}:${it.start}:${it.end}:${it.include}`).join(),
+      () =>
+        library.items.map((it) => `${it.id}:${it.start}:${it.end}:${it.at}:${it.include}`).join(),
       () => (itemId.value === null ? null : (library.versionOf(itemId.value)?.file ?? null)),
       () => library.seamTransitions,
       () => library.normalizeAudio,

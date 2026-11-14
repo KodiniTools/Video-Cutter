@@ -194,6 +194,8 @@ export interface AppendMeta {
   position: AppendPosition
   /** Nur bei 'after': hinter dem n-ten Bereich des Hauptvideos (1-basiert); fehlt = am Ende. */
   slot?: number
+  /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille); fehlt = 0. */
+  hold?: number
 }
 
 /** Höchster sinnvoller Slot-Wert (größere Werte bedeuten ohnehin „am Ende"). */
@@ -339,8 +341,30 @@ export function parseAppendMeta(body: Record<string, unknown>, count: number): A
       }
       if (position === 'before') slot = undefined
     }
-    return slot === undefined ? { start, duration, position } : { start, duration, position, slot }
+    const hold = parseHold(m.hold, 'eines angehängten Videos')
+    const meta: AppendMeta =
+      slot === undefined ? { start, duration, position } : { start, duration, position, slot }
+    if (hold > 0) meta.hold = hold
+    return meta
   })
+}
+
+/** Höchstes Standbild am Clip-Ende (Sekunden). */
+export const MAX_HOLD_SEC = 600
+
+/** Liest eine Standbild-Dauer (fehlt/leer = 0). */
+function parseHold(v: unknown, label: string): number {
+  if (v === undefined || v === null || v === '') return 0
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0 || n > MAX_HOLD_SEC) {
+    throw new ValidationError(`Ungültiges Standbild ${label} (erlaubt: 0–${MAX_HOLD_SEC} s).`)
+  }
+  return n
+}
+
+/** `mainHold`: Standbild am Ende des Hauptvideos (letzter behaltener Bereich) beim Zusammenfügen. */
+export function parseMainHold(body: Record<string, unknown>): number {
+  return parseHold(body.mainHold, 'des ersten Videos')
 }
 
 /** Mindestlänge eines gekürzten angehängten Videos (Sekunden). */
