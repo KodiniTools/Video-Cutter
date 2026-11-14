@@ -156,4 +156,61 @@ describe('LibraryRow – Aktionen und Status', () => {
     await err.find('button.retry').trigger('click')
     expect(err.emitted('retry')).toHaveLength(1)
   })
+
+  describe('Von/Bis-Eingabe', () => {
+    async function typeInto(w: ReturnType<typeof mountRow>, which: 0 | 1, value: string) {
+      // setValue löst „input" und „change" aus (wie Verlassen des Feldes).
+      await w.findAll('.range input')[which].setValue(value)
+    }
+    // Clip wie in der Meldung: 14,72 s lang, Von 6, Bis leer.
+    const long = () => clip({ duration: 14.72, start: 6, end: null })
+
+    it('„mm:ss:mmm" (Doppelpunkt vor den ms) wird wie „mm:ss.mmm" übernommen', async () => {
+      const w = mountRow(long())
+      await typeInto(w, 1, '00:10:500')
+      expect(w.emitted('end')).toEqual([[10.5]])
+      expect(w.find('.range-note').exists()).toBe(false)
+    })
+
+    it('Bis hinter dem Videoende: wird gemeldet statt still verworfen', async () => {
+      const w = mountRow(long())
+      await typeInto(w, 1, '00:19:729')
+      expect(w.emitted('end')).toEqual([[19.729]])
+      const note = w.find('.range-note').text()
+      expect(note).toContain('00:19.729')
+      expect(note).toContain('00:14.720')
+    })
+
+    it('ungültige Zeit: Hinweis, nichts gemeldet', async () => {
+      const w = mountRow(long())
+      await typeInto(w, 1, '00:19:72')
+      expect(w.emitted('end')).toBeUndefined()
+      expect(w.find('.range-note').text()).toContain('00:19:72')
+    })
+
+    it('Bis vor Von und Von hinter dem Ende werden gemeldet', async () => {
+      const w = mountRow(long())
+      await typeInto(w, 1, '3')
+      expect(w.find('.range-note').text()).toContain('00:06.000')
+      await typeInto(w, 0, '20')
+      expect(w.emitted('start')).toEqual([[20]])
+      expect(w.find('.range-note').text()).toContain('00:20.000')
+    })
+
+    it('gültige Eingabe, leeres Bis und ↺ löschen den Hinweis', async () => {
+      const w = mountRow(long())
+      await typeInto(w, 1, 'abc')
+      expect(w.find('.range-note').exists()).toBe(true)
+      await typeInto(w, 1, '10')
+      expect(w.find('.range-note').exists()).toBe(false)
+      await typeInto(w, 1, 'abc')
+      await typeInto(w, 1, '')
+      expect(w.emitted('end')).toEqual([[10], [null]])
+      expect(w.find('.range-note').exists()).toBe(false)
+      await typeInto(w, 1, 'abc')
+      await w.find('.range button').trigger('click')
+      expect(w.emitted('reset')).toHaveLength(1)
+      expect(w.find('.range-note').exists()).toBe(false)
+    })
+  })
 })

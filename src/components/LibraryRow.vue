@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { itemLength, isItemTrimmed, type LibraryItem } from '@/stores/library'
+import { itemLength, isItemTrimmed, MIN_LENGTH, type LibraryItem } from '@/stores/library'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 import { MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
 
@@ -150,21 +150,64 @@ const errorText = computed(() =>
   props.item.error === MEDIA_UNSUPPORTED ? t('errors.mediaUnsupported') : props.item.error,
 )
 
+/** Rückmeldung zur letzten Von/Bis-Eingabe (statt die Eingabe still zu verwerfen). */
+const rangeNote = ref('')
+
+/**
+ * Liest eine Zeit aus Von/Bis. „mm:ss:mmm" (Doppelpunkt statt Punkt vor den
+ * drei Millisekunden-Ziffern) wird wie „mm:ss.mmm" verstanden.
+ */
+function readTime(raw: string): number | null {
+  const s = raw.trim()
+  return parseTimeInput(/^(\d{1,2}:)?\d{1,2}:\d{3}$/.test(s) ? s.replace(/:(\d{3})$/, '.$1') : s)
+}
+
 function commitStart(): void {
-  const sec = parseTimeInput(startInput.value)
-  if (sec !== null) emit('start', sec)
+  const raw = startInput.value.trim()
+  const sec = readTime(raw)
+  const dur = props.item.duration
+  if (sec === null) {
+    rangeNote.value = raw ? t('append.timeInvalid', { value: raw }) : ''
+  } else {
+    rangeNote.value =
+      dur > 0 && sec > dur - MIN_LENGTH
+        ? t('append.startBeyond', { value: formatTimeMs(sec), dur: formatTimeMs(dur) })
+        : ''
+    emit('start', sec)
+  }
   startInput.value = formatTimeMs(props.item.start)
 }
 
 function commitEnd(): void {
   const raw = endInput.value.trim()
   if (!raw) {
+    rangeNote.value = ''
     emit('end', null)
     return
   }
-  const sec = parseTimeInput(raw)
-  if (sec !== null) emit('end', sec)
+  const sec = readTime(raw)
+  const dur = props.item.duration
+  if (sec === null) {
+    rangeNote.value = t('append.timeInvalid', { value: raw })
+  } else {
+    if (dur > 0 && sec - dur > 1e-3) {
+      rangeNote.value = t('append.endBeyond', {
+        value: formatTimeMs(sec),
+        dur: formatTimeMs(dur),
+      })
+    } else if (sec < props.item.start + MIN_LENGTH) {
+      rangeNote.value = t('append.endBeforeStart', { from: formatTimeMs(props.item.start) })
+    } else {
+      rangeNote.value = ''
+    }
+    emit('end', sec)
+  }
   endInput.value = props.item.end === null ? '' : formatTimeMs(props.item.end)
+}
+
+function resetRange(): void {
+  rangeNote.value = ''
+  emit('reset')
 }
 </script>
 
@@ -354,11 +397,12 @@ function commitEnd(): void {
         :disabled="!trimmed || disabled"
         :title="t('append.full')"
         :aria-label="t('append.full')"
-        @click="emit('reset')"
+        @click="resetRange"
       >
         ↺
       </button>
     </div>
+    <p v-if="item.include && rangeNote" class="range-note" role="status">{{ rangeNote }}</p>
   </li>
 </template>
 
@@ -544,6 +588,12 @@ function commitEnd(): void {
   display: flex;
   align-items: flex-end;
   gap: 6px;
+}
+.range-note {
+  margin: 0;
+  font-size: var(--ds-text-xs);
+  line-height: 1.4;
+  color: var(--ds-warning, var(--ds-danger));
 }
 .range-field {
   flex: 1;

@@ -54,7 +54,7 @@ export type SeamPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
 export const MAX_MERGE_ITEMS = 6
 
 /** Mindestlänge eines verwendeten Bereichs in Sekunden. */
-const MIN_LENGTH = 0.05
+export const MIN_LENGTH = 0.05
 
 /** Schlüssel einer Nahtstelle aus ihren beiden Nachbarn. */
 export function seamKey(left: Pick<LibraryItem, 'id'>, right: Pick<LibraryItem, 'id'>): string {

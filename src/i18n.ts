@@ -143,6 +143,12 @@ const messages = {
       to: 'Bis',
       toEnd: 'Ende',
       full: 'Ganzes Video verwenden',
+      timeInvalid:
+        '„{value}“ ist keine gültige Zeit. Bitte als mm:ss.mmm eingeben, z. B. 00:12.500.',
+      endBeyond:
+        'Bis {value} liegt hinter dem Ende dieses Videos ({dur}). Es wird bis zum Ende verwendet.',
+      startBeyond: 'Von {value} liegt hinter dem Ende dieses Videos ({dur}).',
+      endBeforeStart: 'Bis muss nach Von ({from}) liegen.',
     },
     anim: {
       menu: 'Animation',
@@ -617,6 +623,10 @@ const messages = {
       to: 'To',
       toEnd: 'End',
       full: 'Use whole video',
+      timeInvalid: '“{value}” is not a valid time. Please enter mm:ss.mmm, e.g. 00:12.500.',
+      endBeyond: 'To {value} is past the end of this video ({dur}). It is used up to the end.',
+      startBeyond: 'From {value} is past the end of this video ({dur}).',
+      endBeforeStart: 'To must be after From ({from}).',
     },
     anim: {
       menu: 'Animation',
