@@ -7,6 +7,7 @@ import {
   lookKey,
   renderGraphic,
   stackOrder,
+  STILL_FRAME,
   type GraphicFrame,
   type GraphicOverlay,
 } from '@/lib/graphicOverlay'
@@ -156,7 +157,7 @@ const rendered = computed<Rendered[]>(() => {
     // Angehalten: ruhende Ansicht für alle Grafiken im Zeitbereich (wie bei Texten).
     const frame: GraphicFrame =
       paused.value && (isSel || animated.visible)
-        ? { visible: animated.visible, opacity: 1, dy: 0 }
+        ? { ...STILL_FRAME, visible: animated.visible }
         : animated
     if (!frame.visible && !isSel) return []
     const img = imageFor(o, previewH(o, H, bh))
@@ -172,6 +173,11 @@ const rendered = computed<Rendered[]>(() => {
           width: `${img.width * scale}px`,
           height: `${img.height * scale}px`,
           opacity: String(frame.visible ? frame.opacity : 0.35),
+          // Drehen/Skalieren um den Mittelpunkt – wie rotate/scale auf dem Server.
+          transform:
+            frame.angle || frame.scale !== 1
+              ? `translate(-50%, -50%) rotate(${frame.angle}deg) scale(${frame.scale})`
+              : 'translate(-50%, -50%)',
         },
       },
     ]

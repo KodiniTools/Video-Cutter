@@ -384,4 +384,25 @@ describe('parseProjectState', () => {
     })
     expect(s.items.map((it) => it.at)).toEqual([6, null, null, null])
   })
+
+  it('Grafik-Animationen: gespeichert übernommen, alte Projekte ohne Feld -> keine', () => {
+    const base = { kind: 'symbol', start: 0, end: 2, x: 0.5, y: 0.5 }
+    const s = parseProjectState({
+      items: [
+        {
+          media: 'a',
+          graphics: [
+            { ...base, animation: 'pop', loop: 'spin' },
+            { ...base, animation: 'slide' },
+            { ...base, animation: 'quatsch', loop: 'quatsch' },
+          ],
+        },
+      ],
+    })
+    expect(s.items[0].graphics.map((g) => [g.animation, g.loop])).toEqual([
+      ['pop', 'spin'],
+      ['slide', 'none'],
+      ['fade', 'none'],
+    ])
+  })
 })

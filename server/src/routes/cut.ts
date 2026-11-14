@@ -100,6 +100,7 @@ export const SERVER_FEATURES = [
   'mergeHold',
   'clipSpeed',
   'videoSpeed',
+  'graphicMotion',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

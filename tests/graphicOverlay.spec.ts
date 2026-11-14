@@ -5,6 +5,7 @@ import {
   clampGraphic,
   defaultGraphic,
   graphicFrame,
+  hasMotion,
   isValidGraphic,
   imageHeight,
   lookKey,
@@ -98,7 +99,67 @@ describe('graphicFrame (wie die FFmpeg-Filter des Servers)', () => {
   })
 
   it('none: sofort voll sichtbar', () => {
-    expect(graphicFrame(g({ animation: 'none' }), 1)).toEqual({ visible: true, opacity: 1, dy: 0 })
+    expect(graphicFrame(g({ animation: 'none' }), 1)).toEqual({
+      visible: true,
+      opacity: 1,
+      dy: 0,
+      scale: 1,
+      angle: 0,
+    })
+  })
+})
+
+describe('Aufploppen und Dauer-Animationen (wie scale/rotate/enable des Servers)', () => {
+  it('pop: 0,4 -> 1,12 (bei 0,6·m) -> 1, Einblenden über m/2', () => {
+    const o = g({ animation: 'pop' }) // 3 s -> m = 500 ms, a = 300 ms
+    expect(graphicFrame(o, 1).scale).toBeCloseTo(0.4)
+    expect(graphicFrame(o, 1.3).scale).toBeCloseTo(1.12)
+    expect(graphicFrame(o, 1.5).scale).toBeCloseTo(1)
+    expect(graphicFrame(o, 1.125).opacity).toBeCloseTo(0.5)
+    expect(graphicFrame(o, 2).scale).toBe(1)
+  })
+
+  it('pulse: 1 … 1,12 mit 1 s Periode, kombiniert mit pop', () => {
+    const o = g({ loop: 'pulse', animation: 'none' })
+    expect(graphicFrame(o, 1).scale).toBeCloseTo(1)
+    expect(graphicFrame(o, 1.5).scale).toBeCloseTo(1.12)
+    expect(graphicFrame(o, 2).scale).toBeCloseTo(1)
+    expect(graphicFrame(g({ loop: 'pulse', animation: 'pop' }), 1).scale).toBeCloseTo(0.4)
+  })
+
+  it('wobble/spin: Drehung in Grad (im Uhrzeigersinn)', () => {
+    expect(graphicFrame(g({ loop: 'wobble' }), 1.2).angle).toBeCloseTo(10)
+    expect(graphicFrame(g({ loop: 'wobble' }), 1.6).angle).toBeCloseTo(-10)
+    expect(graphicFrame(g({ loop: 'spin' }), 1.75).angle).toBeCloseTo(90)
+    expect(graphicFrame(g({ loop: 'spin' }), 3.25).angle).toBeCloseTo(270)
+  })
+
+  it('float: nach oben zuerst, ±1,5 % Bildhöhe', () => {
+    expect(graphicFrame(g({ loop: 'float', animation: 'none' }), 1.5).dy).toBeCloseTo(-0.015)
+    expect(graphicFrame(g({ loop: 'float', animation: 'none' }), 2.5).dy).toBeCloseTo(0.015)
+  })
+
+  it('blink: 0,6 s sichtbar, 0,4 s aus (bleibt „visible“ für die Auswahl)', () => {
+    const o = g({ loop: 'blink', animation: 'none' })
+    expect(graphicFrame(o, 1.5).opacity).toBe(1)
+    expect(graphicFrame(o, 1.7)).toMatchObject({ visible: true, opacity: 0 })
+    expect(graphicFrame(o, 2.05).opacity).toBe(1)
+  })
+
+  it('clampGraphic: unbekannte Werte (alte/kaputte Projekte) -> Standard', () => {
+    const bad = clampGraphic({ ...g(), animation: 'zoom', loop: 'jump' } as unknown as GraphicData)
+    expect(bad.animation).toBe('fade')
+    expect(bad.loop).toBe('none')
+    const { loop: _l, ...old } = g()
+    expect(clampGraphic(old as GraphicData).loop).toBe('none')
+    expect(defaultGraphic('emoji').loop).toBe('none')
+  })
+
+  it('hasMotion: nur pop oder Dauer-Animation brauchen das neue Backend', () => {
+    expect(hasMotion(g())).toBe(false)
+    expect(hasMotion(g({ animation: 'slide' }))).toBe(false)
+    expect(hasMotion(g({ animation: 'pop' }))).toBe(true)
+    expect(hasMotion(g({ loop: 'blink' }))).toBe(true)
   })
 })
 

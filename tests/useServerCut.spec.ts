@@ -8,6 +8,7 @@ import {
   MUSIC_UNSUPPORTED,
   MEDIA_UNSUPPORTED,
   GRAPHICS_UNSUPPORTED,
+  GRAPHIC_MOTION_UNSUPPORTED,
   AUDIO_FADE_UNSUPPORTED,
   PREVIEW_UNSUPPORTED,
   startTextJob,
@@ -471,6 +472,7 @@ describe('startTextJob – Grafiken (Formen/Emojis)', () => {
     start: 0,
     end: 2,
     animation: 'none' as const,
+    loop: 'none' as const,
   }
 
   beforeEach(() => {
@@ -513,6 +515,44 @@ describe('startTextJob – Grafiken (Formen/Emojis)', () => {
     await expect(startTextJob('m1', [], undefined, [graphic])).resolves.toBe('t3')
     const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string)
     expect(body.graphics).toEqual([graphic])
+  })
+
+  it('Dauer-Animation + Backend ohne graphicMotion -> GRAPHIC_MOTION_UNSUPPORTED, kein Job', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["graphics"]}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"features":["graphics"]}', { status: 200 }))
+    await expect(startTextJob('m1', [], undefined, [{ ...graphic, loop: 'spin' }])).rejects.toThrow(
+      GRAPHIC_MOTION_UNSUPPORTED,
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('Aufploppen + fehlende Bestätigung graphicMotion -> Job abbrechen', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["graphics","graphicMotion"]}'))
+      .mockResolvedValueOnce(new Response('{"features":["graphics","graphicMotion"]}'))
+      .mockResolvedValueOnce(
+        new Response('{"jobId":"t4","text":true,"graphics":true}', { status: 202 }),
+      )
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    await expect(
+      startTextJob('m1', [], undefined, [{ ...graphic, animation: 'pop' }]),
+    ).rejects.toThrow(GRAPHIC_MOTION_UNSUPPORTED)
+    expect(fetchMock).toHaveBeenCalledWith('/api/cut/t4', { method: 'DELETE' })
+  })
+
+  it('neues Backend: Dauer-Animation wird mitgesendet', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('{"features":["graphics","graphicMotion"]}'))
+      .mockResolvedValueOnce(new Response('{"features":["graphics","graphicMotion"]}'))
+      .mockResolvedValueOnce(
+        new Response('{"jobId":"t5","text":true,"graphics":true,"graphicMotion":true}', {
+          status: 202,
+        }),
+      )
+    const g = { ...graphic, loop: 'pulse' as const }
+    await expect(startTextJob('m1', [], undefined, [g])).resolves.toBe('t5')
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string).graphics).toEqual([g])
   })
 })
 

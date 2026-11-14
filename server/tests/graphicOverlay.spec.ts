@@ -7,8 +7,11 @@ import { deflateSync } from 'node:zlib'
 import {
   buildGraphicsFilterComplex,
   graphicFilter,
+  graphicFps,
   graphicInputArgs,
   graphicTopLeft,
+  rotationBox,
+  GRAPHIC_LOOPS,
   parseGraphicOverlays,
   pngSize,
   MAX_GRAPHICS,
@@ -95,7 +98,8 @@ describe('parseGraphicOverlays', () => {
     expect(bad({ png: 'Zm9v' })).toThrow(/kein PNG/)
     expect(bad({ png: 'not base64!' })).toThrow(ValidationError)
     expect(bad({ png: 42 })).toThrow(ValidationError)
-    expect(bad({ animation: 'pop' })).toThrow(/Animation/)
+    expect(bad({ animation: 'typewriter' })).toThrow(/Animation/)
+    expect(bad({ loop: 'jump' })).toThrow(/Dauer-Animation/)
     expect(bad({ start: 4, end: 4.1 })).toThrow(/Ende/)
     expect(bad({ x: 'a' })).toThrow(ValidationError)
     expect(() => parseGraphicOverlays(Array(MAX_GRAPHICS + 1).fill(base), 10)).toThrow(/Maximal/)
@@ -180,6 +184,80 @@ describe('Grafik-Filter', () => {
 
   it('Feature-Flag in /api/health', () => {
     expect(SERVER_FEATURES).toContain('graphics')
+    expect(SERVER_FEATURES).toContain('graphicMotion')
+  })
+
+  it('ohne loop-Feld (alter Client): keine Dauer-Animation, Filter wie bisher', () => {
+    expect(g!.loop).toBe('none')
+    const [withNone] = parseGraphicOverlays([{ ...base, loop: 'none' }], 10)
+    expect(graphicFilter(withNone!, 1, '[0:v]', '[v1]', 640, 360)).toBe(
+      graphicFilter(g!, 1, '[0:v]', '[v1]', 640, 360),
+    )
+  })
+
+  it('pop: Größe 0,4 -> 1,12 -> 1, zentriert über die aktuelle Größe', () => {
+    const f = graphicFilter({ ...g!, animation: 'pop' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(f).toContain('fade=t=in:st=1:d=0.25:alpha=1')
+    expect(f).toContain(
+      "scale=w='max(1,trunc(iw*if(between(t,0.9,3.1),if(lt((t-1),0.3),0.4+0.72*min(1,max(0,(t-1)/0.3)),1.12-0.12*min(1,max(0,((t-1)-0.3)/0.2))),1)))'",
+    )
+    expect(f).toContain(':eval=frame')
+    expect(f).toContain("overlay=x='320-overlay_w/2':y='180-overlay_h/2'")
+  })
+
+  it('pulse: Größe pulsiert, kombinierbar mit fade', () => {
+    const f = graphicFilter({ ...g!, loop: 'pulse' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(f).toContain('fade=t=in')
+    expect(f).toContain('trunc(iw*if(between(t,0.9,3.1),(1+0.06*(1-cos(2*PI*(t-1)/1))),1))')
+  })
+
+  it('wobble/spin: drehen in festem Quadrat (Diagonale), transparent gefüllt', () => {
+    expect(rotationBox(41, 21)).toBe(47)
+    const w = graphicFilter({ ...g!, loop: 'wobble' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(w).toContain(
+      "rotate=a='0.1745*sin(2*PI*(t-1)/0.8)':ow=47:oh=47:c=black@0:enable='between(t,0.9,3.1)'",
+    )
+    // Fester Mittelpunkt: (320-23.5, 180-23.5) gerundet.
+    expect(w).toContain('overlay=x=297:y=157')
+    const s = graphicFilter({ ...g!, loop: 'spin' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(s).toContain("rotate=a='2*PI*(t-1)/3'")
+    // spin + pop: erst drehen, dann skalieren
+    const sp = graphicFilter(
+      { ...g!, loop: 'spin', animation: 'pop' },
+      1,
+      '[0:v]',
+      '[v1]',
+      640,
+      360,
+    )
+    expect(sp.indexOf('rotate=')).toBeLessThan(sp.indexOf('scale='))
+  })
+
+  it('float: y schwebt auf und ab, slide kombiniert', () => {
+    const f = graphicFilter({ ...g!, loop: 'float' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(f).toContain("y='170-5.4*sin(2*PI*(t-1)/2)'")
+    const s = graphicFilter(
+      { ...g!, loop: 'float', animation: 'slide' },
+      1,
+      '[0:v]',
+      '[v1]',
+      640,
+      360,
+    )
+    expect(s).toContain("y='170+22*max(0,1-(t-1)/0.5)-5.4*sin(2*PI*(t-1)/2)'")
+  })
+
+  it('blink: zusätzlich im enable-Ausdruck', () => {
+    const f = graphicFilter({ ...g!, loop: 'blink' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(f).toContain("enable='gte(t,0.999)*lt(t,2.999)*lt(mod((t-1),1),0.6)'")
+  })
+
+  it('Takt der Standbilder = Bildrate des Videos (sonst 30)', () => {
+    expect(graphicFps(25)).toBe('25')
+    expect(graphicFps(30000 / 1001)).toBe(String(30000 / 1001))
+    expect(graphicFps(0)).toBe('30')
+    expect(graphicFps(500)).toBe('30')
+    expect(graphicInputArgs(['/a.png'], 10, 25)).toContain('25')
   })
 })
 
@@ -239,6 +317,48 @@ describe('Grafiken mit echtem FFmpeg einbrennen', () => {
       )
       expect(dur).toBeGreaterThan(1.8)
       expect(dur).toBeLessThan(2.5)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(!hasFfmpeg)('alle Dauer-Animationen (mit pop) laufen durch FFmpeg', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'vc-graphic-loop-'))
+    try {
+      const input = path.join(dir, 'in.mp4')
+      execFileSync('ffmpeg', [
+        '-v',
+        'error',
+        '-f',
+        'lavfi',
+        '-i',
+        'testsrc=size=320x180:rate=25:duration=2',
+        '-pix_fmt',
+        'yuv420p',
+        input,
+      ])
+      const loops = GRAPHIC_LOOPS.filter((l) => l !== 'none')
+      const paths = loops.map((_, i) => path.join(dir, `g${i}.png`))
+      paths.forEach((p) => writeFileSync(p, png))
+      const graphics = parseGraphicOverlays(
+        loops.map((loop) => ({ ...base, start: 0.2, end: 1.8, animation: 'pop', loop })),
+        2,
+      )
+      const out = path.join(dir, 'out.mp4')
+      const args = buildOverlayArgs({
+        inputPath: input,
+        assPath: null,
+        fontsDir: dir,
+        graphics,
+        graphicPaths: paths,
+        width: 320,
+        height: 180,
+        duration: 2,
+        fps: 25,
+        outputPath: out,
+      }).filter((a, i, all) => a !== '-progress' && all[i - 1] !== '-progress')
+      execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { timeout: 60_000 })
+      expect(existsSync(out)).toBe(true)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

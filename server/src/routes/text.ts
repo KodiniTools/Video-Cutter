@@ -56,6 +56,8 @@ export function buildOverlayArgs(params: {
   width: number
   height: number
   duration: number
+  /** Bildrate des Videos (0 = unbekannt) – Takt der Grafik-Standbilder. */
+  fps?: number
   outputPath: string
 }): string[] {
   const { inputPath, assPath, fontsDir, graphics, graphicPaths, outputPath } = params
@@ -68,7 +70,7 @@ export function buildOverlayArgs(params: {
     ...PROGRESS,
     '-i',
     inputPath,
-    ...graphicInputArgs(graphicPaths, params.duration),
+    ...graphicInputArgs(graphicPaths, params.duration, params.fps ?? 0),
     '-filter_complex',
     buildGraphicsFilterComplex(graphics, params.width, params.height, textFilter),
     '-map',
@@ -93,7 +95,7 @@ textRouter.get('/fonts', (_req: Request, res: Response) => {
  * Bibliotheks-Video ein. Das Ergebnis wird als neues
  * Bibliotheks-Video gespeichert (wie „Schneiden" mit storeResult); Fortschritt
  * und Abbruch laufen über die bekannten Job-Endpunkte (/api/cut/:id/…).
- * Antwort: 202 { jobId, text: true, graphics: true, storeResult: true }
+ * Antwort: 202 { jobId, text: true, graphics: true, graphicMotion: true, storeResult: true }
  */
 textRouter.post(
   '/text',
@@ -139,6 +141,7 @@ textRouter.post(
         width,
         height,
         duration,
+        fps: item.info.fps ?? 0,
         outputPath,
       })
       const baseName = safeBaseName(item.name).replace(/_text$/, '')
@@ -154,7 +157,9 @@ textRouter.post(
         outputName: `${baseName}_text.${outExt}`,
       })
       void jobManager.run(job, args, duration, customFontsEnv())
-      res.status(202).json({ jobId: id, text: true, graphics: true, storeResult: true })
+      res
+        .status(202)
+        .json({ jobId: id, text: true, graphics: true, graphicMotion: true, storeResult: true })
     } catch (err) {
       await Promise.all(ownedFiles.map((p) => rm(p, { force: true }).catch(() => {})))
       await mediaStore.release([item.id])
