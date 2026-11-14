@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useLibraryStore, itemLength, MAX_MERGE_ITEMS } from '@/stores/library'
+import { useLibraryStore, itemLength, isItemTrimmed, MAX_MERGE_ITEMS } from '@/stores/library'
 import { useHistoryStore } from '@/stores/history'
 import {
   useServerCut,
@@ -54,6 +54,7 @@ import { useAudioFadeStore } from '@/stores/audioFade'
 import { useAiStore } from '@/stores/ai'
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 import { useSelectionPreview } from '@/composables/useSelectionPreview'
+import { useListRangePlayback, type ListRange } from '@/composables/useListRangePlayback'
 
 const { t } = useI18n()
 const store = useVideoEditorStore()
@@ -326,6 +327,8 @@ function onLoadedMetadata(): void {
   readDuration()
   const el = videoEl.value
   if (el) store.setVideoDimensions(el.videoWidth, el.videoHeight)
+  // Gekürzter Clip: gleich das erste verwendete Bild zeigen (Abspielen ab Von).
+  listRangePlayback.showStart()
 }
 
 function onDurationChange(): void {
@@ -388,6 +391,27 @@ const preview = useSelectionPreview({
 })
 const previewActive = preview.active
 const previewLoop = preview.loop
+
+// --- Von/Bis aus der Liste: Markierung + Abspielen nur dieses Bereichs --------
+/** Fürs Zusammenfügen verwendeter Bereich des Clips im Editor (`null` = ungekürzt). */
+const listRange = computed<ListRange | null>(() => {
+  const it = selected.value
+  if (!it || !isItemTrimmed(it)) return null
+  return { from: it.start, to: it.end ?? Infinity }
+})
+/** Dasselbe für die Zeitleiste (Ende auf die Dauer begrenzt). */
+const listRangeBand = computed(() => {
+  const r = listRange.value
+  if (!r || !(duration.value > 0)) return null
+  return { start: r.from, end: Math.min(r.to, duration.value) }
+})
+const listRangePlayback = useListRangePlayback({
+  video: videoEl,
+  range: listRange,
+  fps,
+  seek: seekTo,
+  suspended: () => previewActive.value || seekingForDuration,
+})
 
 function stepCursor(dir: 1 | -1): void {
   scrubTo(frameSeekTime(stepFrames(currentTime.value, dir, fps.value, duration.value), fps.value))
@@ -1248,12 +1272,23 @@ async function downloadResult(): Promise<void> {
             :start="startTime"
             :end="endTime"
             :current="currentTime"
+            :used="listRangeBand"
             @update:start="store.setStart"
             @update:end="store.setEnd"
             @seek="seekTo"
             @grab="preview.holdForEdit()"
             @release="preview.rangeEdited"
           />
+
+          <p v-if="listRangeBand" class="list-range-hint">
+            <span class="list-range-swatch" aria-hidden="true"></span>
+            {{
+              t('listRange.hint', {
+                from: formatTimeMs(listRangeBand.start),
+                to: formatTimeMs(listRangeBand.end),
+              })
+            }}
+          </p>
 
           <!-- Vorschau nur des ausgewählten Bereichs (im Player oben, mit Overlays) -->
           <div class="preview-row" :class="{ idle: !hasVideo }" :inert="!hasVideo">
@@ -2167,6 +2202,25 @@ async function downloadResult(): Promise<void> {
   padding: 6px 9px;
   font-size: var(--ds-text-md);
   line-height: 1;
+}
+
+/* Hinweis zum Bereich aus der Liste (Farbe wie die Leiste in der Timeline) */
+.list-range-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.list-range-swatch {
+  flex: none;
+  width: 18px;
+  height: 4px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-success);
 }
 
 /* Auswahl-Vorschau unter der Timeline */

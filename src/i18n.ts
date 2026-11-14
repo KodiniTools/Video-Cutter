@@ -116,6 +116,9 @@ const messages = {
       stop: '■ Vorschau stoppen',
       loop: 'Schleife',
     },
+    listRange: {
+      hint: 'Fürs Zusammenfügen verwendet: {from} – {to} (Von/Bis in der Liste). Abspielen startet bei Von und hält bei Bis.',
+    },
     segments: {
       title: 'Ausschnitte',
       add: 'Ausschnitt hinzufügen',
@@ -584,6 +587,9 @@ const messages = {
       play: '▶ Play selection',
       stop: '■ Stop preview',
       loop: 'Loop',
+    },
+    listRange: {
+      hint: 'Used for merging: {from} – {to} (From/To in the list). Playback starts at From and stops at To.',
     },
     segments: {
       title: 'Segments',
