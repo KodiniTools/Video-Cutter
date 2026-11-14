@@ -117,7 +117,7 @@ describe('aiApi: Bild-Ergebnisse prüfen', () => {
     expect(() => parseImagePrompt({})).toThrow()
     expect(
       parseGeneratedImages({ images: [{ id: 'a', mime: 'image/png' }, { x: 1 }], failed: 1 }),
-    ).toEqual({ images: [{ id: 'a', mime: 'image/png' }], failed: 1 })
+    ).toMatchObject({ images: [{ id: 'a', mime: 'image/png' }], failed: 1 })
     expect(() => parseGeneratedImages({ images: [] })).toThrow()
   })
 })

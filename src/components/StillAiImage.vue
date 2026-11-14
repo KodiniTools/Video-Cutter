@@ -18,6 +18,7 @@ import {
   type ImageStyle,
 } from '@/lib/aiApi'
 import { saveFile } from '@/lib/download'
+import StillGallery from './StillGallery.vue'
 
 /**
  * KI-Hintergrund für einen Bild-Clip: Claude schreibt aus Stichworten, Stil
@@ -157,7 +158,10 @@ async function generate(): Promise<void> {
     )
     clearVariants()
     variants.value = files.map((file) => ({ file, url: URL.createObjectURL(file) }))
-    if (res.failed > 0) notice.value = t('stillAi.partial', { n: res.failed })
+    notice.value = [res.failed > 0 ? t('stillAi.partial', { n: res.failed }) : '', res.galleryError]
+      .filter(Boolean)
+      .join(' ')
+    if (res.saved) galleryRefresh.value++
     choose(0)
   } catch (e) {
     if (!(e instanceof Error && e.message === AI_CANCELLED)) error.value = message(e)
@@ -165,6 +169,19 @@ async function generate(): Promise<void> {
     run.value = null
     setPhase(null)
   }
+}
+
+// --- Galerie (dauerhaft gespeicherte Bilder) ---
+const galleryOpen = ref(false)
+const galleryRefresh = ref(0)
+
+function onGalleryPick(file: File): void {
+  selected.value = -1
+  emit('pick', file)
+}
+
+function onGalleryPrompt(text: string): void {
+  prompt.value = text.slice(0, MAX_IMAGE_PROMPT)
 }
 
 function choose(i: number): void {
@@ -323,6 +340,23 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <p class="hint">{{ t('stillAi.hint') }}</p>
+
+    <button
+      type="button"
+      class="btn small"
+      :aria-expanded="galleryOpen"
+      data-test="gallery-toggle"
+      @click="galleryOpen = !galleryOpen"
+    >
+      {{ galleryOpen ? t('gallery.close') : t('gallery.open') }}
+    </button>
+    <StillGallery
+      v-if="galleryOpen"
+      :disabled="busy || disabled"
+      :refresh-key="galleryRefresh"
+      @pick="onGalleryPick"
+      @prompt="onGalleryPrompt"
+    />
   </div>
 </template>
 

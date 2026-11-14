@@ -147,6 +147,9 @@ export function parseImagePrompt(data: unknown): string {
 export function parseGeneratedImages(data: unknown): {
   images: GeneratedImageRef[]
   failed: number
+  /** In der Galerie gespeicherte Bilder; `null` = Backend ohne Galerie. */
+  saved: number | null
+  galleryError: string
 } {
   const d = isRecord(data) ? data : {}
   const list = Array.isArray(d.images) ? d.images : []
@@ -155,7 +158,12 @@ export function parseGeneratedImages(data: unknown): {
     .filter((i) => typeof i.id === 'string' && i.id !== '')
     .map((i) => ({ id: i.id as string, mime: typeof i.mime === 'string' ? i.mime : 'image/png' }))
   if (images.length === 0) throw new Error('Ungültiges Ergebnis (keine Bilder).')
-  return { images, failed: finite(d.failed) ? d.failed : 0 }
+  return {
+    images,
+    failed: finite(d.failed) ? d.failed : 0,
+    saved: finite(d.saved) ? d.saved : null,
+    galleryError: typeof d.galleryError === 'string' ? d.galleryError : '',
+  }
 }
 
 /** Lädt ein erzeugtes Bild als Datei (für Vorschau und Bild-Clip). */
@@ -166,6 +174,79 @@ export async function fetchGeneratedImage(ref: GeneratedImageRef, name: string):
   const type = blob.type || ref.mime
   const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
   return new File([blob], `${name}.${ext}`, { type })
+}
+
+// --- Galerie der KI-Bilder (dauerhaft auf dem Server) ------------------------------
+
+export interface GalleryImage {
+  id: string
+  mime: string
+  prompt: string
+  createdAt: number
+  size: number
+}
+
+export interface GalleryList {
+  images: GalleryImage[]
+  totalBytes: number
+}
+
+export function parseGallery(data: unknown): GalleryList {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.images) ? d.images : []
+  const images = list
+    .filter(isRecord)
+    .filter((i) => typeof i.id === 'string' && i.id !== '')
+    .map((i) => ({
+      id: i.id as string,
+      mime: typeof i.mime === 'string' ? i.mime : 'image/png',
+      prompt: typeof i.prompt === 'string' ? i.prompt : '',
+      createdAt: finite(i.createdAt) ? i.createdAt : 0,
+      size: finite(i.size) ? i.size : 0,
+    }))
+  return { images, totalBytes: finite(d.totalBytes) ? d.totalBytes : 0 }
+}
+
+/** Alle gespeicherten KI-Bilder, neueste zuerst. */
+export async function fetchGallery(): Promise<GalleryList> {
+  const res = await fetch(`${API_BASE}/api/ai/gallery`)
+  if (!res.ok) throw await readError(res)
+  return parseGallery(await res.json())
+}
+
+export function galleryThumbUrl(id: string): string {
+  return `${API_BASE}/api/ai/gallery/${encodeURIComponent(id)}/thumb`
+}
+
+function imageExt(type: string): string {
+  return type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png'
+}
+
+/** Dateiname eines Galerie-Bildes: ki-bild-JJJJMMTT-HHMMSS.<ext> (Ortszeit). */
+export function galleryFileName(img: GalleryImage): string {
+  const d = new Date(img.createdAt)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const stamp = Number.isNaN(d.getTime())
+    ? img.id.slice(0, 8)
+    : `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  return `ki-bild-${stamp}.${imageExt(img.mime)}`
+}
+
+/** Lädt das Original eines Galerie-Bildes als Datei. */
+export async function fetchGalleryFile(img: GalleryImage): Promise<File> {
+  const res = await fetch(`${API_BASE}/api/ai/gallery/${encodeURIComponent(img.id)}/file`)
+  if (!res.ok) throw await readError(res)
+  const blob = await res.blob()
+  return new File([blob], galleryFileName(img), { type: blob.type || img.mime })
+}
+
+/** Löscht ein Galerie-Bild endgültig vom Server. */
+export async function deleteGalleryImage(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/ai/gallery/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  // 404 = schon weg: gilt als gelöscht.
+  if (!res.ok && res.status !== 404) throw await readError(res)
 }
 
 async function readError(res: Response): Promise<Error> {

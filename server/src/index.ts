@@ -14,12 +14,15 @@ import { jobManager } from './lib/jobs'
 import { initCustomFonts } from './lib/customFonts'
 import { aiRouter, aiStatus } from './routes/ai'
 import { aiJobs } from './lib/aiJobs'
+import { gallery } from './lib/gallery'
 import { createApiRateLimit } from './lib/rateLimits'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
   await mkdir(config.projectsDir, { recursive: true })
   console.log(`Projekte: ${config.projectsDir}`)
+  await gallery.init()
+  console.log(`Galerie (KI-Bilder): ${gallery.list().length} Bilder in ${config.galleryDir}`)
   const fonts = await initCustomFonts(config.customFontsDir, config.tmpDir)
   console.log(`Eigene Schriften: ${fonts.length} aus ${config.customFontsDir}`)
   const ai = aiStatus()
