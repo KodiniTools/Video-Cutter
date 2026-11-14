@@ -361,6 +361,18 @@ describe('parseProjectState', () => {
     expect(() => parseProjectState(null)).toThrow()
   })
 
+  it('Tempo: gültige Stufe übernommen, sonst normal (alte Projekte ohne Feld)', () => {
+    const s = parseProjectState({
+      items: [
+        { media: 'a', speed: 1.5 },
+        { media: 'b', speed: 'x' },
+        { media: 'c' },
+        { media: 'd', speed: -9 },
+      ],
+    })
+    expect(s.items.map((it) => it.speed)).toEqual([1.5, 0, 0, -2.5])
+  })
+
   it('Von im Gesamtvideo: Zahl ≥ 0 übernommen, sonst direkt nach dem vorigen', () => {
     const s = parseProjectState({
       items: [

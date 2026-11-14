@@ -622,6 +622,42 @@ export interface AppendClip {
   slot?: number
   /** Letztes Bild danach so lange stehen lassen (Sekunden, mit Stille). Standard 0. */
   hold?: number
+  /** Wiedergabegeschwindigkeit (Faktor, 1 = normal). Standard 1. */
+  speed?: number
+}
+
+/** Erlaubter Bereich der Wiedergabegeschwindigkeit je Clip (Faktor). */
+export const MIN_CLIP_SPEED = 0.25
+export const MAX_CLIP_SPEED = 4
+
+/** Geschwindigkeit normieren: ungültig/fehlt -> 1, sonst auf den erlaubten Bereich begrenzt. */
+export function clipSpeed(speed: number | undefined): number {
+  if (speed === undefined || !Number.isFinite(speed) || speed <= 0) return 1
+  return Math.min(MAX_CLIP_SPEED, Math.max(MIN_CLIP_SPEED, speed))
+}
+
+/** Länge im Ergebnis eines Clips mit `duration` Sekunden Quellmaterial bei Geschwindigkeit `speed`. */
+export function spedDuration(duration: number, speed?: number): number {
+  return duration / clipSpeed(speed)
+}
+
+/**
+ * `atempo`-Kette für den Faktor (Tonhöhe bleibt). Ein einzelnes `atempo`
+ * erlaubt in älteren FFmpeg-Versionen nur 0,5–2, daher ggf. mehrere.
+ */
+export function atempoFilters(speed: number): string[] {
+  let f = clipSpeed(speed)
+  const out: string[] = []
+  while (f > 2 + 1e-9) {
+    out.push('atempo=2')
+    f /= 2
+  }
+  while (f < 0.5 - 1e-9) {
+    out.push('atempo=0.5')
+    f /= 0.5
+  }
+  if (Math.abs(f - 1) > 1e-6) out.push(`atempo=${f.toFixed(6)}`)
+  return out
 }
 
 /**
@@ -686,6 +722,8 @@ export interface MergeArgsInput {
   preview?: boolean
   /** Standbild (Sekunden) am Ende des letzten behaltenen Bereichs des Hauptvideos. */
   mainHold?: number
+  /** Wiedergabegeschwindigkeit des Hauptvideos (Faktor, gilt für alle seine Bereiche). Standard 1. */
+  mainSpeed?: number
 }
 
 /** Länge eines Clips im Ergebnis: verwendete Länge plus Standbild am Ende. */
@@ -930,6 +968,7 @@ export function buildMergeArgs({
   audioFade,
   preview = false,
   mainHold = 0,
+  mainSpeed = 1,
 }: MergeArgsInput): string[] {
   const W = evenPx(width)
   const H = evenPx(height)
@@ -942,10 +981,12 @@ export function buildMergeArgs({
       '-i',
       a.path,
     ],
-    duration: clipSpan(a.duration, a.hold),
+    // -t = Quellmaterial; im Ergebnis zählt die Länge nach der Geschwindigkeit.
+    duration: clipSpan(spedDuration(a.duration, a.speed), a.hold),
     hold: a.hold && a.hold > 0 ? a.hold : 0,
     hasAudio: a.hasAudio,
     crop: undefined as CropRect | undefined,
+    speed: clipSpeed(a.speed),
   })
   const lastKeep = keep.length - 1
   const mainClip = (r: Segment, index: number) => ({
@@ -957,10 +998,14 @@ export function buildMergeArgs({
       '-i',
       inputPath,
     ],
-    duration: index === lastKeep ? clipSpan(r.duration, mainHold) : r.duration,
+    duration:
+      index === lastKeep
+        ? clipSpan(spedDuration(r.duration, mainSpeed), mainHold)
+        : spedDuration(r.duration, mainSpeed),
     hold: index === lastKeep && mainHold > 0 ? mainHold : 0,
     hasAudio: mainHasAudio,
     crop,
+    speed: clipSpeed(mainSpeed),
   })
 
   const clips = mergeSequence(keep.length, appends).map((item) =>
@@ -983,12 +1028,17 @@ export function buildMergeArgs({
   let filter = ''
   clips.forEach((c, i) => {
     const pre = c.crop ? [buildCropFilter(c.crop)] : []
+    // Geschwindigkeit: Zeitstempel VOR fps= umrechnen, damit danach wieder
+    // gleichmäßig MERGE_FPS Bilder entstehen (schneller = Bilder fallen weg,
+    // langsamer = Bilder werden wiederholt). Ton per atempo (Tonhöhe bleibt).
+    if (c.speed !== 1) pre.push(`setpts=(PTS-STARTPTS)/${c.speed.toFixed(6)}`)
     const vfx = ['setsar=1', `fps=${MERGE_FPS}`, 'format=yuv420p', 'setpts=PTS-STARTPTS']
-    // Stille (anullsrc) braucht keine Lautheits-Angleichung.
+    // Stille (anullsrc) braucht keine Lautheits-Angleichung; sie hat schon die Länge im Ergebnis.
     const afx = [
       ...(normalizeAudio && c.hasAudio ? [LOUDNORM_FILTER] : []),
       AUDIO_NORM,
       'asetpts=PTS-STARTPTS',
+      ...(c.hasAudio ? atempoFilters(c.speed) : []),
     ]
     // Standbild am Ende: letztes Bild klonen, Ton mit Stille auffüllen
     // (anullsrc hat die volle Länge schon).

@@ -30,7 +30,7 @@ vi.mock('@/lib/mediaApi', () => ({
   deleteMedia: (id: string) => deleteMedia(id),
 }))
 
-const { useLibraryStore, seamKey, itemLength, isItemTrimmed, MAX_MERGE_ITEMS } =
+const { useLibraryStore, seamKey, itemLength, itemSpan, isItemTrimmed, MAX_MERGE_ITEMS } =
   await import('@/stores/library')
 
 const vid = (name: string) => new File([new Uint8Array([0])], name, { type: 'video/mp4' })
@@ -248,6 +248,32 @@ describe('library store – Zusammenfügen', () => {
     expect(lib.items[1].at).toBe(12)
     lib.setAt(b.id, Number.NaN)
     expect(lib.items[1].at).toBeNull()
+  })
+
+  it('Tempo: Länge im Gesamtvideo = Länge / Faktor; in Zusammenfügen-Einstellungen enthalten', async () => {
+    const lib = await readyLib(2) // je 10 s
+    const [a, b] = lib.items
+    expect(lib.items[0].speed).toBe(0)
+    lib.setSpeed(a.id, 1) // 2×
+    expect(itemSpan(lib.items[0])).toBe(5)
+    expect(itemLength(lib.items[0])).toBe(10) // Quellmaterial unverändert
+    expect(lib.timelineById.get(b.id)).toMatchObject({ start: 5, end: 15 })
+    expect(lib.timeline?.total).toBe(15)
+    lib.setSpeed(b.id, -1) // 0,5×
+    expect(lib.timeline?.total).toBe(25)
+    lib.setSpeed(b.id, 7) // begrenzt
+    expect(lib.items[1].speed).toBe(2.5)
+    lib.setSpeed(b.id, 0.3) // auf 0,5er-Stufe gerundet
+    expect(lib.items[1].speed).toBe(0.5)
+    const st = lib.mergeState()
+    expect(st.ranges[a.id].speed).toBe(1)
+    lib.setSpeed(a.id, 0)
+    lib.resetRange(a.id) // ↺ (Von/Bis) lässt das Tempo in Ruhe
+    lib.applyMergeState(st)
+    expect(lib.items[0].speed).toBe(1)
+    // Alte Stände ohne Tempo -> normal
+    lib.applyMergeState({ ...st, ranges: { [a.id]: { start: 0, end: null, include: true } } })
+    expect(lib.items[0].speed).toBe(0)
   })
 
   it('Reihenfolge: move/moveBy (Drag & Drop, ↑↓)', async () => {

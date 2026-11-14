@@ -21,6 +21,7 @@ const clip = (over: Partial<LibraryItem> = {}): LibraryItem => ({
   start: 2,
   end: 6,
   at: null,
+  speed: 0,
   include: true,
   status: 'ready',
   progress: 1,
@@ -217,6 +218,31 @@ describe('LibraryRow – Aktionen und Status', () => {
       await typeInto(w, 1, '00:10.000')
       // 2 s im Clip + (10 − 5) s = 7 s im Clip
       expect(w.emitted('end')).toEqual([[7]])
+    })
+
+    it('Tempo: Bis wird mit dem Faktor in Clip-Zeit umgerechnet, Grenze = Clip-Länge / Faktor', async () => {
+      // 2× (Stufe +1): 3 s im Gesamtvideo = 6 s Quellmaterial
+      const w = mountWith(
+        video({ start: 2, speed: 1 }),
+        entry({ start: 5, end: 11.36, used: 6.36 }),
+      )
+      await typeInto(w, 1, '00:08.000')
+      expect(w.emitted('end')).toEqual([[8]])
+      // Clip ab 2 s ist 12,729 s lang -> bei 2× reicht er bis 5 + 6,3645 s
+      await typeInto(w, 1, '00:20.000')
+      expect(w.emitted('end')![1][0]).toBeCloseTo(14.729, 6)
+      expect(w.find('.range-note').text()).toContain('00:11.36')
+    })
+
+    it('Tempo-Regler meldet die Stufe, ↺ setzt auf 0; Mini-Player spielt im Tempo', async () => {
+      const w = mountWith(video({ speed: -1 }))
+      expect(w.find('.speed-value').text()).toContain('0,5×')
+      await w.find('.speed-range').setValue('1.5')
+      await w.find('.speed button').trigger('click')
+      expect(w.emitted('speed')).toEqual([[1.5], [0]])
+      await w.find('.thumb-btn').trigger('click')
+      await w.vm.$nextTick()
+      expect((w.find('video.player').element as HTMLVideoElement).playbackRate).toBe(0.5)
     })
 
     it('Bis 00:19:729 passt genau (5 s + 14,729 s), kein Hinweis', async () => {

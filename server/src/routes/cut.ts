@@ -10,6 +10,7 @@ import {
   computeKeepRanges,
   mergeOutputDuration,
   clipSpan,
+  spedDuration,
   mergeSequence,
   mergeTargetSize,
   outputDurationFor,
@@ -31,6 +32,7 @@ import {
   parseSeamTransitions,
   resolveAppendRange,
   parseMainHold,
+  parseMainSpeed,
   safeExt,
   safeBaseName,
   ValidationError,
@@ -94,6 +96,7 @@ export const SERVER_FEATURES = [
   'stillClip',
   'mergePreview',
   'mergeHold',
+  'clipSpeed',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -208,6 +211,8 @@ cutRouter.post(
       const audioFade = parseAudioFade(req.body ?? {})
       // Standbild am Ende des Hauptvideos (nur beim Zusammenfügen mit angehängten Videos).
       const mainHold = appendSrcs.length > 0 ? parseMainHold(req.body ?? {}) : 0
+      // Geschwindigkeit je Clip (nur beim Zusammenfügen mit angehängten Videos).
+      const mainSpeed = appendSrcs.length > 0 ? parseMainSpeed(req.body ?? {}) : 1
       if (preview && !useMerge) {
         throw new ValidationError('Die Vorschau gibt es nur beim Zusammenfügen.')
       }
@@ -271,6 +276,7 @@ cutRouter.post(
             position: appendMeta[i].position,
             slot: appendMeta[i].slot,
             ...(appendMeta[i].hold ? { hold: appendMeta[i].hold } : {}),
+            ...(appendMeta[i].speed ? { speed: appendMeta[i].speed } : {}),
           }
         })
         // Übergänge je Nahtstelle: Anzahl muss zur Gesamtreihenfolge passen.
@@ -308,14 +314,19 @@ cutRouter.post(
           audioFade,
           preview,
           mainHold,
+          mainSpeed,
         })
         // Reihenfolge ist für die Gesamtdauer egal (Summe minus Überlappungen).
         outputDuration = mergeOutputDuration(
           [
-            ...keep.map((r, i) =>
-              i === keep.length - 1 ? { ...r, duration: clipSpan(r.duration, mainHold) } : r,
-            ),
-            ...appends.map((a) => ({ start: 0, duration: clipSpan(a.duration, a.hold) })),
+            ...keep.map((r, i) => {
+              const d = spedDuration(r.duration, mainSpeed)
+              return { ...r, duration: i === keep.length - 1 ? clipSpan(d, mainHold) : d }
+            }),
+            ...appends.map((a) => ({
+              start: 0,
+              duration: clipSpan(spedDuration(a.duration, a.speed), a.hold),
+            })),
           ],
           transition,
           seams,
@@ -391,6 +402,7 @@ cutRouter.post(
         storeResult,
         preview,
         mergeHold: appendSrcs.length > 0,
+        clipSpeed: appendSrcs.length > 0,
       })
     } catch (err) {
       await removeFiles(allPaths)

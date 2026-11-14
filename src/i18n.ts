@@ -118,6 +118,7 @@ const messages = {
     },
     listRange: {
       hint: 'Fürs Zusammenfügen verwendeter Teil dieses Clips: {from} – {to} (Zeit im Clip). Abspielen startet dort und hält am Ende des Bereichs.',
+      speed: 'Tempo {factor}: Der Player spielt diesen Clip so schnell wie im Gesamtvideo.',
     },
     segments: {
       title: 'Ausschnitte',
@@ -150,6 +151,10 @@ const messages = {
       clipFromHint: 'Clip ab: Ab dieser Stelle im Clip wird er verwendet (Anfang kürzen).',
       holdInfo: 'Danach bleibt das letzte Bild {sec} stehen (Lücke bis zum nächsten Clip).',
       cutInfo: 'Endet bei {at}, weil der nächste Clip dort beginnt.',
+      speed: 'Tempo',
+      speedHint:
+        'Wiedergabegeschwindigkeit im Gesamtvideo: 0 = normal, Plus = schneller (+1 = 2×), Minus = langsamer (−1 = 0,5×). Ton läuft mit, Tonhöhe bleibt.',
+      speedReset: 'Normales Tempo',
       total: 'Gesamtdauer: {total}',
       timeInvalid:
         '„{value}“ ist keine gültige Zeit. Bitte als mm:ss.mmm eingeben, z. B. 00:12.500.',
@@ -217,6 +222,7 @@ const messages = {
       clips: 'Lage im Gesamtvideo (Von – Bis · Länge):',
       trimmed: 'gekürzt',
       hold: '+ {sec} Standbild',
+      speed: 'Tempo {factor}',
     },
     text: {
       title: 'Text',
@@ -609,6 +615,7 @@ const messages = {
     },
     listRange: {
       hint: 'Part of this clip used for joining: {from} – {to} (time within the clip). Playback starts there and stops at the end of the range.',
+      speed: 'Speed {factor}: the player plays this clip as fast as in the joined video.',
     },
     segments: {
       title: 'Segments',
@@ -642,6 +649,10 @@ const messages = {
       clipFromHint: 'Clip from: the clip is used from this point in the clip (trim the start).',
       holdInfo: 'Afterwards the last frame is held for {sec} (gap until the next clip).',
       cutInfo: 'Ends at {at} because the next clip starts there.',
+      speed: 'Speed',
+      speedHint:
+        'Playback speed in the joined video: 0 = normal, plus = faster (+1 = 2×), minus = slower (−1 = 0.5×). Audio follows, pitch is kept.',
+      speedReset: 'Normal speed',
       total: 'Total length: {total}',
       timeInvalid: '“{value}” is not a valid time. Please enter mm:ss.mmm, e.g. 00:12.500.',
       endBeyond:
@@ -708,6 +719,7 @@ const messages = {
       clips: 'Position in the joined video (from – to · length):',
       trimmed: 'trimmed',
       hold: '+ {sec} still frame',
+      speed: 'speed {factor}',
     },
     text: {
       title: 'Text',

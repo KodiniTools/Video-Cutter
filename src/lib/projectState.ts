@@ -1,4 +1,5 @@
 import { parseAudioFadeSettings, type AudioFadeSettings } from './audioFade'
+import { normalizeSpeedStep } from './clipSpeed'
 import {
   clampGraphic,
   defaultGraphic,
@@ -37,6 +38,8 @@ export interface ProjectItemState {
   include: boolean
   /** Von im Gesamtvideo; fehlt/`null` = direkt nach dem vorigen Clip. */
   at?: number | null
+  /** Geschwindigkeit als Stufe −2,5 … +2,5; fehlt = 0 (normal). */
+  speed?: number
   texts: TextOverlay[]
   /** Bild-Grafiken verweisen per `image` auf einen Schlüssel in `images`. */
   graphics: GraphicOverlay[]
@@ -165,6 +168,7 @@ export function parseProjectState(raw: unknown): ProjectState {
     end: typeof it.end === 'number' && Number.isFinite(it.end) ? it.end : null,
     include: it.include !== false,
     at: typeof it.at === 'number' && Number.isFinite(it.at) && it.at >= 0 ? it.at : null,
+    speed: normalizeSpeedStep(it.speed ?? 0),
     texts: Array.isArray(it.texts)
       ? it.texts.map(parseText).filter((t): t is TextOverlay => t !== null)
       : [],

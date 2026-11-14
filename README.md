@@ -63,6 +63,11 @@ Zusammenfügen laden nichts erneut hoch.
 - **„Zusammenfügen"** verbindet alle angehakten Videos (**„Beim Zusammenfügen
   verwenden"**, max. 6) in Listenreihenfolge, jeweils mit **Von/Bis** gekürzt.
   Das Ergebnis kommt als **neues** Video in die Liste (zunächst nicht angehakt).
+- **Tempo** je Video in der Liste: Stufe −2,5 … +2,5 (0 = normal, +1 = 2×,
+  −1 = 0,5×, +2,5 = 3,5×, −2,5 ≈ 0,29×). Wirkt echt beim Zusammenfügen
+  (`setpts` + `atempo`, Tonhöhe bleibt) und in der Vorschau; Editor- und
+  Zeilen-Player spielen im eingestellten Tempo. Von/Bis rechnen mit der
+  Länge nach dem Tempo.
 - **🗑** löscht ein Video sofort vom Server (ein laufender Upload wird abgebrochen).
 - **Auto-Aufräumen:** Videos, die `MEDIA_TTL_SEC` (Standard 2 h) nicht benutzt
   wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`

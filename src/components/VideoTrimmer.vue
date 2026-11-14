@@ -3,7 +3,14 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
-import { useLibraryStore, itemLength, isItemTrimmed, MAX_MERGE_ITEMS } from '@/stores/library'
+import {
+  useLibraryStore,
+  itemLength,
+  itemSpan,
+  isItemTrimmed,
+  MAX_MERGE_ITEMS,
+} from '@/stores/library'
+import { formatSpeedFactor, speedFactor } from '@/lib/clipSpeed'
 import { useHistoryStore } from '@/stores/history'
 import {
   useServerCut,
@@ -56,7 +63,7 @@ import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 import { useSelectionPreview } from '@/composables/useSelectionPreview'
 import { useListRangePlayback, type ListRange } from '@/composables/useListRangePlayback'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = useVideoEditorStore()
 const {
   objectUrl,
@@ -397,12 +404,34 @@ const previewLoop = preview.loop
 const listRange = computed<ListRange | null>(() => {
   const it = selected.value
   if (!it) return null
-  // Vom nächsten Clip abgeschnitten -> nur bis dorthin.
+  // Vom nächsten Clip abgeschnitten -> nur bis dorthin (e.used = Zeit im
+  // Gesamtvideo, im Clip also mal Geschwindigkeit).
   const e = it.include ? library.timelineById.get(it.id) : undefined
-  const cutByNext = e !== undefined && itemLength(it) - e.used > 1e-3
+  const cutByNext = e !== undefined && itemSpan(it) - e.used > 1e-3
   if (!isItemTrimmed(it) && !cutByNext) return null
-  return { from: it.start, to: cutByNext ? it.start + e.used : (it.end ?? Infinity) }
+  return {
+    from: it.start,
+    to: cutByNext ? it.start + e.used * speedFactor(it.speed) : (it.end ?? Infinity),
+  }
 })
+
+// --- Tempo aus der Liste: Editor-Player spielt so schnell wie im Gesamtvideo --
+/** Stufe des markierten Clips (nur, wenn er zusammengefügt wird). */
+const editorSpeedStep = computed(() => (selected.value?.include ? (selected.value.speed ?? 0) : 0))
+const editorSpeedText = computed(() =>
+  editorSpeedStep.value !== 0 ? formatSpeedFactor(editorSpeedStep.value, locale.value) : '',
+)
+watch(
+  [videoEl, editorSpeedStep],
+  ([el, step]) => {
+    if (!el) return
+    const f = speedFactor(step)
+    // defaultPlaybackRate bleibt auch nach einem Wechsel der Datei erhalten.
+    el.defaultPlaybackRate = f
+    el.playbackRate = f
+  },
+  { immediate: true },
+)
 /** Dasselbe für die Zeitleiste (Ende auf die Dauer begrenzt). */
 const listRangeBand = computed(() => {
   const r = listRange.value
@@ -619,21 +648,30 @@ function buildMergeRequest(): MediaCutRequest | null {
   const holdOf = (h: number) => (h > 1e-3 ? h : undefined)
   return {
     mediaId: first.mediaId,
-    segments: [{ start: first.start, duration: e0.used }],
+    segments: [
+      {
+        start: first.start,
+        duration: Math.min(itemLength(first), e0.used * speedFactor(first.speed)),
+      },
+    ],
     mainHold: holdOf(e0.hold),
+    mainSpeed: first.speed !== 0 ? speedFactor(first.speed) : undefined,
     mode: 'reencode',
     operation: 'keep',
     transition: { preset: animation.value, duration: animDuration.value },
     appends: rest.map((it, i) => {
       const e = restEntries[i]
       // Gekürzt (Ende gesetzt oder vom nächsten Clip abgeschnitten)? Sonst bis zum Dateiende.
-      const cut = it.end !== null || itemLength(it) - e.used > 1e-3
+      const f = speedFactor(it.speed)
+      const cut = it.end !== null || itemSpan(it) - e.used > 1e-3
       return {
         mediaId: it.mediaId ?? undefined,
         start: it.start,
-        duration: cut ? e.used : undefined,
+        // e.used = Länge im Gesamtvideo; der Server will Quellmaterial (mal Tempo).
+        duration: cut ? Math.min(itemLength(it), e.used * f) : undefined,
         hold: holdOf(e.hold),
         position: 'after' as const,
+        speed: f !== 1 ? f : undefined,
       }
     }),
     normalizeAudio: normalizeAudio.value,
@@ -691,8 +729,9 @@ async function onMergePreview(): Promise<void> {
     name: it.name,
     start: entries[i]?.start ?? 0,
     end: entries[i]?.end ?? 0,
-    trimmed: isItemTrimmed(it) || itemLength(it) - (entries[i]?.used ?? 0) > 1e-3,
+    trimmed: isItemTrimmed(it) || itemSpan(it) - (entries[i]?.used ?? 0) > 1e-3,
     hold: entries[i]?.hold ?? 0,
+    speed: it.speed !== 0 ? formatSpeedFactor(it.speed, locale.value) : undefined,
   }))
   closeMergePreview()
   store.setError('')
@@ -1314,6 +1353,9 @@ async function downloadResult(): Promise<void> {
                 to: formatTimeMs(listRangeBand.end),
               })
             }}
+          </p>
+          <p v-if="editorSpeedText" class="list-range-hint">
+            {{ t('listRange.speed', { factor: editorSpeedText }) }}
           </p>
 
           <!-- Vorschau nur des ausgewählten Bereichs (im Player oben, mit Overlays) -->
