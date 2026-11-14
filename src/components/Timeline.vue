@@ -13,6 +13,8 @@ const props = defineProps<{
   operation?: 'keep' | 'remove'
   /** Übergangsname für das Ein-/Ausblenden der Bänder (aus dem Menü). */
   transitionName?: string
+  /** Fürs Zusammenfügen verwendeter Bereich (Von/Bis aus der Liste), nur Anzeige. */
+  used?: { start: number; end: number } | null
 }>()
 
 const emit = defineEmits<{
@@ -44,6 +46,12 @@ const segmentBands = computed(() =>
     width: `${Math.max(0, pct(s.end) - pct(s.start))}%`,
   })),
 )
+
+const usedStyle = computed(() => {
+  const u = props.used
+  if (!u || !(u.end > u.start)) return null
+  return { left: `${pct(u.start)}%`, width: `${Math.max(0, pct(u.end) - pct(u.start))}%` }
+})
 
 function timeFromClientX(clientX: number): number {
   const el = track.value
@@ -111,6 +119,7 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
         ></div>
       </TransitionGroup>
       <div class="range" :style="rangeStyle"></div>
+      <div v-if="usedStyle" class="used" :style="usedStyle"></div>
       <div class="playhead" :style="{ left: `${currentPct}%` }"></div>
 
       <button
@@ -164,6 +173,16 @@ function nudge(target: 'start' | 'end', dir: -1 | 1, ev: KeyboardEvent): void {
   background: var(--ds-accent-soft);
   border-top: 2px solid var(--ds-accent);
   border-bottom: 2px solid var(--ds-accent);
+  pointer-events: none;
+}
+
+/* Von/Bis aus der Liste (nur Anzeige): Leiste über der Spur. */
+.used {
+  position: absolute;
+  top: -12px;
+  height: 4px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-success);
   pointer-events: none;
 }
 
