@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { formatNudge, formatTimeMs, parseTimeInput, toMs } from '@/lib/timeFormat'
+import {
+  formatClockDuration,
+  formatNudge,
+  formatTimeMs,
+  parseTimeInput,
+  toMs,
+} from '@/lib/timeFormat'
 
 describe('formatTimeMs', () => {
   it('formatiert mm:ss.mmm', () => {
@@ -51,5 +57,23 @@ describe('formatNudge', () => {
   it('volle Sekunden als s', () => {
     expect(formatNudge(-1000)).toBe('-1s')
     expect(formatNudge(1000)).toBe('+1s')
+  })
+})
+
+describe('formatClockDuration', () => {
+  it('formatiert m:ss mit gerundeten Sekunden', () => {
+    expect(formatClockDuration(222)).toBe('3:42')
+    expect(formatClockDuration(221.6)).toBe('3:42')
+    expect(formatClockDuration(5)).toBe('0:05')
+    expect(formatClockDuration(59.6)).toBe('1:00')
+  })
+  it('zeigt Stunden nur bei Bedarf', () => {
+    expect(formatClockDuration(3600)).toBe('1:00:00')
+    expect(formatClockDuration(3725)).toBe('1:02:05')
+  })
+  it('negativ/NaN/Infinity -> 0:00', () => {
+    expect(formatClockDuration(-3)).toBe('0:00')
+    expect(formatClockDuration(Number.NaN)).toBe('0:00')
+    expect(formatClockDuration(Number.POSITIVE_INFINITY)).toBe('0:00')
   })
 })
