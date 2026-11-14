@@ -247,6 +247,16 @@ describe('Grafik-Filter', () => {
     expect(s).toContain("y='170+22*max(0,1-(t-1)/0.5)-5.4*sin(2*PI*(t-1)/2)'")
   })
 
+  it('Tempo: Perioden und Ein-/Ausblendzeit geteilt durch den Faktor', () => {
+    const f = graphicFilter({ ...g!, loop: 'spin', animSpeed: 2 }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(f).toContain("rotate=a='2*PI*(t-1)/1.5'")
+    expect(f).toContain('fade=t=in:st=1:d=0.2:alpha=1')
+    const b = graphicFilter({ ...g!, loop: 'blink', animSpeed: 0.5 }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(b).toContain('lt(mod((t-1),2),1.2)')
+    expect(g!.animSpeed).toBe(1)
+    expect(SERVER_FEATURES).toContain('animSpeed')
+  })
+
   it('blink: zusätzlich im enable-Ausdruck', () => {
     const f = graphicFilter({ ...g!, loop: 'blink' }, 1, '[0:v]', '[v1]', 640, 360)
     expect(f).toContain("enable='gte(t,0.999)*lt(t,2.999)*lt(mod((t-1),1),0.6)'")

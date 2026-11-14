@@ -71,6 +71,11 @@ export interface TextOverlayData {
   style: TextStyle
   accent: string
   animation: TextAnimation
+  /**
+   * Tempo der Animation (Faktor, 1 = normal, 0,5 = halb so schnell). Fehlt bei
+   * älteren Einträgen = 1. Siehe ANIM_SPEEDS.
+   */
+  animSpeed?: number
 }
 
 /** Eintrag im Editor (mit lokaler ID). */
@@ -126,17 +131,47 @@ export const DEFAULT_TEXT_STYLE: Omit<TextOverlayData, 'text' | 'start' | 'end'>
 
 // --- Animations-Zeiten (identisch mit dem Server) ---------------------------
 
-export function fadeMs(durationSec: number): number {
-  return Math.round(Math.min(400, (durationSec * 1000) / 3))
+// Tempo: Grundzeiten (400/500/60 ms) werden durch den Faktor geteilt, die
+// Obergrenze (ein Drittel bzw. 60 % der Einblenddauer) bleibt. Faktor 1 =
+// exakt das bisherige Verhalten.
+
+export function fadeMs(durationSec: number, speed = 1): number {
+  return Math.round(Math.min(400 / speed, (durationSec * 1000) / 3))
 }
 
-export function moveMs(durationSec: number): number {
-  return Math.round(Math.min(500, (durationSec * 1000) / 3))
+export function moveMs(durationSec: number, speed = 1): number {
+  return Math.round(Math.min(500 / speed, (durationSec * 1000) / 3))
 }
 
-export function typeStepMs(durationSec: number, chars: number): number {
+export function typeStepMs(durationSec: number, chars: number, speed = 1): number {
   if (chars <= 1) return 0
-  return Math.min(60, (durationSec * 1000 * 0.6) / (chars - 1))
+  return Math.min(60 / speed, (durationSec * 1000 * 0.6) / (chars - 1))
+}
+
+/** Wählbare Tempo-Stufen der Animationen (Faktor). */
+export const ANIM_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
+export const MIN_ANIM_SPEED = 0.25
+export const MAX_ANIM_SPEED = 4
+
+/** Tempo eines Eintrags: fehlend/ungültig = 1, sonst auf [0,25; 4] begrenzt. */
+export function animSpeedOf(o: { animSpeed?: unknown }): number {
+  const v = o.animSpeed
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 1
+  return Math.min(MAX_ANIM_SPEED, Math.max(MIN_ANIM_SPEED, v))
+}
+
+/** Nächstgelegene Stufe aus ANIM_SPEEDS (Index für den Regler). */
+export function animSpeedIndex(speed: number): number {
+  let best = 0
+  ANIM_SPEEDS.forEach((s, i) => {
+    if (Math.abs(s - speed) < Math.abs(ANIM_SPEEDS[best]! - speed)) best = i
+  })
+  return best
+}
+
+/** Anzeige „0,5ד / „2ד je Sprache. */
+export function formatAnimSpeed(speed: number, locale: string): string {
+  return `${speed.toLocaleString(locale, { maximumFractionDigits: 2 })}×`
 }
 
 export const SLIDE_OFFSET = 0.06
@@ -170,8 +205,9 @@ export function overlayFrame(o: TextOverlayData, t: number): OverlayFrame {
   const dur = o.end - o.start
   const ms = (t - o.start) * 1000
   const left = (o.end - t) * 1000
-  const f = fadeMs(dur)
-  const m = moveMs(dur)
+  const sp = animSpeedOf(o)
+  const f = fadeMs(dur, sp)
+  const m = moveMs(dur, sp)
   const fadeOut = (outMs: number) => (outMs > 0 ? clamp01(left / outMs) : 1)
   const fadeIn = (inMs: number) => (inMs > 0 ? clamp01(ms / inMs) : 1)
   const frame: OverlayFrame = { visible: true, opacity: 1, dy: 0, scale: 1, chars: Infinity }
@@ -196,7 +232,7 @@ export function overlayFrame(o: TextOverlayData, t: number): OverlayFrame {
     case 'typewriter': {
       frame.opacity = fadeOut(f)
       const visible = Array.from(o.text).filter((c) => c !== '\n').length
-      const step = typeStepMs(dur, visible)
+      const step = typeStepMs(dur, visible, sp)
       // Zeichen k erscheint bei round(k*step) ms (wie die \t-Zeiten des Servers).
       let n = 0
       for (let k = 0; k < visible; k++) {
@@ -229,6 +265,8 @@ export function toServerOverlay(o: TextOverlay): TextOverlayData {
     style: o.style,
     accent: o.accent,
     animation: o.animation,
+    // Nur abweichendes Tempo senden: Anfrage sonst unverändert wie bisher.
+    ...(animSpeedOf(o) !== 1 ? { animSpeed: animSpeedOf(o) } : {}),
   }
 }
 

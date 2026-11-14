@@ -53,6 +53,8 @@ export interface TextOverlay {
   /** Farbe von Kontur / Box / Schatten `#rrggbb`. */
   accent: string
   animation: TextAnimation
+  /** Tempo der Animation (Faktor 0,25–4, 1 = normal). */
+  animSpeed: number
 }
 
 /** Hoch genug für automatisch erzeugte Untertitel (ca. 30–40 Minuten Sprache). */
@@ -175,26 +177,42 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
       style: oneOf(item.style, TEXT_STYLES, `Stil von Text ${n}`),
       accent: color(item.accent, `Akzent von Text ${n}`),
       animation: oneOf(item.animation, TEXT_ANIMATIONS, `Animation von Text ${n}`),
+      animSpeed: parseAnimSpeed(item.animSpeed, `Tempo von Text ${n}`),
     }
   })
 }
 
 // --- Animations-Zeiten (identisch im Frontend, src/lib/textOverlay.ts) ------
 
+// Tempo (Faktor): Grundzeiten werden geteilt, Obergrenzen bleiben; 1 = wie bisher.
+
 /** Ein-/Ausblendzeit in ms – höchstens ein Drittel der Einblenddauer. */
-export function fadeMs(durationSec: number): number {
-  return Math.round(Math.min(400, (durationSec * 1000) / 3))
+export function fadeMs(durationSec: number, speed = 1): number {
+  return Math.round(Math.min(400 / speed, (durationSec * 1000) / 3))
 }
 
 /** Dauer der Bewegung bei 'slide'/'pop' in ms. */
-export function moveMs(durationSec: number): number {
-  return Math.round(Math.min(500, (durationSec * 1000) / 3))
+export function moveMs(durationSec: number, speed = 1): number {
+  return Math.round(Math.min(500 / speed, (durationSec * 1000) / 3))
 }
 
 /** Zeit pro Zeichen bei 'typewriter' in ms (alles nach spätestens 60 % sichtbar). */
-export function typeStepMs(durationSec: number, chars: number): number {
+export function typeStepMs(durationSec: number, chars: number, speed = 1): number {
   if (chars <= 1) return 0
-  return Math.min(60, (durationSec * 1000 * 0.6) / (chars - 1))
+  return Math.min(60 / speed, (durationSec * 1000 * 0.6) / (chars - 1))
+}
+
+export const MIN_ANIM_SPEED = 0.25
+export const MAX_ANIM_SPEED = 4
+
+/** Tempo aus der Anfrage: fehlt = 1 (ältere Clients), sonst Zahl in [0,25; 4]. */
+export function parseAnimSpeed(v: unknown, label: string): number {
+  if (v === undefined || v === null) return 1
+  const n = typeof v === 'string' ? Number(v) : v
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    throw new ValidationError(`Ungültiger Wert für ${label}.`)
+  }
+  return Math.min(MAX_ANIM_SPEED, Math.max(MIN_ANIM_SPEED, n))
 }
 
 /** Versatz nach unten beim Hereingleiten (Anteil der Bildhöhe). */
@@ -288,8 +306,8 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
     `\\an5\\fn${meta.family}\\b${meta.bold ? 1 : 0}\\fs${r1(px * meta.winRatio)}` +
     `\\c${assColor(o.color)}${look}${alpha}`
 
-  const f = fadeMs(dur)
-  const m = moveMs(dur)
+  const f = fadeMs(dur, o.animSpeed)
+  const m = moveMs(dur, o.animSpeed)
   let anim: string
   let body = escapeAssText(o.text)
   switch (o.animation) {
@@ -315,7 +333,7 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
       anim = `\\pos(${x},${y})\\fad(0,${f})`
       const chars = Array.from(o.text)
       const visible = chars.filter((c) => c !== '\n').length
-      const step = typeStepMs(dur, visible)
+      const step = typeStepMs(dur, visible, o.animSpeed)
       // Box bleibt von Anfang an stehen (sonst stückelt libass sie je Zeichen).
       const hidden = o.style === 'box' ? '\\1a&HFF&' : '\\1a&HFF&\\3a&HFF&\\4a&HFF&'
       const shown = o.style === 'box' ? '\\1a&H00&' : alpha

@@ -1,5 +1,5 @@
 import { ValidationError } from './validate'
-import { fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
+import { fadeMs, moveMs, parseAnimSpeed, SLIDE_OFFSET } from './textOverlay'
 
 /**
  * Grafik-Einblendungen (Formen, Linien, Pfeile, Symbole, Emojis, Bilder).
@@ -62,6 +62,8 @@ export interface GraphicOverlay {
   end: number
   animation: GraphicAnimation
   loop: GraphicLoop
+  /** Tempo von Ein-/Ausblenden und Dauer-Animation (Faktor 0,25–4). */
+  animSpeed: number
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -156,6 +158,7 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
       end,
       animation: animation as GraphicAnimation,
       loop: loop as GraphicLoop,
+      animSpeed: parseAnimSpeed(item.animSpeed, `Tempo von Grafik ${n}`),
     }
   })
 }
@@ -208,8 +211,11 @@ export function graphicFilter(
   frameH: number,
 ): string {
   const dur = g.end - g.start
-  const f = fadeMs(dur) / 1000
-  const m = moveMs(dur) / 1000
+  const sp = g.animSpeed ?? 1
+  const f = fadeMs(dur, sp) / 1000
+  const m = moveMs(dur, sp) / 1000
+  /** Periode einer Dauer-Animation beim gewählten Tempo (s). */
+  const per = (base: number) => String(Math.round((base / sp) * 1e4) / 1e4)
   const loop = g.loop ?? 'none'
   const st = f3(g.start)
   const u = `(t-${st})`
@@ -258,19 +264,19 @@ export function graphicFilter(
     case 'none':
       break
     case 'pulse':
-      scales.push(`(1+${PULSE_AMOUNT / 2}*(1-cos(2*PI*${u}/${PULSE_PERIOD})))`)
+      scales.push(`(1+${PULSE_AMOUNT / 2}*(1-cos(2*PI*${u}/${per(PULSE_PERIOD)})))`)
       break
     case 'wobble':
-      angle = `${Math.round(((WOBBLE_DEG * Math.PI) / 180) * 1e4) / 1e4}*sin(2*PI*${u}/${WOBBLE_PERIOD})`
+      angle = `${Math.round(((WOBBLE_DEG * Math.PI) / 180) * 1e4) / 1e4}*sin(2*PI*${u}/${per(WOBBLE_PERIOD)})`
       break
     case 'spin':
-      angle = `2*PI*${u}/${SPIN_PERIOD}`
+      angle = `2*PI*${u}/${per(SPIN_PERIOD)}`
       break
     case 'float':
-      yParts.push(`-${f3(FLOAT_AMOUNT * frameH)}*sin(2*PI*${u}/${FLOAT_PERIOD})`)
+      yParts.push(`-${f3(FLOAT_AMOUNT * frameH)}*sin(2*PI*${u}/${per(FLOAT_PERIOD)})`)
       break
     case 'blink':
-      blink = `*lt(mod(${u},${BLINK_PERIOD}),${BLINK_PERIOD * BLINK_ON})`
+      blink = `*lt(mod(${u},${per(BLINK_PERIOD)}),${per(BLINK_PERIOD * BLINK_ON)})`
       break
     default: {
       const never: never = loop
