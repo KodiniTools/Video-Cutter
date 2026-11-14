@@ -61,6 +61,9 @@ const messages = {
       mode: 'Was soll erzeugt werden?',
       modes: { image: '🖼 Bild', video: '🎬 Video' },
       duration: 'Länge',
+      model: 'Gemini-Modell',
+      modelDefault: '{model} (Standard)',
+      usedModel: 'Zuletzt erzeugt mit: {model}',
       generateVideo: '🎬 Video erzeugen und einfügen',
       generatingVideo: 'Gemini dreht … {pct} %',
       hintVideo:
@@ -656,6 +659,9 @@ const messages = {
       mode: 'What should be generated?',
       modes: { image: '🖼 Image', video: '🎬 Video' },
       duration: 'Length',
+      model: 'Gemini model',
+      modelDefault: '{model} (default)',
+      usedModel: 'Last generated with: {model}',
       generateVideo: '🎬 Generate video and insert',
       generatingVideo: 'Gemini is filming … {pct} %',
       hintVideo:

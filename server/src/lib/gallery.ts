@@ -23,6 +23,8 @@ export interface GalleryImage {
   createdAt: number
   /** Dateigröße des Originals in Bytes. */
   size: number
+  /** Gemini-Modell, das die Datei erzeugt hat ('' = unbekannt, ältere Einträge). */
+  model: string
 }
 
 export class GalleryFullError extends Error {}
@@ -56,6 +58,7 @@ export function parseGalleryMeta(raw: unknown): GalleryImage | null {
     prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
     createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
     size: typeof raw.size === 'number' && raw.size >= 0 ? raw.size : 0,
+    model: typeof raw.model === 'string' ? raw.model.slice(0, 80) : '',
   }
 }
 
@@ -116,7 +119,7 @@ export class Gallery {
   }
 
   /** Speichert ein Bild. Wirft GalleryFullError, wenn das Limit erreicht ist. */
-  async add(data: Buffer, mime: string, prompt: string): Promise<GalleryImage> {
+  async add(data: Buffer, mime: string, prompt: string, model = ''): Promise<GalleryImage> {
     await this.init()
     if (!EXT[mime]) throw new Error('Bildformat nicht unterstützt.')
     if (this.totalBytes + data.length > this.maxTotalBytes) {
@@ -128,6 +131,7 @@ export class Gallery {
       prompt: prompt.slice(0, 2000),
       createdAt: Date.now(),
       size: data.length,
+      model,
     }
     const file = this.filePath(img)
     await writeFile(file, data)

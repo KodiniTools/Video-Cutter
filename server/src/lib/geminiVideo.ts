@@ -40,6 +40,7 @@ export function buildVideoRequest(
   prompt: string,
   aspect: VideoAspect,
   durationSec: number,
+  model: string = config.geminiVideoModel,
 ): Record<string, unknown> {
   const format: Record<string, unknown> = {
     type: 'video',
@@ -49,7 +50,7 @@ export function buildVideoRequest(
   // GEMINI_VIDEO_DURATION=off lässt die Dauer weg (ältere Modelle kennen sie nicht).
   if (config.geminiVideoDuration !== 'off') format.duration = `${durationSec}s`
   if (config.geminiVideoResolution) format.resolution = config.geminiVideoResolution
-  return { model: config.geminiVideoModel, input: prompt, response_format: format }
+  return { model, input: prompt, response_format: format }
 }
 
 /** Wo das fertige Video liegt: inline (base64) oder als Datei-Verweis. */
@@ -95,7 +96,11 @@ export function fileIdOf(uri: string): string | null {
 }
 
 /** Übersetzt HTTP-Fehler in verständliche Meldungen. */
-export function videoHttpError(status: number, body: unknown): Error {
+export function videoHttpError(
+  status: number,
+  body: unknown,
+  model: string = config.geminiVideoModel,
+): Error {
   const err = isRecord(body) && isRecord(body.error) ? body.error : {}
   const msg = typeof err.message === 'string' ? err.message : ''
   if (status === 400 && /api key/i.test(msg)) {
@@ -108,7 +113,7 @@ export function videoHttpError(status: number, body: unknown): Error {
   }
   if (status === 404) {
     return new Error(
-      `Gemini-Videomodell „${config.geminiVideoModel}“ nicht gefunden (GEMINI_VIDEO_MODEL prüfen).`,
+      `Gemini-Videomodell „${model}“ nicht gefunden (anderes Modell wählen bzw. GEMINI_VIDEO_MODEL prüfen).`,
     )
   }
   if (status === 429) {
@@ -247,6 +252,7 @@ export async function generateVideo(
   signal: AbortSignal,
   progress: (p: number) => void,
   pollMs = 5000,
+  model: string = config.geminiVideoModel,
 ): Promise<Buffer> {
   // Gemini meldet keinen Fortschritt; die Anzeige läuft gegen ~90 % (≈ 2 min).
   const started = Date.now()
@@ -258,14 +264,14 @@ export async function generateVideo(
     try {
       r = await requestJson(`${base()}/interactions`, {
         method: 'POST',
-        body: buildVideoRequest(prompt, aspect, durationSec),
+        body: buildVideoRequest(prompt, aspect, durationSec, model),
         signal,
         timeoutMs: config.geminiVideoTimeoutMs,
       })
     } catch (err) {
       throw networkError(err, signal)
     }
-    if (r.status >= 400) throw videoHttpError(r.status, r.body)
+    if (r.status >= 400) throw videoHttpError(r.status, r.body, model)
     const result = extractVideo(r.body)
     progress(95)
     return result.kind === 'inline' ? result.data : await downloadFile(result.uri, signal, pollMs)

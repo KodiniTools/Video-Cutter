@@ -5,6 +5,7 @@ import { i18n } from '@/i18n'
 
 const runAiJob = vi.fn()
 const fetchGeneratedImage = vi.fn()
+const fetchAiModels = vi.fn()
 const saveFile = vi.fn(async (_f: { blob: Blob; name: string }) => true)
 vi.mock('@/lib/download', () => ({ saveFile: (f: { blob: Blob; name: string }) => saveFile(f) }))
 
@@ -15,6 +16,7 @@ vi.mock('@/lib/aiApi', async (orig) => {
     runAiJob: (...a: unknown[]) => runAiJob(...a),
     fetchGeneratedImage: (...a: unknown[]) => fetchGeneratedImage(...a),
     fetchAiStatus: async () => ({ transcribe: false, claude: true, image: true }),
+    fetchAiModels: () => fetchAiModels(),
   }
 })
 
@@ -35,6 +37,8 @@ function mountIt(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   runAiJob.mockReset()
   fetchGeneratedImage.mockReset()
+  fetchAiModels.mockReset().mockResolvedValue(null)
+  localStorage.clear()
   globalThis.URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`)
   globalThis.URL.revokeObjectURL = vi.fn()
 })
@@ -142,6 +146,53 @@ describe('StillAiImage', () => {
     expect((w.find('[data-test=still-ai-prompt]').element as HTMLTextAreaElement).value).toBe(
       'Bild-Prompt',
     )
+  })
+
+  it('Modellauswahl je Modus: Standard vorgewählt, Wahl geht mit und wird gemerkt', async () => {
+    fetchAiModels.mockResolvedValue({
+      image: { default: 'img-a-image', models: ['img-a-image', 'img-b-image'] },
+      video: { default: 'omni-a', models: ['omni-a', 'omni-b'] },
+    })
+    localStorage.setItem('vc.aiModel.video', 'omni-b')
+    localStorage.setItem('vc.aiModel.image', 'nicht-mehr-da')
+    const f1 = new File(['1'], 'v1.png', { type: 'image/png' })
+    runAiJob.mockReturnValue({
+      promise: Promise.resolve({ images: [{ id: 'x' }], failed: 0, model: 'img-b-image' }),
+      cancel: vi.fn(),
+    })
+    fetchGeneratedImage.mockResolvedValue(f1)
+    const w = mountIt()
+    await flushPromises()
+    const sel = () => w.find('[data-test=still-ai-model]').element as HTMLSelectElement
+    // Gemerktes, nicht mehr angebotenes Modell -> Standard
+    expect(sel().value).toBe('img-a-image')
+    expect(sel().options[0].text).toContain('Standard')
+    await w.find('[data-test=still-ai-model]').setValue('img-b-image')
+    expect(localStorage.getItem('vc.aiModel.image')).toBe('img-b-image')
+    await w.find('[data-test=still-ai-prompt]').setValue('Berg')
+    await w.find('[data-test=still-ai-generate]').trigger('click')
+    await flushPromises()
+    expect(runAiJob.mock.calls[0][1]).toMatchObject({ model: 'img-b-image' })
+    expect(w.find('[data-test=still-ai-used-model]').text()).toContain('img-b-image')
+    await w.find('[data-test=still-ai-mode-video]').trigger('click')
+    expect(sel().value).toBe('omni-b')
+    expect([...sel().options].map((o) => o.value)).toEqual(['omni-a', 'omni-b'])
+  })
+
+  it('altes Backend ohne Modellliste: kein Auswahlfeld, kein model im Auftrag', async () => {
+    runAiJob.mockReturnValue({
+      promise: Promise.resolve({ images: [{ id: 'x' }], failed: 0 }),
+      cancel: vi.fn(),
+    })
+    fetchGeneratedImage.mockResolvedValue(new File(['1'], 'v1.png', { type: 'image/png' }))
+    const w = mountIt()
+    await flushPromises()
+    expect(w.find('[data-test=still-ai-model]').exists()).toBe(false)
+    await w.find('[data-test=still-ai-prompt]').setValue('Berg')
+    await w.find('[data-test=still-ai-generate]').trigger('click')
+    await flushPromises()
+    expect(runAiJob.mock.calls[0][1]).not.toHaveProperty('model')
+    expect(w.find('[data-test=still-ai-used-model]').exists()).toBe(false)
   })
 
   it('zeigt Fehler des Servers', async () => {

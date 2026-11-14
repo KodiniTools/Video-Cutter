@@ -151,6 +151,8 @@ export function parseGeneratedImages(data: unknown): {
   /** In der Galerie gespeicherte Bilder; `null` = Backend ohne Galerie. */
   saved: number | null
   galleryError: string
+  /** Verwendetes Gemini-Modell ('' = Backend meldet es nicht). */
+  model: string
 } {
   const d = isRecord(data) ? data : {}
   const list = Array.isArray(d.images) ? d.images : []
@@ -164,7 +166,43 @@ export function parseGeneratedImages(data: unknown): {
     failed: finite(d.failed) ? d.failed : 0,
     saved: finite(d.saved) ? d.saved : null,
     galleryError: typeof d.galleryError === 'string' ? d.galleryError : '',
+    model: typeof d.model === 'string' ? d.model : '',
   }
+}
+
+// --- Modellauswahl -------------------------------------------------------------------
+
+export interface ModelChoices {
+  /** Voreinstellung des Servers. */
+  default: string
+  models: string[]
+}
+
+export interface AiModels {
+  image: ModelChoices
+  video: ModelChoices
+}
+
+function parseChoices(v: unknown): ModelChoices {
+  const d = isRecord(v) ? v : {}
+  const models = (Array.isArray(d.models) ? d.models : []).filter(
+    (m): m is string => typeof m === 'string' && m !== '',
+  )
+  const def = typeof d.default === 'string' && d.default ? d.default : (models[0] ?? '')
+  return { default: def, models: def && !models.includes(def) ? [def, ...models] : models }
+}
+
+export function parseAiModels(data: unknown): AiModels {
+  const d = isRecord(data) ? data : {}
+  return { image: parseChoices(d.image), video: parseChoices(d.video) }
+}
+
+/** Wählbare Gemini-Modelle; `null` = Backend kennt die Auswahl noch nicht. */
+export async function fetchAiModels(): Promise<AiModels | null> {
+  const res = await fetch(`${API_BASE}/api/ai/models`)
+  if (res.status === 404) return null
+  if (!res.ok) throw await readError(res)
+  return parseAiModels(await res.json())
 }
 
 /** Lädt ein erzeugtes Bild als Datei (für Vorschau und Bild-Clip). */
@@ -185,6 +223,8 @@ export interface GalleryImage {
   prompt: string
   createdAt: number
   size: number
+  /** Gemini-Modell ('' = unbekannt). */
+  model: string
 }
 
 export interface GalleryList {
@@ -204,6 +244,7 @@ export function parseGallery(data: unknown): GalleryList {
       prompt: typeof i.prompt === 'string' ? i.prompt : '',
       createdAt: finite(i.createdAt) ? i.createdAt : 0,
       size: finite(i.size) ? i.size : 0,
+      model: typeof i.model === 'string' ? i.model : '',
     }))
   return { images, totalBytes: finite(d.totalBytes) ? d.totalBytes : 0 }
 }
@@ -258,12 +299,14 @@ export function parseGeneratedVideo(data: unknown): {
   media: MediaView
   saved: number | null
   galleryError: string
+  model: string
 } {
   const d = isRecord(data) ? data : {}
   return {
     media: parseMediaView(d.media),
     saved: finite(d.saved) ? d.saved : null,
     galleryError: typeof d.galleryError === 'string' ? d.galleryError : '',
+    model: typeof d.model === 'string' ? d.model : '',
   }
 }
 
