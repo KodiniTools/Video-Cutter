@@ -98,6 +98,16 @@ export const config = {
   claudeModel: process.env.CLAUDE_MODEL ?? 'claude-opus-5-5',
   /** Denktiefe (low | medium | high | xhigh | max). */
   claudeEffort: process.env.CLAUDE_EFFORT ?? 'medium',
+
+  // --- KI-Bilder für Bild-Clips (Google Gemini) ---
+  /** Gemini-Bildmodell; der API-Key kommt aus GEMINI_API_KEY. */
+  geminiImageModel: process.env.GEMINI_IMAGE_MODEL ?? 'gemini-nano-banana-2.1',
+  /** API-Basis (für Tests/Proxy überschreibbar). */
+  geminiBaseUrl: process.env.GEMINI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta',
+  /** Auflösung: leer = passend zum Clip (1K/2K/4K), sonst fest; „off“ = nicht senden. */
+  geminiImageSize: process.env.GEMINI_IMAGE_SIZE ?? '',
+  /** Zeitgrenze pro Bild. */
+  geminiTimeoutMs: num('GEMINI_TIMEOUT_SEC', 120) * 1000,
 } as const
 
 export type AppConfig = typeof config

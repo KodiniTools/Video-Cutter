@@ -22,7 +22,11 @@ describe('aiApi: Ergebnisse prüfen', () => {
     expect(parseAiStatus({ ai: { transcribe: true, claude: false } })).toEqual({
       transcribe: true,
       claude: false,
+      image: false,
     })
+    expect(parseAiStatus({ ai: { transcribe: false, claude: true, image: true } })?.image).toBe(
+      true,
+    )
   })
 
   it('Transkript, Untertitel und Vorschläge werden bereinigt', () => {

@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { useLibraryStore } from '@/stores/library'
 import { IMAGE_ACCEPT, checkImageFile, decodeImageFile } from '@/lib/imageAssets'
 import { createStillClip, fetchMediaFile, MEDIA_UNSUPPORTED } from '@/lib/mediaApi'
+import StillAiImage, { type SceneRef } from './StillAiImage.vue'
 import {
   STILL_DEFAULT_DURATION,
   STILL_FITS,
@@ -36,6 +37,9 @@ const { items, selectedId } = storeToRefs(library)
 
 const open = ref(false)
 const busy = ref(false)
+/** KI-Bereich aufgeklappt / KI arbeitet gerade. */
+const aiOpen = ref(false)
+const aiBusy = ref(false)
 const error = ref('')
 
 const imageName = ref('')
@@ -122,6 +126,11 @@ async function onImage(e: Event): Promise<void> {
   const file = input.files?.[0]
   input.value = '' // dieselbe Datei erneut wählbar
   if (!file) return
+  await useImageFile(file)
+}
+
+/** Setzt eine Bilddatei als Hintergrund (Upload oder KI-Variante). */
+async function useImageFile(file: File): Promise<boolean> {
   error.value = ''
   try {
     checkImageFile(file)
@@ -129,10 +138,37 @@ async function onImage(e: Event): Promise<void> {
     releaseImage()
     image.value = { source: d.source, width: d.w, height: d.h }
     imageName.value = file.name
+    return true
   } catch {
     error.value = t('still.imageError')
+    return false
   }
 }
+
+/** KI-Variante gewählt: hat schon das passende Seitenverhältnis -> Fläche füllen. */
+async function onAiPick(file: File): Promise<void> {
+  if (await useImageFile(file)) fit.value = 'cover'
+}
+
+/**
+ * Nachbarclips an der Einfügestelle (für den KI-Prompt): Ende des genutzten
+ * Bereichs davor, Anfang des genutzten Bereichs danach.
+ */
+function sceneOf(index: number, role: 'before' | 'after'): SceneRef | null {
+  const it = items.value[index]
+  if (!it || it.status !== 'ready' || !it.mediaId || !(it.width > 0)) return null
+  const end = it.end ?? it.duration
+  const time =
+    role === 'before' ? Math.max(0, Math.max(it.start, end - 0.1)) : Math.max(0, it.start + 0.1)
+  return { mediaId: it.mediaId, time, name: it.name }
+}
+// Zugeklappt = KI-Bereich entfernt (bricht laufende Aufträge ab).
+watch([open, aiOpen], ([o, a]) => {
+  if (!o || !a) aiBusy.value = false
+})
+
+const sceneBefore = computed(() => sceneOf(position.value - 1, 'before'))
+const sceneAfter = computed(() => sceneOf(position.value, 'after'))
 
 function releaseImage(): void {
   const src = image.value?.source
@@ -166,7 +202,7 @@ function drawPreview(): void {
 watch([image, fit, background, previewSize, open], () => void nextTick(drawPreview))
 
 // --- Erstellen ------------------------------------------------------------
-const canCreate = computed(() => !props.disabled && !busy.value && !!size.value)
+const canCreate = computed(() => !props.disabled && !busy.value && !aiBusy.value && !!size.value)
 
 async function create(): Promise<void> {
   const s = size.value
@@ -232,7 +268,7 @@ onBeforeUnmount(releaseImage)
             type="file"
             :accept="IMAGE_ACCEPT"
             class="sr-only"
-            :disabled="busy"
+            :disabled="busy || aiBusy"
             data-test="still-image"
             @change="onImage"
           />
@@ -251,6 +287,27 @@ onBeforeUnmount(releaseImage)
           ✕
         </button>
       </div>
+
+      <button
+        type="button"
+        class="btn small ai-toggle"
+        :aria-expanded="aiOpen"
+        :disabled="busy"
+        data-test="still-ai-toggle"
+        @click="aiOpen = !aiOpen"
+      >
+        {{ aiOpen ? t('stillAi.close') : t('stillAi.open') }}
+      </button>
+      <StillAiImage
+        v-if="aiOpen && size"
+        :width="size.width"
+        :height="size.height"
+        :before="sceneBefore"
+        :after="sceneAfter"
+        :disabled="busy || disabled"
+        @pick="onAiPick"
+        @busy="aiBusy = $event"
+      />
 
       <label class="field stack">
         <span class="field-label">{{ t('still.fit') }}</span>
@@ -405,6 +462,9 @@ onBeforeUnmount(releaseImage)
   border-radius: var(--ds-radius-sm);
   background: var(--ds-surface-0);
   cursor: pointer;
+}
+.ai-toggle {
+  align-self: flex-start;
 }
 .actions {
   display: flex;

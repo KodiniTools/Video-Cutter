@@ -84,6 +84,13 @@ Endpunkte: `POST /api/ai/transcribe | subtitles | cuts` (JSON mit `mediaId`) →
 Fortschritt/Ergebnis per SSE `GET /api/ai/jobs/:id/events`, Abbruch `DELETE /api/ai/jobs/:id`.
 Höchstens eine Transkription gleichzeitig (belegt `WHISPER_THREADS` Kerne).
 
+**KI-Bilder für Bild-Clips (Gemini):** `GEMINI_API_KEY` in die Backend-`.env` eintragen
+(optional `GEMINI_IMAGE_MODEL`, Standard `gemini-nano-banana-2.1`) und neu starten.
+`GET /api/health` meldet dann `ai.image: true`. `POST /api/ai/image-prompt` lässt Claude aus
+Stichworten, Stil und den Nachbarclips (Standbild + Transkript, falls vorhanden) einen Prompt
+schreiben; `POST /api/ai/images { prompt, width, height, count }` erzeugt 1–4 Varianten, die
+unter `GET /api/ai/images/:id` 30 Minuten abrufbar sind.
+
 ## Frontend anbinden
 
 Beim Build der SPA `VITE_API_BASE=/video-cutter` setzen; dann nutzt der
