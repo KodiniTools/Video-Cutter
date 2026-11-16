@@ -741,8 +741,17 @@ const messages = {
       done: 'Das Video ist fertig.',
       downloaded: 'Der Download wurde gestartet.',
       download: 'Herunterladen',
+      normalize: 'Lautstärke angleichen',
+      normalizeHint:
+        'Bringt den fertigen Ton auf eine einheitliche Lautheit (EBU R128, −16 LUFS). Wirkt nur im Export, nicht in der Vorschau.',
       unsupported:
         'Das Backend kennt den Export des neuen Editors noch nicht (veraltet). Bitte das Backend neu deployen.',
+    },
+    timelineProject: {
+      size: 'Format',
+      fps: 'Bilder/s',
+      background: 'Hintergrund',
+      backgroundTitle: 'Farbe hinter den Clips (sichtbar an Rändern und in Lücken)',
     },
     timelineEditor: {
       title: 'Neuer Editor (Beta)',
@@ -1473,8 +1482,17 @@ const messages = {
       done: 'The video is ready.',
       downloaded: 'The download has started.',
       download: 'Download',
+      normalize: 'Normalise loudness',
+      normalizeHint:
+        'Brings the finished audio to a uniform loudness (EBU R128, −16 LUFS). Applies to the export only, not the preview.',
       unsupported:
         'The backend does not know the new editor’s export yet (outdated). Please redeploy the backend.',
+    },
+    timelineProject: {
+      size: 'Format',
+      fps: 'Frames/s',
+      background: 'Background',
+      backgroundTitle: 'Colour behind the clips (visible at borders and in gaps)',
     },
     timelineEditor: {
       title: 'New editor (beta)',

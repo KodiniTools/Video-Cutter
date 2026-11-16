@@ -31,6 +31,7 @@ const dialogEl = ref<HTMLDialogElement | null>(null)
 const phase = ref<Phase>('setup')
 const quality = ref<RenderQuality>('standard')
 const name = ref('projekt')
+const normalizeAudio = ref(false)
 const progress = ref(0)
 const error = ref('')
 const downloaded = ref(false)
@@ -60,7 +61,11 @@ async function start(): Promise<void> {
   try {
     const id = await startRender(
       store.doc,
-      { quality: quality.value, name: name.value.trim() || 'projekt' },
+      {
+        quality: quality.value,
+        name: name.value.trim() || 'projekt',
+        normalizeAudio: normalizeAudio.value,
+      },
       ctrl.signal,
     )
     if (ctrl.signal.aborted) {
@@ -161,6 +166,13 @@ onBeforeUnmount(discard)
             </span>
           </label>
         </fieldset>
+        <label class="option">
+          <input v-model="normalizeAudio" type="checkbox" data-testid="export-normalize" />
+          <span>
+            <strong>{{ t('timelineExport.normalize') }}</strong>
+            <small>{{ t('timelineExport.normalizeHint') }}</small>
+          </span>
+        </label>
         <p v-if="phase === 'error'" class="error" role="alert" data-testid="export-error">
           {{ error }}
         </p>

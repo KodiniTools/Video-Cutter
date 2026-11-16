@@ -19,10 +19,12 @@ describe('parseRenderRequest', () => {
     expect(parseRenderRequest(undefined)).toEqual({
       quality: 'standard',
       outputName: 'projekt.mp4',
+      normalizeAudio: false,
     })
     expect(parseRenderRequest({ quality: 'ultra', name: 42 })).toEqual({
       quality: 'standard',
       outputName: 'projekt.mp4',
+      normalizeAudio: false,
     })
     expect(parseRenderRequest({ quality: 'constructor' }).quality).toBe('standard')
   })
@@ -31,7 +33,10 @@ describe('parseRenderRequest', () => {
     expect(parseRenderRequest({ quality: 'high', name: '../Mein Film: 1.mov' })).toEqual({
       quality: 'high',
       outputName: 'Mein Film 1.mp4',
+      normalizeAudio: false,
     })
+    expect(parseRenderRequest({ normalizeAudio: true }).normalizeAudio).toBe(true)
+    expect(parseRenderRequest({ normalizeAudio: 'ja' }).normalizeAudio).toBe(false)
     expect(RENDER_QUALITIES.high).toBeLessThan(RENDER_QUALITIES.small)
   })
 })
@@ -125,7 +130,12 @@ describe('POST /api/render', () => {
       sourceIn: s(0.5),
       speed: 1,
     }
-    const res = await post({ doc: doc([clip]), quality: 'small', name: 'Mein Film' })
+    const res = await post({
+      doc: doc([clip]),
+      quality: 'small',
+      name: 'Mein Film',
+      normalizeAudio: true,
+    })
     expect(res.status).toBe(202)
     const { jobId, width, height } = (await res.json()) as {
       jobId: string

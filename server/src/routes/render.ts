@@ -22,6 +22,8 @@ export interface RenderRequest {
   quality: RenderQuality
   /** Dateiname des Ergebnisses (bereinigt, mit `.mp4`). */
   outputName: string
+  /** Lautstärke des fertigen Tons angleichen. */
+  normalizeAudio: boolean
 }
 
 /** Liest die Export-Einstellungen; Unbekanntes fällt auf den Standard zurück. */
@@ -32,13 +34,17 @@ export function parseRenderRequest(body: unknown): RenderRequest {
       ? (b.quality as RenderQuality)
       : 'standard'
   const base = typeof b.name === 'string' ? safeBaseName(b.name) : 'video'
-  return { quality, outputName: `${base === 'video' ? 'projekt' : base}.mp4` }
+  return {
+    quality,
+    outputName: `${base === 'video' ? 'projekt' : base}.mp4`,
+    normalizeAudio: b.normalizeAudio === true,
+  }
 }
 
 export const renderRouter = Router()
 
 /**
- * POST /api/render  { doc, quality?, name? }
+ * POST /api/render  { doc, quality?, name?, normalizeAudio? }
  * Rendert die ganze Timeline in voller Größe (H.264 + AAC, MP4) – mit demselben
  * Compiler wie die Vorschau. Antwort 202 `{ jobId }`; Fortschritt, Download und
  * Abbrechen laufen über die Job-Endpunkte `/api/cut/:id/events`,
@@ -64,7 +70,10 @@ renderRouter.post(
       res.status(422).json({ error: 'Die Timeline ist leer.' })
       return
     }
-    const compiled = compileTimeline(parsed.doc, { sources })
+    const compiled = compileTimeline(parsed.doc, {
+      sources,
+      normalizeAudio: settings.normalizeAudio,
+    })
     if (compiled.duration > config.maxDurationSec) {
       res
         .status(422)

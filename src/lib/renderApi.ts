@@ -18,6 +18,8 @@ export interface RenderOptions {
   quality: RenderQuality
   /** Dateiname ohne Endung. */
   name: string
+  /** Lautstärke des fertigen Tons angleichen (EBU R128). */
+  normalizeAudio?: boolean
 }
 
 /** Export starten; liefert die Job-ID. */
@@ -29,7 +31,12 @@ export async function startRender(
   const res = await fetch(`${API_BASE}/api/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ doc, quality: options.quality, name: options.name }),
+    body: JSON.stringify({
+      doc,
+      quality: options.quality,
+      name: options.name,
+      normalizeAudio: options.normalizeAudio === true,
+    }),
     signal,
   })
   let data: { jobId?: unknown; error?: unknown } = {}

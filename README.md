@@ -265,6 +265,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   18/21/26) mit demselben Compiler wie die Vorschau. Fortschritt, Download und
   Abbrechen laufen über die Job-Endpunkte `/api/cut/:id/…`; es gelten
   `MAX_CONCURRENT` und `MAX_DURATION_SEC`.
+  `normalizeAudio: true` gleicht die Lautstärke des fertigen Tons an
+  (`loudnorm`, −16 LUFS; nur im Export, Feature `timelineNormalize`).
+- **Projektformat** (`ProjectSettings.vue`, Modell `updateSettings`): Größe
+  (u. a. 16:9, 9:16, 1:1, 4:5), Bildrate und Hintergrundfarbe oben im Editor,
+  rückgängig machbar. Das erste Video legt das Format fest; Clips anderer
+  Größe werden eingepasst, Ränder zeigen den Hintergrund.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,

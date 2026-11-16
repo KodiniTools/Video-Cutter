@@ -23,6 +23,7 @@ import {
   splitClip as splitClipOp,
   trimClip as trimClipOp,
   trimRange,
+  updateSettings as updateSettingsOp,
   updateTrack as updateTrackOp,
   validateDoc,
   type AssetRef,
@@ -32,6 +33,7 @@ import {
   type NewTrack,
   type OpError,
   type OpResult,
+  type SettingsPatch,
   type Time,
   type TimelineDoc,
   type TrackKind,
@@ -432,6 +434,13 @@ export const useTimelineStore = defineStore('timeline', () => {
     playhead.value = snapToFrame(t, doc.value.settings.fps)
   }
 
+  /** Projektformat ändern (rückgängig machbar); der Abspielkopf bleibt auf dem Bildraster. */
+  function updateSettings(patch: SettingsPatch): boolean {
+    const done = apply((d) => updateSettingsOp(d, patch))
+    if (done) seek(playhead.value)
+    return done
+  }
+
   /** Vorschau starten bzw. anhalten (ohne Clips gibt es nichts abzuspielen). */
   function togglePlay(): void {
     playing.value = !playing.value && duration.value > 0
@@ -500,6 +509,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     selectAll,
     seek,
     togglePlay,
+    updateSettings,
     setZoom,
     snap,
   }

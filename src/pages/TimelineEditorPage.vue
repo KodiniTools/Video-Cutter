@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
+import ProjectSettings from '@/components/timeline/ProjectSettings.vue'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 
 import { useTimelineStore } from '@/stores/timeline'
@@ -23,6 +24,7 @@ function openExport(): void {
     <header class="editor-head">
       <h2>{{ t('timelineEditor.title') }}</h2>
       <span class="head-actions">
+        <ProjectSettings />
         <RouterLink :to="{ name: 'classic' }">{{ t('timelineEditor.back') }}</RouterLink>
         <button
           type="button"
@@ -67,6 +69,8 @@ function openExport(): void {
 }
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--ds-space-4);
 }
