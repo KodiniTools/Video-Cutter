@@ -728,6 +728,18 @@ const messages = {
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
         cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
+        layout: 'Bild-in-Bild',
+        layoutFields: { scale: 'Größe', opacity: 'Deckkraft', x: 'Waagerecht', y: 'Senkrecht' },
+        layoutCorner: 'In die Ecke',
+        layoutCorners: {
+          topLeft: 'Oben links',
+          topRight: 'Oben rechts',
+          bottomLeft: 'Unten links',
+          bottomRight: 'Unten rechts',
+        },
+        layoutReset: 'Volle Größe und Deckkraft',
+        layoutHint:
+          'Verkleinert den Clip und legt ihn an eine Stelle im Bild. Darunter ist zu sehen, was auf den Video-Spuren weiter unten liegt, sonst der Hintergrund. Das Bild bleibt immer ganz im Projektformat.',
         hold: 'Letztes Bild halten bis zum nächsten Clip',
         holdHint:
           'Folgt auf diesen Clip eine Lücke, zeigt sie sein letztes Bild als Standbild statt des Hintergrunds. Ohne folgenden Clip auf der Spur passiert nichts.',
@@ -841,6 +853,7 @@ const messages = {
           overlays: 'Nicht möglich: Texte, Grafiken oder Bilder müssen eingerechnet werden.',
           speed: 'Nicht möglich: Der Clip hat ein geändertes Tempo.',
           crop: 'Nicht möglich: Der Clip ist zugeschnitten.',
+          layout: 'Nicht möglich: Der Clip ist verkleinert oder durchscheinend (Bild-in-Bild).',
           transition: 'Nicht möglich: Der Clip hat einen Übergang.',
           audio:
             'Nicht möglich: Der Ton ist verändert (Lautstärke, Blende, verschoben oder weitere Ton-Clips).',
@@ -1615,6 +1628,18 @@ const messages = {
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
+        layout: 'Picture-in-picture',
+        layoutFields: { scale: 'Size', opacity: 'Opacity', x: 'Horizontal', y: 'Vertical' },
+        layoutCorner: 'To a corner',
+        layoutCorners: {
+          topLeft: 'Top left',
+          topRight: 'Top right',
+          bottomLeft: 'Bottom left',
+          bottomRight: 'Bottom right',
+        },
+        layoutReset: 'Full size and opacity',
+        layoutHint:
+          'Scales the clip down and places it somewhere in the frame. Below it you see what lies on the video tracks further down, otherwise the background. The picture always stays fully inside the project format.',
         hold: 'Hold the last frame until the next clip',
         holdHint:
           'If a gap follows this clip, it shows the clip’s last frame as a still instead of the background. Without a following clip on the track nothing happens.',
@@ -1726,6 +1751,7 @@ const messages = {
           overlays: 'Not possible: texts, graphics or images have to be rendered in.',
           speed: 'Not possible: the clip has a changed speed.',
           crop: 'Not possible: the clip is cropped.',
+          layout: 'Not possible: the clip is scaled down or translucent (picture-in-picture).',
           transition: 'Not possible: the clip has a transition.',
           audio: 'Not possible: the sound is changed (volume, fade, moved or further audio clips).',
           format: 'Not possible: the project format differs from the size of the video.',

@@ -276,22 +276,53 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
       // Der ganze Abschnitt liegt in einer gehaltenen Lücke.
       (holderAt(f0) ? [{ frames, clip: null, offset: 0 }] : null)
     if (!parts) continue
+    // Ein verkleinerter oder durchscheinender Clip braucht den Hintergrund
+    // unter sich: Liegt er auf der untersten Spur, kommt der zuerst.
+    if (layers.length === 0 && track.clips.some((c) => c.layout)) {
+      const base = label('base')
+      chains.push(
+        `color=c=${background}:s=${size}:r=${fps},format=yuv420p,trim=end_frame=${frames}[${base}]`,
+      )
+      layers.push(base)
+    }
     const opaque = layers.length === 0
     const format = opaque ? 'yuv420p' : 'yuva420p'
     const fill = opaque ? background : 'black@0'
     const labels: string[] = []
     /** Clip ins Projektformat bringen (ohne Längenschnitt). */
-    const fitSteps = (clip: DocVideoClip): string[] => [
-      clip.kind === 'still' || clip.speed === 1
-        ? 'setpts=PTS-STARTPTS'
-        : `setpts=(PTS-STARTPTS)/${num(clip.speed)}`,
-      `fps=${fps}`,
-      ...(clip.crop ? [buildCropFilter(clip.crop)] : []),
-      `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
-      `format=${format}`,
-      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${fill}`,
-      'setsar=1',
-    ]
+    const fitSteps = (clip: DocVideoClip): string[] => {
+      const head = [
+        clip.kind === 'still' || clip.speed === 1
+          ? 'setpts=PTS-STARTPTS'
+          : `setpts=(PTS-STARTPTS)/${num(clip.speed)}`,
+        `fps=${fps}`,
+        ...(clip.crop ? [buildCropFilter(clip.crop)] : []),
+      ]
+      const l = clip.layout
+      if (!l) {
+        return [
+          ...head,
+          `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+          `format=${format}`,
+          `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${fill}`,
+          'setsar=1',
+        ]
+      }
+      // Bild-in-Bild: in den verkleinerten Rahmen einpassen, um die Mitte
+      // (x, y) legen (ganz im Bild), der Rest bleibt durchsichtig.
+      const boxW = Math.max(2, Math.round((width * l.scale) / 2) * 2)
+      const boxH = Math.max(2, Math.round((height * l.scale) / 2) * 2)
+      return [
+        ...head,
+        `scale=${boxW}:${boxH}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+        'format=yuva420p',
+        ...(l.opacity < 1 ? [`lut=a=val*${num(l.opacity)}`] : []),
+        `pad=${width}:${height}:` +
+          `'max(0,min(ow-iw,${num(l.x)}*ow-iw/2))':'max(0,min(oh-ih,${num(l.y)}*oh-ih/2))'` +
+          ':color=black@0',
+        'setsar=1',
+      ]
+    }
     /** Auf genau `count` Bilder bringen; endet die Quelle zu früh, hält das letzte Bild. */
     const lengthSteps = (count: number): string[] => [
       `tpad=stop_mode=clone:stop_duration=${sec(secondsOf(count))}`,

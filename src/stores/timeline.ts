@@ -24,6 +24,7 @@ import {
   removeClip as removeClipOp,
   removeTrack as removeTrackOp,
   setClipCrop as setClipCropOp,
+  setClipLayout as setClipLayoutOp,
   setClipFade as setClipFadeOp,
   setClipHold as setClipHoldOp,
   setClipTransition as setClipTransitionOp,
@@ -43,6 +44,7 @@ import {
   type AssetRef,
   type Clip,
   type ClipCrop,
+  type ClipLayout,
   type ClipTransitionPreset,
   type DocIssue,
   type FadeCurve,
@@ -342,6 +344,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     apply((d) => setClipSpeedOp(d, clipId, speed, opts))
 
   /** Zuschnitt eines Video-Clips (`null` = ganzes Bild). */
+  const setClipLayout = (clipId: string, layout: ClipLayout | null) =>
+    apply((d) => setClipLayoutOp(d, clipId, layout))
   const setClipCrop = (clipId: string, crop: ClipCrop | null) =>
     apply((d) => setClipCropOp(d, clipId, crop))
 
@@ -654,6 +658,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipGain,
     setClipFade,
     setClipCrop,
+    setClipLayout,
     setClipTransition,
     cutClipRanges,
     repeatClip,

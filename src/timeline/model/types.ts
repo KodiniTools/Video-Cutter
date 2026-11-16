@@ -85,10 +85,24 @@ export interface ClipTransition {
   duration: Time
 }
 
+/**
+ * Lage eines Video-Clips im Bild (Bild-in-Bild). Fehlt sie, füllt der Clip das
+ * Projektformat. `scale` ist der Anteil des Projektformats, in den das Bild
+ * eingepasst wird; `x`/`y` sind die Mitte als Anteile [0, 1] (das Bild bleibt
+ * dabei ganz im Projektformat); `opacity` ist die Deckkraft.
+ */
+export interface ClipLayout {
+  x: number
+  y: number
+  scale: number
+  opacity: number
+}
+
 export interface VideoClip extends MediaClipBase {
   /** `still` = Standbild (Bild-Asset) mit frei wählbarer Dauer. */
   kind: 'video' | 'still'
   crop?: ClipCrop | null
+  layout?: ClipLayout
   /** Übergang vom vorigen Clip derselben Spur (oder aus dem Hintergrund). */
   transitionIn?: ClipTransition
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt (Standbild in der Lücke). */

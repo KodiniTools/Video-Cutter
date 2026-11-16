@@ -6,6 +6,7 @@ import { isTime, MAX_SPEED, MICROS_PER_SECOND, MIN_CLIP_DURATION, MIN_SPEED } fr
 import {
   CLIP_TRANSITIONS,
   FADE_CURVES,
+  type ClipLayout,
   type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
   type AssetRef,
@@ -191,6 +192,14 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
     typeof clip.hold !== 'boolean'
   )
     return 'invalid-settings'
+  if ((clip.kind === 'video' || clip.kind === 'still') && clip.layout !== undefined) {
+    const l = clip.layout
+    const unit = (v: unknown) => typeof v === 'number' && v >= 0 && v <= 1
+    if (!l || !unit(l.x) || !unit(l.y) || !unit(l.opacity) || !unit(l.scale)) {
+      return 'invalid-settings'
+    }
+    if (l.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+  }
   if ((clip.kind === 'video' || clip.kind === 'still') && clip.transitionIn !== undefined) {
     const t = clip.transitionIn
     if (
@@ -652,6 +661,56 @@ export function normalizeCrop(crop: ClipCrop | null | undefined): ClipCrop | nul
   const cy = round(Math.min(1 - h, Math.max(0, y)))
   if (cx === 0 && cy === 0 && w === 1 && h === 1) return null
   return { x: cx, y: cy, width: w, height: h }
+}
+
+/** Kleinste Größe eines Clips im Bild (Anteil des Projektformats). */
+export const MIN_LAYOUT_SCALE = 0.05
+
+/** Lage in gültige Grenzen bringen; volle Größe und Deckkraft (oder Ungültiges) ergibt `null`. */
+export function normalizeLayout(layout: ClipLayout | null | undefined): ClipLayout | null {
+  if (!layout) return null
+  const { x, y, scale, opacity } = layout
+  if (![x, y, scale, opacity].every((v) => Number.isFinite(v))) return null
+  const round = (v: number) => Math.round(v * 10000) / 10000
+  const unit = (v: number) => round(Math.min(1, Math.max(0, v)))
+  const s = round(Math.min(1, Math.max(MIN_LAYOUT_SCALE, scale)))
+  const o = unit(opacity)
+  if (s === 1 && o === 1) return null
+  return { x: unit(x), y: unit(y), scale: s, opacity: o }
+}
+
+/**
+ * Lage eines Video-Clips im Bild (Bild-in-Bild): Größe, Mitte und Deckkraft.
+ * `null` oder volle Größe mit voller Deckkraft hebt sie auf.
+ */
+export function setClipLayout(
+  doc: TimelineDoc,
+  clipId: string,
+  layout: ClipLayout | null,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const next = normalizeLayout(layout)
+  const before = normalizeLayout(clip.layout)
+  if (
+    (next === null && before === null) ||
+    (next !== null &&
+      before !== null &&
+      next.x === before.x &&
+      next.y === before.y &&
+      next.scale === before.scale &&
+      next.opacity === before.opacity)
+  ) {
+    return ok(doc)
+  }
+  const changed: Clip = { ...clip }
+  if (next) changed.layout = next
+  else delete changed.layout
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
 /**
