@@ -15,7 +15,12 @@ describe('parseStillParams', () => {
       width: 1920,
       height: 1080,
       fps: 30,
+      audio: true,
     })
+    // Timeline-Editor: ohne stille Tonspur.
+    expect(parseStillParams({ duration: '5', width: '640', height: '360', audio: '0' }).audio).toBe(
+      false,
+    )
     expect(parseStillParams({ duration: 2.5, width: 720, height: 1280, fps: '24.4' }).fps).toBe(24)
   })
 
@@ -43,12 +48,27 @@ describe('buildStillArgs', () => {
       width: 1280,
       height: 720,
       fps: 25,
+      audio: true,
     })
     expect(args.slice(args.indexOf('-loop'), args.indexOf('-loop') + 2)).toEqual(['-loop', '1'])
     expect(args).toContain('anullsrc=r=48000:cl=stereo')
     expect(args[args.indexOf('-t') + 1]).toBe('4.000')
     expect(args[args.indexOf('-vf') + 1]).toContain('pad=1280:720')
     expect(args[args.length - 1]).toBe('/tmp/o.mp4')
+  })
+
+  it('ohne Tonspur: kein anullsrc, -an', () => {
+    const args = buildStillArgs('/tmp/a.png', '/tmp/o.mp4', {
+      duration: 4,
+      width: 1280,
+      height: 720,
+      fps: 25,
+      audio: false,
+    })
+    expect(args).not.toContain('anullsrc=r=48000:cl=stereo')
+    expect(args).not.toContain('-shortest')
+    expect(args).toContain('-an')
+    expect(args[args.indexOf('-t') + 1]).toBe('4.000')
   })
 
   it('Dateiname', () => {
@@ -75,13 +95,20 @@ describe.skipIf(!hasFfmpeg)('Bild-Clip mit echtem ffmpeg', () => {
         '1',
         img,
       ])
-      const p = { duration: 1.5, width: 640, height: 360, fps: 30 }
+      const p = { duration: 1.5, width: 640, height: 360, fps: 30, audio: true }
       await runFfmpeg(buildStillArgs(img, out, p), p.duration, () => {}).promise
       const info = await probeMedia(out)
       expect(info.width).toBe(640)
       expect(info.height).toBe(360)
       expect(info.hasAudio).toBe(true)
       expect(Math.abs(info.duration - 1.5)).toBeLessThan(0.1)
+      // Ohne Tonspur (Timeline-Editor): gleiche Dauer, kein Ton.
+      const silent = path.join(dir, 'silent.mp4')
+      await runFfmpeg(buildStillArgs(img, silent, { ...p, audio: false }), p.duration, () => {})
+        .promise
+      const mute = await probeMedia(silent)
+      expect(mute.hasAudio).toBe(false)
+      expect(Math.abs(mute.duration - 1.5)).toBeLessThan(0.1)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

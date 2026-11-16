@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import StillClipForm from './StillClipForm.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
 import { UPLOAD_ABORTED } from '@/lib/mediaApi'
@@ -18,6 +19,8 @@ const THUMB_WIDTH = 96
 
 const input = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
+/** Formular „Bild-Clip“ aufgeklappt? */
+const stillOpen = ref(false)
 /** Schlüssel des Mediums, dessen Entfernen zuletzt abgelehnt wurde. */
 const blockedKey = ref<string | null>(null)
 
@@ -125,6 +128,16 @@ const rejectedText = computed(() =>
       @change="onPick"
     />
     <button type="button" class="add" @click="input?.click()">{{ t('mediaPool.add') }}</button>
+    <button
+      type="button"
+      class="add second"
+      :aria-expanded="stillOpen"
+      data-testid="media-pool-still"
+      @click="stillOpen = !stillOpen"
+    >
+      {{ t('timeline.still.open') }}
+    </button>
+    <StillClipForm v-if="stillOpen" @close="stillOpen = false" />
 
     <p v-if="rejectedText" class="note error" role="alert">{{ rejectedText }}</p>
     <p v-if="!pool.items.length" class="note">{{ t('mediaPool.empty') }}</p>
@@ -234,6 +247,10 @@ const rejectedText = computed(() =>
   color: var(--ds-text);
   font-weight: var(--ds-weight-semibold);
   cursor: pointer;
+}
+.add.second {
+  border-color: var(--ds-border);
+  font-weight: var(--ds-weight-regular, 400);
 }
 .add:hover {
   background: var(--ds-accent-soft);

@@ -299,6 +299,16 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `afade` mit Zeiten im Clip (`clipFadeFilters`), damit eine Blende über
   Abschnittsgrenzen der Vorschau hinweg wie im Export klingt. Beim Teilen
   bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.
+- **Bild-Clip, KI-Bild, KI-Video** (`StillClipForm.vue` in der Medienliste):
+  Ein Bild (hochgeladen, mit KI erzeugt oder aus der KI-Galerie) oder nur
+  eine Farbe wird über `POST /api/media/still` zu einem Video im
+  Projektformat und kommt in die Medienliste (`mediaPool.addMedia`). Der
+  Editor schickt `audio=0` (Feature `stillNoAudio`): Der Clip hat dann keine
+  stille Tonspur, und auf der Timeline entsteht kein leerer Ton-Clip. KI-Videos
+  und Galerie-Videos liegen schon auf dem Server und werden direkt
+  aufgenommen. Der KI-Bereich ist die Komponente des bisherigen Editors
+  (`StillAiImage.vue`). Grenze: Ein Bild-Clip wird nicht länger als beim
+  Erstellen eingestellt (höchstens 600 s).
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die
