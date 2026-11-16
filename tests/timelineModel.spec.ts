@@ -1,0 +1,386 @@
+import { describe, expect, it } from 'vitest'
+import {
+  addTrack,
+  createDoc,
+  docDuration,
+  findClip,
+  frameIndex,
+  insertClip,
+  moveClip,
+  putAsset,
+  removeClip,
+  removeTrack,
+  secondsToTime,
+  snapPoints,
+  snapTime,
+  snapToFrame,
+  splitClip,
+  trimClip,
+  updateTrack,
+  validateDoc,
+  type AudioClip,
+  type OpResult,
+  type TimelineDoc,
+  type VideoClip,
+} from '@/timeline/model'
+
+const s = secondsToTime
+
+/** Friert das Dokument tief ein: jeder schreibende Zugriff eines Befehls würde werfen. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const v of Object.values(value)) deepFreeze(v)
+  }
+  return value
+}
+
+function unwrap(r: OpResult): TimelineDoc {
+  if (!r.ok) throw new Error(`Befehl abgelehnt: ${r.error}`)
+  expect(validateDoc(r.doc)).toEqual([])
+  return deepFreeze(r.doc)
+}
+
+function errorOf(r: OpResult): string | null {
+  return r.ok ? null : r.error
+}
+
+const video = (id: string, start: number, duration: number, extra: Partial<VideoClip> = {}) =>
+  ({
+    id,
+    kind: 'video',
+    asset: 'vid',
+    start: s(start),
+    duration: s(duration),
+    sourceIn: 0,
+    speed: 1,
+    ...extra,
+  }) satisfies VideoClip
+
+const audio = (id: string, start: number, duration: number, extra: Partial<AudioClip> = {}) =>
+  ({
+    id,
+    kind: 'audio',
+    asset: 'vid',
+    start: s(start),
+    duration: s(duration),
+    sourceIn: 0,
+    speed: 1,
+    gain: 1,
+    ...extra,
+  }) satisfies AudioClip
+
+/** V1 + A1 mit einem 10-s-Video als Quelle. */
+function baseDoc(): TimelineDoc {
+  let doc = createDoc()
+  doc = putAsset(doc, { id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10), hasAudio: true })
+  doc = putAsset(doc, { id: 'img', kind: 'image', name: 'b.png', duration: null })
+  doc = unwrap(addTrack(doc, { id: 'A1', kind: 'audio', name: 'Ton' }))
+  doc = unwrap(addTrack(doc, { id: 'V1', kind: 'video', name: 'Video' }))
+  return doc
+}
+
+const starts = (doc: TimelineDoc, trackId: string) =>
+  doc.tracks.find((t) => t.id === trackId)!.clips.map((c) => [c.id, c.start, c.duration])
+
+describe('Zeit', () => {
+  it('rechnet Sekunden in ganze Mikrosekunden um', () => {
+    expect(s(1.5)).toBe(1_500_000)
+    expect(s(0.1 + 0.2)).toBe(300_000)
+    expect(s(Number.NaN)).toBe(0)
+  })
+
+  it('rastet auf das Bildraster ein (auch 29,97 fps)', () => {
+    expect(snapToFrame(s(1.02), 25)).toBe(s(1.04))
+    expect(frameIndex(snapToFrame(s(3.2), 29.97), 29.97)).toBe(96)
+    expect(snapToFrame(1234, 0)).toBe(1234)
+  })
+})
+
+describe('Spuren', () => {
+  it('legt neue Spuren oben an und lehnt doppelte IDs ab', () => {
+    const doc = baseDoc()
+    expect(doc.tracks.map((t) => t.id)).toEqual(['V1', 'A1'])
+    expect(errorOf(addTrack(doc, { id: 'V1', kind: 'video', name: 'x' }))).toBe('duplicate-id')
+    const more = unwrap(addTrack(doc, { id: 'T1', kind: 'overlay', name: 'Text' }, 99))
+    expect(more.tracks.map((t) => t.id)).toEqual(['V1', 'A1', 'T1'])
+  })
+
+  it('ändert nur Felder, die die Spur-Art kennt', () => {
+    const doc = unwrap(updateTrack(baseDoc(), 'V1', { hidden: true, muted: true, name: 'Haupt' }))
+    expect(doc.tracks[0]).toMatchObject({ hidden: true, name: 'Haupt' })
+    expect('muted' in doc.tracks[0]).toBe(false)
+  })
+
+  it('entfernt gesperrte Spuren nicht', () => {
+    const doc = unwrap(updateTrack(baseDoc(), 'V1', { locked: true }))
+    expect(errorOf(removeTrack(doc, 'V1'))).toBe('track-locked')
+    expect(unwrap(removeTrack(doc, 'A1')).tracks.map((t) => t.id)).toEqual(['V1'])
+    expect(errorOf(removeTrack(doc, 'nope'))).toBe('track-not-found')
+  })
+})
+
+describe('insertClip', () => {
+  it('fügt sortiert ein und verändert die Eingabe nicht', () => {
+    let doc = baseDoc()
+    doc = unwrap(insertClip(doc, 'V1', video('b', 5, 2)))
+    doc = unwrap(insertClip(doc, 'V1', video('a', 0, 2)))
+    expect(starts(doc, 'V1')).toEqual([
+      ['a', 0, s(2)],
+      ['b', s(5), s(2)],
+    ])
+    expect(docDuration(doc)).toBe(s(7))
+  })
+
+  it('lehnt Überlappung, falsche Spur-Art und ungültige Werte ab', () => {
+    const doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 2)))
+    expect(errorOf(insertClip(doc, 'V1', video('b', 1.5, 2)))).toBe('overlap')
+    // Direkt anschließen ist erlaubt.
+    expect(insertClip(doc, 'V1', video('b', 2, 2)).ok).toBe(true)
+    expect(errorOf(insertClip(doc, 'A1', video('b', 3, 2)))).toBe('kind-mismatch')
+    expect(errorOf(insertClip(doc, 'V1', video('a', 3, 2)))).toBe('duplicate-id')
+    expect(errorOf(insertClip(doc, 'V1', video('b', 3, 0.01)))).toBe('too-short')
+    expect(errorOf(insertClip(doc, 'V1', video('b', 3.0000001, 2, { start: 0.5 })))).toBe(
+      'invalid-time',
+    )
+    expect(errorOf(insertClip(doc, 'V1', video('b', 3, 2, { asset: 'x' })))).toBe('asset-not-found')
+    expect(errorOf(insertClip(doc, 'V1', video('b', 3, 2, { speed: 8 })))).toBe('invalid-time')
+    expect(errorOf(insertClip(doc, 'nope', video('b', 3, 2)))).toBe('track-not-found')
+  })
+
+  it('achtet auf das Ende der Quelle, auch mit Tempo', () => {
+    const doc = baseDoc()
+    expect(errorOf(insertClip(doc, 'V1', video('a', 0, 11)))).toBe('out-of-source')
+    expect(errorOf(insertClip(doc, 'V1', video('a', 0, 6, { speed: 2 })))).toBe('out-of-source')
+    expect(insertClip(doc, 'V1', video('a', 0, 5, { speed: 2 })).ok).toBe(true)
+    // Halbes Tempo: 10 s Quelle reichen für 20 s auf der Timeline.
+    expect(insertClip(doc, 'V1', video('a', 0, 20, { speed: 0.5 })).ok).toBe(true)
+    // Standbilder sind beliebig lang.
+    expect(insertClip(doc, 'V1', video('a', 0, 60, { kind: 'still', asset: 'img' })).ok).toBe(true)
+  })
+
+  it('lehnt Änderungen an gesperrten Spuren ab', () => {
+    const doc = unwrap(updateTrack(baseDoc(), 'V1', { locked: true }))
+    expect(errorOf(insertClip(doc, 'V1', video('a', 0, 2)))).toBe('track-locked')
+  })
+})
+
+describe('moveClip', () => {
+  it('verschiebt in der Zeit und auf eine andere Spur', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 2)))
+    doc = unwrap(addTrack(doc, { id: 'V2', kind: 'video', name: 'V2' }))
+    doc = unwrap(moveClip(doc, 'a', { start: s(4), trackId: 'V2' }))
+    expect(starts(doc, 'V1')).toEqual([])
+    expect(starts(doc, 'V2')).toEqual([['a', s(4), s(2)]])
+  })
+
+  it('lehnt Überlappung, negative Zeit und falsche Spur ab', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 2)))
+    doc = unwrap(insertClip(doc, 'V1', video('b', 3, 2)))
+    expect(errorOf(moveClip(doc, 'b', { start: s(1) }))).toBe('overlap')
+    expect(errorOf(moveClip(doc, 'b', { start: -1 }))).toBe('invalid-time')
+    expect(errorOf(moveClip(doc, 'b', { start: s(6), trackId: 'A1' }))).toBe('kind-mismatch')
+    expect(errorOf(moveClip(doc, 'x', { start: 0 }))).toBe('clip-not-found')
+    // Ein Clip darf über seine eigene alte Lage hinweg rücken.
+    expect(starts(unwrap(moveClip(doc, 'b', { start: s(2.5) })), 'V1')[1]).toEqual([
+      'b',
+      s(2.5),
+      s(2),
+    ])
+  })
+
+  it('nimmt verknüpfte Clips mit und scheitert als Ganzes', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 2, 2, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 2, 2, { linkGroup: 'g' })))
+    const moved = unwrap(moveClip(doc, 'v', { start: s(5) }))
+    expect(starts(moved, 'A1')).toEqual([['a', s(5), s(2)]])
+    // Verknüpfter Ton würde vor 0 landen bzw. kollidieren -> nichts bewegt sich.
+    const blocked = unwrap(insertClip(doc, 'A1', audio('x', 6, 2)))
+    expect(errorOf(moveClip(blocked, 'v', { start: s(5) }))).toBe('overlap')
+    // Ohne Verknüpfung bewegt sich nur das Bild.
+    const alone = unwrap(moveClip(blocked, 'v', { start: s(5) }, { linked: false }))
+    expect(starts(alone, 'A1')[0]).toEqual(['a', s(2), s(2)])
+    // Gesperrte Spur eines verknüpften Clips blockiert.
+    const locked = unwrap(updateTrack(doc, 'A1', { locked: true }))
+    expect(errorOf(moveClip(locked, 'v', { start: s(5) }))).toBe('track-locked')
+  })
+})
+
+describe('trimClip', () => {
+  it('zieht den Anfang: Quell-Beginn rückt mit, Ende bleibt', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 2, 4, { sourceIn: s(1) })))
+    doc = unwrap(trimClip(doc, 'a', 'start', s(3)))
+    expect(findClip(doc, 'a')!.clip).toMatchObject({ start: s(3), duration: s(3), sourceIn: s(2) })
+    // Zurück über den Quell-Anfang hinaus geht nicht.
+    expect(errorOf(trimClip(doc, 'a', 'start', s(0.5)))).toBe('out-of-source')
+    expect(unwrap(trimClip(doc, 'a', 'start', s(1))).tracks[0].clips[0]).toMatchObject({
+      start: s(1),
+      sourceIn: 0,
+    })
+  })
+
+  it('rechnet beim Anfang das Tempo ein', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 4, { speed: 2 })))
+    doc = unwrap(trimClip(doc, 'a', 'start', s(1)))
+    expect(findClip(doc, 'a')!.clip).toMatchObject({ start: s(1), duration: s(3), sourceIn: s(2) })
+  })
+
+  it('zieht das Ende bis höchstens zum Quell-Ende und zum Nachbarn', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 4, { sourceIn: s(2) })))
+    expect(unwrap(trimClip(doc, 'a', 'end', s(8))).tracks[0].clips[0].duration).toBe(s(8))
+    expect(errorOf(trimClip(doc, 'a', 'end', s(8.5)))).toBe('out-of-source')
+    doc = unwrap(insertClip(doc, 'V1', video('b', 5, 2, { sourceIn: s(4) })))
+    expect(errorOf(trimClip(doc, 'a', 'end', s(6)))).toBe('overlap')
+    expect(errorOf(trimClip(doc, 'a', 'end', s(0.01)))).toBe('too-short')
+    expect(errorOf(trimClip(doc, 'a', 'start', s(3.99)))).toBe('too-short')
+    expect(errorOf(trimClip(doc, 'b', 'start', s(3)))).toBe('overlap')
+  })
+
+  it('lässt Standbilder frei verlängern und verknüpfte Clips unberührt', () => {
+    let doc = unwrap(
+      insertClip(
+        baseDoc(),
+        'V1',
+        video('p', 2, 2, { kind: 'still', asset: 'img', linkGroup: 'g' }),
+      ),
+    )
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 2, 2, { linkGroup: 'g' })))
+    doc = unwrap(trimClip(doc, 'p', 'start', 0))
+    doc = unwrap(trimClip(doc, 'p', 'end', s(100)))
+    expect(findClip(doc, 'p')!.clip).toMatchObject({ start: 0, duration: s(100), sourceIn: 0 })
+    expect(findClip(doc, 'a')!.clip).toMatchObject({ start: s(2), duration: s(2) })
+  })
+})
+
+describe('splitClip', () => {
+  const ids = () => {
+    let n = 0
+    return () => `n${++n}`
+  }
+
+  it('teilt einen Clip; die rechte Hälfte setzt in der Quelle nahtlos fort', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 1, 4, { sourceIn: s(1), speed: 2 })))
+    doc = unwrap(splitClip(doc, 'a', s(2.5), { ids: ids() }))
+    expect(doc.tracks[0].clips).toMatchObject([
+      { id: 'a', start: s(1), duration: s(1.5), sourceIn: s(1) },
+      { id: 'n1', start: s(2.5), duration: s(2.5), sourceIn: s(4) },
+    ])
+  })
+
+  it('teilt verknüpfte Clips mit und verknüpft die rechten Hälften neu', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 0, 4, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 0, 4, { linkGroup: 'g' })))
+    doc = unwrap(splitClip(doc, 'v', s(1), { ids: ids() }))
+    const [v1, v2] = doc.tracks[0].clips
+    const [a1, a2] = doc.tracks[1].clips
+    expect([v1.linkGroup, a1.linkGroup]).toEqual(['g', 'g'])
+    expect(v2.linkGroup).toBe(a2.linkGroup)
+    expect(v2.linkGroup).not.toBe('g')
+    expect(v2.linkGroup).toBeTruthy()
+    // Danach bewegen sich die rechten Hälften gemeinsam, die linken bleiben.
+    const moved = unwrap(moveClip(doc, v2.id, { start: s(6) }))
+    expect(starts(moved, 'A1').map((c) => c[1])).toEqual([0, s(6)])
+  })
+
+  it('teilt nur Clips, die die Stelle überdecken; einzelne rechte Hälfte ohne Gruppe', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 0, 4, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 0, 2, { linkGroup: 'g' })))
+    doc = unwrap(splitClip(doc, 'v', s(3), { ids: ids() }))
+    expect(doc.tracks[1].clips).toHaveLength(1)
+    expect(doc.tracks[0].clips[1].linkGroup).toBeUndefined()
+  })
+
+  it('lehnt Stellen außerhalb, zu kurze Teile und gesperrte Spuren ab', () => {
+    const doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 1, 4)))
+    expect(errorOf(splitClip(doc, 'a', s(1)))).toBe('invalid-time')
+    expect(errorOf(splitClip(doc, 'a', s(5)))).toBe('invalid-time')
+    expect(errorOf(splitClip(doc, 'a', s(1.01)))).toBe('too-short')
+    expect(errorOf(splitClip(doc, 'a', s(2), { ids: () => 'a' }))).toBe('duplicate-id')
+    const locked = unwrap(updateTrack(doc, 'V1', { locked: true }))
+    expect(errorOf(splitClip(locked, 'a', s(2)))).toBe('track-locked')
+  })
+})
+
+describe('removeClip', () => {
+  function three(): TimelineDoc {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 2)))
+    doc = unwrap(insertClip(doc, 'V1', video('b', 3, 2)))
+    doc = unwrap(insertClip(doc, 'V1', video('c', 6, 2)))
+    return doc
+  }
+
+  it('löscht ohne Ripple und lässt die Lücke stehen', () => {
+    expect(starts(unwrap(removeClip(three(), 'b')), 'V1')).toEqual([
+      ['a', 0, s(2)],
+      ['c', s(6), s(2)],
+    ])
+  })
+
+  it('schließt mit Ripple genau die Länge des gelöschten Clips', () => {
+    expect(starts(unwrap(removeClip(three(), 'b', { ripple: true })), 'V1')).toEqual([
+      ['a', 0, s(2)],
+      ['c', s(4), s(2)],
+    ])
+  })
+
+  it('löscht verknüpfte Clips mit; Ripple wirkt je Spur', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 0, 2, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 0, 2, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'V1', video('v2', 2, 2)))
+    doc = unwrap(insertClip(doc, 'A1', audio('a2', 3, 2)))
+    const out = unwrap(removeClip(doc, 'v', { ripple: true }))
+    expect(starts(out, 'V1')).toEqual([['v2', 0, s(2)]])
+    expect(starts(out, 'A1')).toEqual([['a2', s(1), s(2)]])
+    const single = unwrap(removeClip(doc, 'v', { linked: false }))
+    expect(starts(single, 'A1')).toHaveLength(2)
+  })
+
+  it('lehnt gesperrte Spuren und unbekannte Clips ab', () => {
+    const locked = unwrap(updateTrack(three(), 'V1', { locked: true }))
+    expect(errorOf(removeClip(locked, 'b'))).toBe('track-locked')
+    expect(errorOf(removeClip(three(), 'x'))).toBe('clip-not-found')
+  })
+})
+
+describe('Einrasten', () => {
+  it('sammelt Clip-Ränder, Marker und Abspielkopf ohne ausgeschlossene Clips', () => {
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 1, 2)))
+    doc = unwrap(insertClip(doc, 'V1', video('b', 5, 2)))
+    doc = { ...doc, markers: [{ id: 'm', at: s(4), label: 'x' }] }
+    expect(snapPoints(doc, { exclude: ['b'], playhead: s(9) })).toEqual([0, s(1), s(3), s(4), s(9)])
+  })
+
+  it('nimmt den nächsten Punkt nur innerhalb der Toleranz', () => {
+    const points = [0, s(1), s(3)]
+    expect(snapTime(s(1.04), points, s(0.05))).toEqual({ time: s(1), snapped: true })
+    expect(snapTime(s(1.2), points, s(0.05))).toEqual({ time: s(1.2), snapped: false })
+    expect(snapTime(s(2.1), points, s(2))).toEqual({ time: s(3), snapped: true })
+    expect(snapTime(s(2), [], s(1))).toEqual({ time: s(2), snapped: false })
+  })
+})
+
+describe('validateDoc', () => {
+  it('meldet Überlappung, doppelte IDs und falsche Spur-Art in geladenen Dokumenten', () => {
+    const doc = baseDoc()
+    const broken: TimelineDoc = {
+      ...doc,
+      tracks: [
+        {
+          ...doc.tracks[0],
+          clips: [video('a', 0, 3), video('a', 2, 2)],
+        } as TimelineDoc['tracks'][0],
+        {
+          ...doc.tracks[1],
+          clips: [video('z', 0, 1) as unknown as AudioClip],
+        } as TimelineDoc['tracks'][1],
+      ],
+    }
+    expect(validateDoc(broken)).toEqual(
+      expect.arrayContaining([
+        { error: 'duplicate-id', id: 'a' },
+        { error: 'overlap', id: 'a' },
+        { error: 'kind-mismatch', id: 'z' },
+      ]),
+    )
+  })
+})

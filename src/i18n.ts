@@ -638,6 +638,11 @@ const messages = {
         'Ein Bild ist für das Einbrennen zu groß (höchstens 16 MB als PNG). Bitte das Bild kleiner einstellen oder zuschneiden.',
     },
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
+    timelineEditor: {
+      title: 'Neuer Editor (Beta)',
+      placeholder: 'Der Timeline-Editor ist in Arbeit. Hier entsteht die Mehrspur-Timeline.',
+      back: 'Zurück zum bisherigen Editor',
+    },
   },
   en: {
     app: {
@@ -1260,6 +1265,11 @@ const messages = {
         'An image is too large to burn in (max. 16 MB as PNG). Please make it smaller or crop it.',
     },
     footer: 'Server-side processing with FFmpeg.',
+    timelineEditor: {
+      title: 'New editor (beta)',
+      placeholder: 'The timeline editor is in progress. The multitrack timeline will appear here.',
+      back: 'Back to the classic editor',
+    },
   },
 } as const
 
