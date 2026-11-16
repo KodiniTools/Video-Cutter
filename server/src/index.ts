@@ -9,6 +9,7 @@ import { mediaRouter } from './routes/media'
 import { textRouter } from './routes/text'
 import { projectsRouter } from './routes/projects'
 import { mediaStore } from './lib/media'
+import { derivedStore } from './lib/derived'
 import { ValidationError } from './lib/validate'
 import { jobManager } from './lib/jobs'
 import { initCustomFonts } from './lib/customFonts'
@@ -25,6 +26,7 @@ async function bootstrap(): Promise<void> {
       ? `Videos: ${restored} wiederhergestellt (${config.mediaIndexFile})`
       : 'Videos: nur im Arbeitsspeicher (MEDIA_INDEX_FILE leer)',
   )
+  await derivedStore.init()
   await mkdir(config.projectsDir, { recursive: true })
   console.log(`Projekte: ${config.projectsDir}`)
   await gallery.init()
@@ -129,6 +131,7 @@ async function bootstrap(): Promise<void> {
   const shutdown = (signal: string) => {
     console.log(`${signal} empfangen – fahre herunter …`)
     aiJobs.shutdown()
+    derivedStore.shutdown()
     server.close(() => {
       void jobManager
         .shutdown()

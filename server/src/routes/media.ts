@@ -10,6 +10,7 @@ import { jobManager } from '../lib/jobs'
 import { buildStillArgs, parseStillParams, stillClipName } from '../lib/stillClip'
 import { safeExt, ValidationError } from '../lib/validate'
 import { isMediaId, mediaStore, mediaView, StorageFullError } from '../lib/media'
+import { derivedStore, type DerivedPart } from '../lib/derived'
 
 /**
  * Video-Bibliothek: Videos werden EINMAL hochgeladen und dann per ID zum
@@ -158,6 +159,63 @@ mediaRouter.get('/media/:id/file', (req: Request, res: Response) => {
     if (err && !res.headersSent) res.status(500).end()
   })
 })
+
+/**
+ * Abgeleitete Dateien für den Timeline-Editor (Wellenform, Filmstreifen,
+ * Vorschau-Kopie). Sie entstehen nur auf Abruf:
+ *  - POST /api/media/:id/derived -> 202 Stand; startet fehlende Teile im Hintergrund
+ *  - GET  /api/media/:id/derived -> Stand je Teil (missing | queued | running | ready | error | unavailable)
+ */
+mediaRouter.post(
+  '/media/:id/derived',
+  asyncHandler(async (req, res) => {
+    const status = await derivedStore.ensure(req.params.id)
+    if (!status) {
+      res.status(404).json({ error: 'Video nicht gefunden.' })
+      return
+    }
+    res.status(202).json(status)
+  }),
+)
+
+mediaRouter.get(
+  '/media/:id/derived',
+  asyncHandler(async (req, res) => {
+    const status = await derivedStore.status(req.params.id)
+    if (!status) {
+      res.status(404).json({ error: 'Video nicht gefunden.' })
+      return
+    }
+    res.json(status)
+  }),
+)
+
+/** Liefert eine fertige abgeleitete Datei aus (404, solange sie fehlt). */
+function sendDerived(part: DerivedPart, type: string) {
+  return asyncHandler(async (req, res) => {
+    const id = req.params.id
+    const file = await derivedStore.file(id, part)
+    if (!file) {
+      res.status(404).json({ error: 'Noch nicht vorhanden.' })
+      return
+    }
+    // Zählt als Benutzung des Videos (Frist fürs Auto-Aufräumen).
+    mediaStore.get(id)
+    // Der Inhalt zu einer Video-ID ändert sich nie.
+    res.set('Cache-Control', 'private, max-age=3600')
+    res.type(type)
+    res.sendFile(file, (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: 'Noch nicht vorhanden.' })
+    })
+  })
+}
+
+/** GET /api/media/:id/peaks -> Wellenform: ein Byte (0–255) je Abschnitt */
+mediaRouter.get('/media/:id/peaks', sendDerived('peaks', 'application/octet-stream'))
+/** GET /api/media/:id/strip -> Filmstreifen als Kachelbild (JPEG) */
+mediaRouter.get('/media/:id/strip', sendDerived('strip', 'image/jpeg'))
+/** GET /api/media/:id/proxy -> Vorschau-Kopie (MP4, unterstützt Bereichsanfragen) */
+mediaRouter.get('/media/:id/proxy', sendDerived('proxy', 'video/mp4'))
 
 /** DELETE /api/media/:id -> sofort vom Server löschen */
 mediaRouter.delete(

@@ -71,6 +71,16 @@ export const config = {
    * Arbeitsspeicher, Videos werden beim Beenden gelöscht.
    */
   mediaIndexFile: process.env.MEDIA_INDEX_FILE ?? path.join(tmpDir, 'media-index.json'),
+  /**
+   * Abgeleitete Dateien je Video für den Timeline-Editor (Vorschau-Kopie,
+   * Wellenform, Filmstreifen). Entstehen nur auf Abruf und werden mit dem
+   * Video gelöscht.
+   */
+  derivedDir: process.env.DERIVED_DIR ?? path.join(tmpDir, 'derived'),
+  /** FFmpeg-Threads für die Vorschau-Kopie (schont die übrigen Dienste). */
+  derivedThreads: num('DERIVED_THREADS', 2),
+  /** Zeitgrenze je abgeleiteter Datei. */
+  derivedTimeoutMs: num('DERIVED_TIMEOUT_SEC', 60 * 60) * 1000,
   /** Obergrenze für alle gespeicherten Videos zusammen. */
   maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
 

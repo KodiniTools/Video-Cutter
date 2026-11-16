@@ -109,6 +109,7 @@ export const SERVER_FEATURES = [
   'aiModels',
   'animSpeed',
   'clipMute',
+  'mediaDerived',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

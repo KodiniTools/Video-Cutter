@@ -8,7 +8,7 @@ export interface RunHandle {
 
 /**
  * Startet FFmpeg via `spawn` (keine Shell). Parst `-progress`-Ausgabe von
- * stdout und meldet Prozent zurück. Bricht nach `ffmpegTimeoutMs` hart ab.
+ * stdout und meldet Prozent zurück. Bricht nach `timeoutMs` hart ab.
  */
 export function runFfmpeg(
   args: string[],
@@ -16,6 +16,8 @@ export function runFfmpeg(
   onProgress: (percent: number) => void,
   /** Optionale Umgebung (z. B. FONTCONFIG_FILE für eigene Schriften). */
   env?: NodeJS.ProcessEnv,
+  /** Harte Zeitgrenze; Standard = `FFMPEG_TIMEOUT_SEC`. */
+  timeoutMs: number = config.ffmpegTimeoutMs,
 ): RunHandle {
   const proc = spawn(config.ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'], env })
 
@@ -25,7 +27,7 @@ export function runFfmpeg(
   const timer = setTimeout(() => {
     timedOut = true
     proc.kill('SIGKILL')
-  }, config.ffmpegTimeoutMs)
+  }, timeoutMs)
 
   // stdout: key=value Zeilen (out_time_us, progress, ...)
   let buf = ''

@@ -234,3 +234,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Zoom und den Rückgängig-Verlauf (höchstens 200 Schritte; eine Geste zwischen
   `beginGesture` und `endGesture` zählt als ein Schritt).
   Tests: `tests/timeline.store.spec.ts`.
+- **Abgeleitete Dateien** (`server/src/lib/derived.ts`, Feature `mediaDerived`):
+  Je Video erzeugt der Server auf Abruf eine Wellenform (ein Byte je 20 ms),
+  einen Filmstreifen (Kachelbild, höchstens 200 Bilder) und eine Vorschau-Kopie
+  (höchstens 540 Zeilen, dichte Schlüsselbilder). Immer nur eine Berechnung zur
+  Zeit, im Hintergrund; gelöscht werden sie mit dem Video.
+  `POST /api/media/:id/derived` startet, `GET /api/media/:id/derived` zeigt den
+  Stand, `GET /api/media/:id/peaks | strip | proxy` liefert die Dateien.
+  Einstellungen: `DERIVED_DIR`, `DERIVED_THREADS`, `DERIVED_TIMEOUT_SEC`.
