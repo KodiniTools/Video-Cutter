@@ -247,6 +247,16 @@ describe('resolvePreviewSources', () => {
     })
   })
 
+  it('lehnt eine Tondatei auf einer Video-Spur ab', async () => {
+    const audioOnly = {
+      get: () => ({ path: '/m/a.mp3', info: { hasAudio: true, hasVideo: false } }),
+      proxy: async () => null,
+    }
+    await expect(resolvePreviewSources(doc(), audioOnly)).rejects.toMatchObject({
+      message: 'Eine Tondatei liegt auf einer Video-Spur.',
+    })
+  })
+
   it('lehnt Dokumente mit fehlenden Videos ab (409)', async () => {
     const d = doc()
     d.assets[ID_B] = { id: ID_B, kind: 'video', duration: s(5) }

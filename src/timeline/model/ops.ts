@@ -862,11 +862,54 @@ export function nextTrackName(doc: TimelineDoc, prefix: string): string {
   return `${prefix}${n}`
 }
 
+/** Ton-Spur, auf der nur Tondateien (Musik, Sprachaufnahmen) liegen. */
+export function isMusicTrack(doc: TimelineDoc, track: Track): boolean {
+  return (
+    track.kind === 'audio' &&
+    track.clips.length > 0 &&
+    track.clips.every((c) => doc.assets[c.asset]?.kind === 'audio')
+  )
+}
+
 /**
- * Video aus der Medienliste ans Ende der Timeline legen: Bild auf die oberste
- * freie Video-Spur, Ton (falls vorhanden) verknüpft auf die oberste freie
- * Ton-Spur. Fehlende oder gesperrte Spuren werden neu angelegt. Ist die
- * Timeline noch leer, übernimmt das Projekt Größe und Bildrate des Videos.
+ * Tondatei auf die Timeline legen: hinter die letzte Tondatei der obersten
+ * freien Musik-Spur. Gibt es noch keine, entsteht unten eine neue Ton-Spur
+ * und die Tondatei beginnt bei 0, läuft also unter den Videos mit.
+ */
+function appendAudioFile(doc: TimelineDoc, asset: AssetRef, ids: () => string): OpResult {
+  const duration = asset.duration ?? 0
+  let next = doc
+  let track = doc.tracks.find((t) => !t.locked && isMusicTrack(doc, t))
+  if (!track) {
+    const id = ids()
+    const added = addTrack(
+      next,
+      { id, kind: 'audio', name: nextTrackName(next, 'A') },
+      next.tracks.length,
+    )
+    if (!added.ok) return added
+    next = added.doc
+    track = next.tracks.find((t) => t.id === id)
+    if (!track) return fail('track-not-found')
+  }
+  return insertClip(next, track.id, {
+    id: ids(),
+    kind: 'audio',
+    asset: asset.id,
+    start: trackEnd(track),
+    duration,
+    sourceIn: 0,
+    speed: 1,
+    gain: 1,
+  })
+}
+
+/**
+ * Medium aus der Medienliste auf die Timeline legen. Video: Bild ans Ende der
+ * obersten freien Video-Spur, Ton (falls vorhanden) verknüpft auf die oberste
+ * freie Ton-Spur, die keine Musik-Spur ist. Fehlende oder gesperrte Spuren
+ * werden neu angelegt. Liegt noch kein Bild auf der Timeline, übernimmt das
+ * Projekt Größe und Bildrate des Videos. Tondatei: siehe `appendAudioFile`.
  */
 export function appendMedia(
   doc: TimelineDoc,
@@ -875,13 +918,15 @@ export function appendMedia(
 ): OpResult {
   const asset = doc.assets[assetId]
   if (!asset) return fail('asset-not-found')
-  // Bilder und reine Tondateien folgen mit den Bild-Clips bzw. der Musik-Spur.
-  if (asset.kind !== 'video' || asset.duration === null) return fail('kind-mismatch')
+  if (asset.kind === 'image' || asset.duration === null) return fail('kind-mismatch')
   if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
   const ids = opts.ids ?? createId
+  if (asset.kind === 'audio') return appendAudioFile(doc, asset, ids)
   let next = doc
 
-  if (!doc.tracks.some((t) => t.clips.length > 0) && asset.width && asset.height) {
+  // Musik, die schon liegt, zählt nicht: Das erste Video bestimmt das Format.
+  const empty = !doc.tracks.some((t) => t.kind !== 'audio' && t.clips.length > 0)
+  if (empty && asset.width && asset.height) {
     next = {
       ...next,
       settings: {
@@ -895,7 +940,8 @@ export function appendMedia(
 
   /** Oberste freie Spur dieser Art; sonst eine neue. `null` = Anlegen abgelehnt. */
   const useTrack = (kind: 'video' | 'audio', prefix: string): string | null => {
-    const free = next.tracks.find((t) => t.kind === kind && !t.locked)
+    // Musik-Spuren bleiben frei: Sonst landete das Video hinter der Musik.
+    const free = next.tracks.find((t) => t.kind === kind && !t.locked && !isMusicTrack(next, t))
     if (free) return free.id
     const id = ids()
     // Bild-Spuren oben, Ton-Spuren unten einsortieren.

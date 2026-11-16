@@ -5,6 +5,7 @@ import {
   deleteMedia,
   createStillClip,
   MEDIA_UNSUPPORTED,
+  isAudioFile,
 } from '@/lib/mediaApi'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -20,9 +21,19 @@ describe('mediaApi', () => {
       height: 0,
       hasAudio: false,
       fps: 0,
+      kind: 'video',
     })
     expect(parseMediaView({ id: 'x', fps: 29.97 }).fps).toBe(29.97)
+    expect(parseMediaView({ id: 'x', kind: 'audio' }).kind).toBe('audio')
+    expect(parseMediaView({ id: 'x', kind: 'quatsch' }).kind).toBe('video')
     expect(() => parseMediaView({})).toThrow()
+  })
+
+  it('isAudioFile erkennt Tondateien am Typ, ohne Typ an der Endung', () => {
+    expect(isAudioFile({ type: 'audio/mpeg', name: 'a' })).toBe(true)
+    expect(isAudioFile({ type: '', name: 'Lied.OPUS' })).toBe(true)
+    expect(isAudioFile({ type: '', name: 'notiz' })).toBe(false)
+    expect(isAudioFile({ type: 'video/mp4', name: 'film.mp3' })).toBe(false)
   })
 
   it('altes Backend (Route unbekannt) -> MEDIA_UNSUPPORTED; eigene Meldungen bleiben', async () => {

@@ -320,6 +320,17 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   aufgenommen. Der KI-Bereich ist die Komponente des bisherigen Editors
   (`StillAiImage.vue`). Grenze: Ein Bild-Clip wird nicht länger als beim
   Erstellen eingestellt (höchstens 600 s).
+- **Musik und Tondateien** (Feature `mediaAudio`): `POST /api/media` nimmt
+  auch Tondateien an (MP3, M4A, WAV, OGG, FLAC …). Die Antwort trägt dann
+  `kind: 'audio'`; ein Titelbild in der Datei zählt nicht als Bild
+  (`hasVideo` in `probe.ts`). In der Medienliste erscheinen sie mit Note und
+  Wellenform. „+ Timeline“ legt eine Tondatei auf eine eigene Musik-Spur ab
+  Zeit 0, weitere dahinter (`appendMedia`, `isMusicTrack`); Videos weichen
+  Musik-Spuren aus, und das erste Video bestimmt weiterhin das Projektformat.
+  Lautstärke, Ton-Blende, Tempo, Teilen und Kürzen gelten wie bei jedem
+  Ton-Clip. Der bisherige Editor und das Einbrennen lehnen Tondateien ab.
+  Noch offen: Musik aus Projekten des bisherigen Editors übernehmen und
+  Wiederholen (Schleife).
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die

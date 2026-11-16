@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
-import { probeMedia } from '../lib/probe'
+import { isAudioOnly, probeMedia } from '../lib/probe'
 import { runFfmpeg } from '../lib/ffmpeg'
 import { jobManager } from '../lib/jobs'
 import { buildStillArgs, parseStillParams, stillClipName } from '../lib/stillClip'
@@ -23,8 +23,9 @@ const upload = multer({
   }),
   limits: { fileSize: config.maxFileSizeBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('video/')) cb(null, true)
-    else cb(new ValidationError('Nur Videodateien werden akzeptiert.'))
+    // Tondateien (Musik, Sprachaufnahmen) nutzt der Timeline-Editor auf Ton-Spuren.
+    if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) cb(null, true)
+    else cb(new ValidationError('Nur Video- und Tondateien werden akzeptiert.'))
   },
 })
 
@@ -60,7 +61,10 @@ export function displayName(original: string): string {
 
 export const mediaRouter = Router()
 
-/** POST /api/media (multipart: video) -> 201 { id, name, size, duration, width, height, hasAudio } */
+/**
+ * POST /api/media (multipart: video; auch Tondateien)
+ * -> 201 { id, name, size, duration, width, height, hasAudio, fps, kind }
+ */
 mediaRouter.post(
   '/media',
   upload.single('video'),
@@ -70,6 +74,8 @@ mediaRouter.post(
     try {
       const info = await probeMedia(file.path)
       if (!(info.duration > 0)) throw new ValidationError('Dauer des Videos unbekannt.')
+      if (isAudioOnly(info) && !info.hasAudio)
+        throw new ValidationError('Die Datei enthält weder Bild noch Ton.')
       const item = await mediaStore.add(file.path, displayName(file.originalname), info, file.size)
       res.status(201).json(mediaView(item))
     } catch (err) {

@@ -43,6 +43,13 @@ describe('MediaStore', () => {
       height: 360,
       hasAudio: true,
       fps: 0,
+      kind: 'video',
+    })
+    expect(
+      mediaView({ ...item, info: { ...info, width: 0, height: 0, hasVideo: false } }),
+    ).toMatchObject({
+      kind: 'audio',
+      width: 0,
     })
     expect(store.get(item.id)?.path).toBe(p)
     expect(await store.remove(item.id)).toBe(true)
@@ -113,6 +120,17 @@ describe('MediaStore mit Verzeichnis auf der Platte', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  it('Tondateien bleiben nach einem Neustart Tondateien', async () => {
+    const a = open()
+    await a.init()
+    const p = await file('musik.mp3', 5)
+    const item = await a.add(p, 'musik.mp3', { ...info, width: 0, height: 0, hasVideo: false })
+    await a.shutdown()
+    const b = open()
+    expect(await b.init()).toBe(1)
+    expect(mediaView(b.get(item.id)!).kind).toBe('audio')
+  })
+
   it('erster Start ohne Verzeichnis: leer, kein Fehler', async () => {
     expect(await open().init()).toBe(0)
   })
@@ -131,6 +149,7 @@ describe('MediaStore mit Verzeichnis auf der Platte', () => {
     const again = b.get(item.id)
     expect(again).toMatchObject({ id: item.id, path: p, name: 'a.mp4', size: 25 })
     expect(mediaView(again!)).toMatchObject({ duration: 10, fps: 25, hasAudio: true })
+    expect(mediaView(again!).kind).toBe('video')
     expect(b.totalBytes).toBe(25)
   })
 

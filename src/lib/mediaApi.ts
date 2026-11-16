@@ -20,6 +20,22 @@ export interface MediaView {
   hasAudio: boolean
   /** Bildrate (Bilder/s), 0 = unbekannt (älteres Backend). */
   fps: number
+  /** `audio` = reine Tondatei (Musik, Sprachaufnahme); nur im Timeline-Editor. Fehlt = Video. */
+  kind?: 'video' | 'audio'
+}
+
+/** Fehler-Kennung: Das Backend nimmt noch keine Tondateien an (veraltet). */
+export const MEDIA_AUDIO_UNSUPPORTED = 'MEDIA_AUDIO_UNSUPPORTED'
+
+/** Meldung eines älteren Backends, das nur Videos annimmt. */
+const VIDEO_ONLY_MESSAGE = 'Nur Videodateien werden akzeptiert.'
+
+/** Endungen üblicher Tondateien (manche Browser melden dafür keinen Typ). */
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|wma|aiff?)$/i
+
+/** Ist die Datei eine Tondatei (nach Typ, sonst nach Endung)? */
+export function isAudioFile(file: Pick<File, 'type' | 'name'>): boolean {
+  return file.type.startsWith('audio/') || (!file.type && AUDIO_EXT.test(file.name))
 }
 
 /** Prüft und normalisiert eine Server-Antwort. Wirft bei fehlender ID. */
@@ -36,6 +52,7 @@ export function parseMediaView(data: unknown): MediaView {
     height: num(d.height),
     hasAudio: d.hasAudio === true,
     fps: num(d.fps),
+    kind: d.kind === 'audio' ? 'audio' : 'video',
   }
 }
 
@@ -80,13 +97,21 @@ export function uploadMedia(file: File, onProgress?: (ratio: number) => void): M
           reject(err instanceof Error ? err : new Error('Ungültige Serverantwort.'))
         }
       } else {
-        reject(errorFrom(xhr.status, xhr.responseText, xhr.getResponseHeader?.('Retry-After')))
+        const err = errorFrom(xhr.status, xhr.responseText, xhr.getResponseHeader?.('Retry-After'))
+        reject(
+          err.message === VIDEO_ONLY_MESSAGE && isAudioFile(file)
+            ? new Error(MEDIA_AUDIO_UNSUPPORTED)
+            : err,
+        )
       }
     }
     xhr.onerror = () => reject(new Error('Upload fehlgeschlagen (Netzwerkfehler).'))
     xhr.onabort = () => reject(new Error(UPLOAD_ABORTED))
     const form = new FormData()
-    form.append('video', file)
+    // Ohne Typ (manche Tondateien) würde der Server die Datei ablehnen.
+    if (!file.type && isAudioFile(file))
+      form.append('video', new Blob([file], { type: 'audio/mpeg' }), file.name)
+    else form.append('video', file)
     xhr.send(form)
   })
   return { promise, abort: () => xhr.abort() }

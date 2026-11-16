@@ -12,6 +12,16 @@ export interface MediaInfo {
   duration: number
   /** Bildrate (Bilder/s) des Videostreams, 0 = unbekannt. Optional für ältere Datensätze. */
   fps?: number
+  /**
+   * Enthält die Datei ein Bild? `false` = reine Tondatei (ein Titelbild in
+   * MP3/M4A zählt nicht). Fehlt bei älteren Datensätzen: dann gilt Video.
+   */
+  hasVideo?: boolean
+}
+
+/** Reine Tondatei (Musik, Sprachaufnahme)? */
+export function isAudioOnly(info: Pick<MediaInfo, 'hasVideo'>): boolean {
+  return info.hasVideo === false
 }
 
 interface ProbeStream {
@@ -21,6 +31,7 @@ interface ProbeStream {
   avg_frame_rate?: string
   r_frame_rate?: string
   tags?: { rotate?: string }
+  disposition?: { attached_pic?: number }
   side_data_list?: Array<{ rotation?: number | string }>
 }
 
@@ -49,7 +60,10 @@ export function parseProbeOutput(json: string): MediaInfo {
     throw new Error('ffprobe lieferte ungültige Daten.')
   }
   const streams = Array.isArray(data.streams) ? data.streams : []
-  const video = streams.find((s) => s.codec_type === 'video')
+  // Titelbilder (Cover in MP3/M4A) sind kein Film.
+  const video = streams.find(
+    (s) => s.codec_type === 'video' && Number(s.disposition?.attached_pic) !== 1,
+  )
   const hasAudio = streams.some((s) => s.codec_type === 'audio')
 
   let width = Number(video?.width) || 0
@@ -66,7 +80,14 @@ export function parseProbeOutput(json: string): MediaInfo {
   const d = Number(data.format?.duration)
   // Mittlere Bildrate bevorzugt (r_frame_rate ist bei VFR oft ein Zeitbasis-Wert).
   const fps = parseFrameRate(video?.avg_frame_rate) || parseFrameRate(video?.r_frame_rate)
-  return { width, height, hasAudio, duration: Number.isFinite(d) && d > 0 ? d : 0, fps }
+  return {
+    width,
+    height,
+    hasAudio,
+    duration: Number.isFinite(d) && d > 0 ? d : 0,
+    fps,
+    hasVideo: video !== undefined,
+  }
 }
 
 /** Liest Auflösung, Tonspur und Dauer per ffprobe (spawn ohne Shell). */
@@ -78,7 +99,7 @@ export function probeMedia(filePath: string): Promise<MediaInfo> {
         '-v',
         'error',
         '-show_entries',
-        'stream=codec_type,width,height,avg_frame_rate,r_frame_rate:stream_tags=rotate:stream_side_data=rotation:format=duration',
+        'stream=codec_type,width,height,avg_frame_rate,r_frame_rate:stream_tags=rotate:stream_disposition=attached_pic:stream_side_data=rotation:format=duration',
         '-of',
         'json',
         filePath,

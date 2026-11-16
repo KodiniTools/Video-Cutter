@@ -640,12 +640,13 @@ const messages = {
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
     mediaPool: {
       title: 'Medien',
-      add: '+ Videos hochladen',
-      empty: 'Noch keine Videos. Hochladen oder Dateien hierher ziehen.',
+      add: '+ Videos oder Ton hochladen',
+      empty:
+        'Noch keine Medien. Videos oder Tondateien (Musik, Sprachaufnahmen) hochladen oder hierher ziehen.',
       uploading: 'Lädt hoch … {pct} %',
       uploadFailed: 'Upload fehlgeschlagen.',
       aborted: 'Upload abgebrochen.',
-      gone: 'Dieses Video gibt es auf dem Server nicht mehr. Bitte entfernen und erneut hochladen.',
+      gone: 'Diese Datei gibt es auf dem Server nicht mehr. Bitte entfernen und erneut hochladen.',
       preparing: 'Vorschau wird vorbereitet …',
       preparingPct: 'Vorschau wird vorbereitet … {pct} %',
       prepareFailed: 'Vorschau konnte nicht vorbereitet werden.',
@@ -657,8 +658,12 @@ const messages = {
       removeNamed: '{name} entfernen',
       addToTimeline: '+ Timeline',
       addToTimelineNamed: '{name} ans Ende der Timeline legen',
-      inUse: 'Dieses Video wird in der Timeline verwendet. Bitte zuerst die Clips löschen.',
-      rejected: 'Keine Videodatei, übersprungen: {names}',
+      addAudioToTimelineNamed: '{name} auf eine Ton-Spur legen',
+      audioFile: 'Tondatei',
+      audioUnsupported:
+        'Das Server-Backend ist veraltet und nimmt noch keine Tondateien an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      inUse: 'Diese Datei wird in der Timeline verwendet. Bitte zuerst die Clips löschen.',
+      rejected: 'Weder Video noch Ton, übersprungen: {names}',
     },
     timeline: {
       empty:
@@ -1504,12 +1509,13 @@ const messages = {
     footer: 'Server-side processing with FFmpeg.',
     mediaPool: {
       title: 'Media',
-      add: '+ Upload videos',
-      empty: 'No videos yet. Upload or drop files here.',
+      add: '+ Upload videos or audio',
+      empty:
+        'No media yet. Upload videos or audio files (music, voice recordings) or drop them here.',
       uploading: 'Uploading … {pct} %',
       uploadFailed: 'Upload failed.',
       aborted: 'Upload cancelled.',
-      gone: 'This video no longer exists on the server. Please remove it and upload again.',
+      gone: 'This file no longer exists on the server. Please remove it and upload again.',
       preparing: 'Preparing preview …',
       preparingPct: 'Preparing preview … {pct} %',
       prepareFailed: 'The preview could not be prepared.',
@@ -1521,8 +1527,12 @@ const messages = {
       removeNamed: 'Remove {name}',
       addToTimeline: '+ Timeline',
       addToTimelineNamed: 'Put {name} at the end of the timeline',
-      inUse: 'This video is used in the timeline. Please delete its clips first.',
-      rejected: 'Not a video file, skipped: {names}',
+      addAudioToTimelineNamed: 'Put {name} on an audio track',
+      audioFile: 'Audio file',
+      audioUnsupported:
+        'The server backend is outdated and does not accept audio files yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      inUse: 'This file is used in the timeline. Please delete its clips first.',
+      rejected: 'Neither video nor audio, skipped: {names}',
     },
     timeline: {
       empty: 'No clips yet. Put a video from the media list on the timeline with “+ Timeline”.',
