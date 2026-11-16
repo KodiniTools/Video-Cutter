@@ -234,6 +234,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Zoom und den Rückgängig-Verlauf (höchstens 200 Schritte; eine Geste zwischen
   `beginGesture` und `endGesture` zählt als ein Schritt).
   Tests: `tests/timeline.store.spec.ts`.
+- **Medienliste** (`src/components/timeline/MediaPool.vue`, Store
+  `src/stores/mediaPool.ts`): Videos hochladen (auch per Ziehen), als Medien im
+  Timeline-Dokument anmelden, Vorschaubild aus dem Filmstreifen, Wellenform und
+  Stand der Vorbereitung anzeigen, entfernen (nicht, solange ein Clip das Video
+  verwendet). Tests: `tests/mediaPool.spec.ts`, `tests/derivedApi.spec.ts`.
 - **Abgeleitete Dateien** (`server/src/lib/derived.ts`, Feature `mediaDerived`):
   Je Video erzeugt der Server auf Abruf eine Wellenform (ein Byte je 20 ms),
   einen Filmstreifen (Kachelbild, höchstens 200 Bilder) und eine Vorschau-Kopie

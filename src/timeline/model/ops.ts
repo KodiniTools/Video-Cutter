@@ -151,6 +151,20 @@ export function putAsset(doc: TimelineDoc, asset: AssetRef): TimelineDoc {
   return { ...doc, assets: { ...doc.assets, [asset.id]: asset } }
 }
 
+/** Wird das Medium von einem Clip verwendet? */
+export function assetInUse(doc: TimelineDoc, assetId: string): boolean {
+  return doc.tracks.some((t) => t.clips.some((c) => 'asset' in c && c.asset === assetId))
+}
+
+/** Medium abmelden; abgelehnt, solange ein Clip es verwendet. */
+export function removeAsset(doc: TimelineDoc, assetId: string): OpResult {
+  if (!doc.assets[assetId]) return fail('asset-not-found')
+  if (assetInUse(doc, assetId)) return fail('asset-in-use')
+  const assets = { ...doc.assets }
+  delete assets[assetId]
+  return ok({ ...doc, assets })
+}
+
 // --- Spuren ----------------------------------------------------------------
 
 export interface NewTrack {
