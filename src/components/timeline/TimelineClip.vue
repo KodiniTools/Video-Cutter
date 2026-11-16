@@ -91,6 +91,17 @@ const peaks = computed(() => {
   return clipPeaks(item.value?.peaks, rate, clip.sourceIn, clip.duration, clip.speed)
 })
 
+/** Übergang am Anfang: Marke so breit wie der Teil, der in diesem Clip liegt. */
+const transition = computed(() => {
+  const clip = props.clip
+  if ((clip.kind !== 'video' && clip.kind !== 'still') || !clip.transitionIn) return null
+  const half = Math.min(clip.duration, Math.round(clip.transitionIn.duration / 2))
+  return {
+    width: Math.min(width.value, Math.max(6, timeToPx(half, props.zoom))),
+    title: t(`anim.${clip.transitionIn.preset}`),
+  }
+})
+
 function grab(mode: ClipGrab, event: PointerEvent): void {
   if (event.button !== 0) return
   emit('grab', props.clip.id, mode, event)
@@ -111,6 +122,13 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       <span v-for="thumb in thumbs" :key="thumb.key" class="thumb" :style="thumb.style"></span>
     </div>
     <div v-if="peaks && peaks.length" class="wave"><WaveformCanvas :peaks="peaks" /></div>
+    <span
+      v-if="transition"
+      class="transition"
+      :style="{ width: `${transition.width}px` }"
+      :title="transition.title"
+      aria-hidden="true"
+    ></span>
     <span v-if="name" class="label">{{ name }}</span>
     <template v-if="!locked">
       <span class="handle start" @pointerdown.stop="grab('start', $event)"></span>
@@ -131,6 +149,15 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   cursor: grab;
   user-select: none;
   touch-action: none;
+}
+.transition {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: linear-gradient(to top right, var(--ds-accent) 50%, transparent 50%);
+  opacity: 0.75;
 }
 .handle {
   position: absolute;

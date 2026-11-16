@@ -331,6 +331,19 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Ton-Clip. Der bisherige Editor und das Einbrennen lehnen Tondateien ab.
   Noch offen: Musik aus Projekten des bisherigen Editors übernehmen und
   Wiederholen (Schleife).
+- **Übergänge** (Feature `timelineTransitions`): Ein Video-Clip kann mit
+  einem Übergang beginnen (`transitionIn: { preset, duration }`, Arten wie im
+  bisherigen Editor: `fade`, `slide`, `scale`, `flip`; `setClipTransition`,
+  Feld „Übergang am Anfang“ im Bereich „Clip“, Marke am Clip-Anfang). Zeiten
+  auf der Timeline ändern sich nicht, Clips überlappen nie. `duration` ist die
+  Gesamtdauer: Bei `fade` blendet der vorige Clip in der ersten Hälfte aus und
+  dieser in der zweiten ein (unterste Spur über die Hintergrundfarbe, höhere
+  Spuren durchsichtig). Die übrigen laufen in der halben Dauer per `xfade`
+  über dem angehaltenen letzten Bild des vorigen Clips, nach einer Lücke aus
+  dem Hintergrund. Der Compiler rechnet mit Zeiten im Clip, damit ein
+  Übergang über Abschnittsgrenzen der Vorschau wie im Export aussieht.
+  Übergänge aus Projekten des bisherigen Editors werden übernommen. Der Ton
+  wird nicht automatisch geblendet, dafür gibt es die Ton-Blende je Clip.
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die

@@ -63,12 +63,29 @@ interface DocClipBase {
   duration: Time
 }
 
+/** Übergänge vom vorigen Clip (wie im bisherigen Editor, ohne „kein“). */
+export const CLIP_TRANSITIONS = ['fade', 'slide', 'scale', 'flip'] as const
+export type ClipTransitionPreset = (typeof CLIP_TRANSITIONS)[number]
+export const MIN_TRANSITION: Time = 100_000
+export const MAX_TRANSITION: Time = 10 * MICROS_PER_SECOND
+
+/**
+ * Übergang am Anfang eines Clips. `duration` ist die Gesamtdauer; die Hälfte
+ * davon liegt am Anfang dieses Clips (bei `fade` die andere Hälfte am Ende des
+ * vorigen).
+ */
+export interface DocTransition {
+  preset: ClipTransitionPreset
+  duration: Time
+}
+
 export interface DocVideoClip extends DocClipBase {
   kind: 'video' | 'still'
   asset: string
   sourceIn: Time
   speed: number
   crop: DocCrop | null
+  transitionIn?: DocTransition | null
 }
 
 export interface DocAudioClip extends DocClipBase {
@@ -474,6 +491,19 @@ export function parseTimelineDoc(
           const r = c as unknown as DocCrop
           crop = { x: r.x, y: r.y, width: r.width, height: r.height }
         }
+        let transitionIn: DocTransition | null = null
+        if (rc.transitionIn !== undefined && rc.transitionIn !== null) {
+          const t = rc.transitionIn
+          if (
+            !isObject(t) ||
+            typeof t.preset !== 'string' ||
+            !(CLIP_TRANSITIONS as readonly string[]).includes(t.preset) ||
+            !isTime(t.duration) ||
+            !inRange(t.duration, MIN_TRANSITION, MAX_TRANSITION)
+          )
+            return fail(`${cp}.transitionIn`, 'Ungültiger Übergang.')
+          transitionIn = { preset: t.preset as ClipTransitionPreset, duration: t.duration }
+        }
         clips.push({
           ...base,
           kind: ck as 'video' | 'still',
@@ -481,6 +511,7 @@ export function parseTimelineDoc(
           sourceIn: rc.sourceIn,
           speed: rc.speed,
           crop,
+          ...(transitionIn ? { transitionIn } : {}),
         })
       })
 

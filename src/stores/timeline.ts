@@ -23,6 +23,7 @@ import {
   removeTrack as removeTrackOp,
   setClipCrop as setClipCropOp,
   setClipFade as setClipFadeOp,
+  setClipTransition as setClipTransitionOp,
   setClipGain as setClipGainOp,
   setClipSpeed as setClipSpeedOp,
   snapPoints,
@@ -39,6 +40,7 @@ import {
   type AssetRef,
   type Clip,
   type ClipCrop,
+  type ClipTransitionPreset,
   type DocIssue,
   type FadeCurve,
   type MoveTarget,
@@ -336,6 +338,12 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Zuschnitt eines Video-Clips (`null` = ganzes Bild). */
   const setClipCrop = (clipId: string, crop: ClipCrop | null) =>
     apply((d) => setClipCropOp(d, clipId, crop))
+
+  /** Übergang am Anfang eines Video-Clips; `null` hebt ihn auf. */
+  const setClipTransition = (
+    clipId: string,
+    transition: { preset: ClipTransitionPreset; duration?: Time } | null,
+  ) => apply((d) => setClipTransitionOp(d, clipId, transition))
 
   /** Ton eines Clips ein- (`in`) bzw. ausblenden (`out`); Dauer 0 oder `null` = aus. */
   const setClipFade = (
@@ -635,6 +643,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipGain,
     setClipFade,
     setClipCrop,
+    setClipTransition,
     updateSettings,
     setZoom,
     snap,

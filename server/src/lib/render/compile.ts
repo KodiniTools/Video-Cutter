@@ -1,4 +1,4 @@
-import { LOUDNORM_FILTER, PROGRESS, atempoFilters, buildCropFilter } from '../args'
+import { LOUDNORM_FILTER, PROGRESS, XFADE_TYPES, atempoFilters, buildCropFilter } from '../args'
 import { graphicFilter } from '../graphicOverlay'
 import { buildAss, escapeFilterPath, type TextOverlay } from '../textOverlay'
 import {
@@ -26,6 +26,9 @@ import {
  *    höhere Spuren sind in den Lücken durchsichtig und werden per `overlay`
  *    darübergelegt: ein `overlay` je Spur, nicht je Clip.
  *  - Ton-Spuren werden mit `amix` gemischt.
+ *  - Übergänge (`transitionIn`) ändern keine Zeiten: `fade` blendet den
+ *    vorigen Clip aus und diesen ein; die übrigen laufen am Clip-Anfang über
+ *    dem angehaltenen letzten Bild des vorigen Clips (`xfade`).
  *  - Alle Grenzen liegen auf dem Bildraster des Projekts; Längen werden in
  *    ganzen Bildern gezählt, damit Bild und Ton nie auseinanderlaufen.
  */
@@ -255,6 +258,36 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     const format = opaque ? 'yuv420p' : 'yuva420p'
     const fill = opaque ? background : 'black@0'
     const labels: string[] = []
+    /** Clip ins Projektformat bringen (ohne Längenschnitt). */
+    const fitSteps = (clip: DocVideoClip): string[] => [
+      clip.kind === 'still' || clip.speed === 1
+        ? 'setpts=PTS-STARTPTS'
+        : `setpts=(PTS-STARTPTS)/${num(clip.speed)}`,
+      `fps=${fps}`,
+      ...(clip.crop ? [buildCropFilter(clip.crop)] : []),
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+      `format=${format}`,
+      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${fill}`,
+      'setsar=1',
+    ]
+    /** Auf genau `count` Bilder bringen; endet die Quelle zu früh, hält das letzte Bild. */
+    const lengthSteps = (count: number): string[] => [
+      `tpad=stop_mode=clone:stop_duration=${sec(secondsOf(count))}`,
+      `trim=end_frame=${count}`,
+      'setpts=PTS-STARTPTS',
+    ]
+    const clipFrames = (clip: DocVideoClip): number =>
+      Math.max(1, frameOf(clipEnd(clip)) - frameOf(clip.start))
+    /** Bilder der halben Übergangsdauer, höchstens `limit`. */
+    const halfFrames = (clip: DocVideoClip, limit: number): number =>
+      clip.transitionIn ? Math.min(limit, frameOf(Math.round(clip.transitionIn.duration / 2))) : 0
+    /** Blende mit Zeiten im Clip, damit sie über Abschnittsgrenzen hinweg stimmt. */
+    const fadeSteps = (dir: 'in' | 'out', startFrame: number, count: number, local: number) => [
+      `setpts=PTS+${sec(secondsOf(local))}/TB`,
+      `fade=t=${dir}:st=${sec(secondsOf(startFrame))}:d=${sec(secondsOf(count))}` +
+        (opaque ? `:color=${background}` : ':alpha=1'),
+      'setpts=PTS-STARTPTS',
+    ]
     for (const piece of parts) {
       const out = label('v')
       if (!piece.clip) {
@@ -263,23 +296,65 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         )
       } else {
         const clip = piece.clip
-        const index = addInput(clip, piece, 'v')
-        const steps = [
-          clip.kind === 'still' || clip.speed === 1
-            ? 'setpts=PTS-STARTPTS'
-            : `setpts=(PTS-STARTPTS)/${num(clip.speed)}`,
-          `fps=${fps}`,
-          ...(clip.crop ? [buildCropFilter(clip.crop)] : []),
-          `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
-          `format=${format}`,
-          `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${fill}`,
-          'setsar=1',
-          // Endet die Quelle ein paar Bilder zu früh, wird das letzte Bild gehalten.
-          `tpad=stop_mode=clone:stop_duration=${sec(secondsOf(piece.frames))}`,
-          `trim=end_frame=${piece.frames}`,
-          'setpts=PTS-STARTPTS',
+        const at = track.clips.indexOf(clip)
+        const before = at > 0 ? track.clips[at - 1] : undefined
+        const prev = before && frameOf(clipEnd(before)) === frameOf(clip.start) ? before : undefined
+        const after = track.clips[at + 1]
+        const next = after && frameOf(after.start) === frameOf(clipEnd(clip)) ? after : undefined
+        const total = clipFrames(clip)
+        /** Erstes Bild dieses Stücks, gezählt im Clip. */
+        const local = frameOf(clip.start + piece.offset) - frameOf(clip.start)
+        const nIn = halfFrames(clip, total)
+        const preset = clip.transitionIn?.preset
+        const inActive = nIn > 0 && local < nIn
+        // Ausblenden, wenn der nächste Clip mit „Blende“ beginnt.
+        const nOut = next?.transitionIn?.preset === 'fade' ? halfFrames(next, total) : 0
+        const outActive = nOut > 0 && local + piece.frames > total - nOut
+        const fades = [
+          ...(inActive && preset === 'fade' ? fadeSteps('in', 0, nIn, local) : []),
+          ...(outActive ? fadeSteps('out', total - nOut, nOut, local) : []),
         ]
-        chains.push(`[${index}:v:0]${steps.join(',')}[${out}]`)
+        if (inActive && preset && preset !== 'fade') {
+          // Der Clip läuft ab seinem ersten Bild über dem angehaltenen letzten
+          // Bild des vorigen Clips ein; danach wird auf das Stück gekürzt.
+          const from = label('xa')
+          if (prev) {
+            const prevTotal = clipFrames(prev)
+            const tail = Math.min(prevTotal, Math.max(1, Math.ceil(rate.num / rate.den / 2)))
+            const offset = Math.max(0, timeOf(frameOf(prev.start) + prevTotal - tail) - prev.start)
+            const pi = addInput(prev, { frames: tail, clip: prev, offset }, 'v')
+            chains.push(
+              `[${pi}:v:0]${[
+                ...fitSteps(prev),
+                `trim=end_frame=${tail}`,
+                // Letztes vorhandenes Bild, auch wenn die Quelle etwas früher endet.
+                'reverse',
+                'trim=end_frame=1',
+                ...lengthSteps(nIn),
+              ].join(',')}[${from}]`,
+            )
+          } else {
+            chains.push(
+              `color=c=${fill}:s=${size}:r=${fps},format=${format},trim=end_frame=${nIn}[${from}]`,
+            )
+          }
+          const to = label('xb')
+          const span = local + piece.frames
+          const index = addInput(clip, { frames: span, clip, offset: 0 }, 'v')
+          chains.push(`[${index}:v:0]${[...fitSteps(clip), ...lengthSteps(span)].join(',')}[${to}]`)
+          chains.push(
+            `[${from}][${to}]${[
+              `xfade=transition=${XFADE_TYPES[preset]}:duration=${sec(secondsOf(nIn))}:offset=0`,
+              `trim=start_frame=${local}:end_frame=${span}`,
+              'setpts=PTS-STARTPTS',
+              ...fades,
+            ].join(',')}[${out}]`,
+          )
+        } else {
+          const index = addInput(clip, piece, 'v')
+          const steps = [...fitSteps(clip), ...lengthSteps(piece.frames), ...fades]
+          chains.push(`[${index}:v:0]${steps.join(',')}[${out}]`)
+        }
       }
       labels.push(out)
     }

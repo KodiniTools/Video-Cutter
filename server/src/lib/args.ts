@@ -25,7 +25,7 @@ export interface Segment {
 
 /** Übergangs-Presets (UI) -> FFmpeg-xfade-Übergangsnamen. */
 export type TransitionPreset = 'none' | 'fade' | 'slide' | 'scale' | 'flip'
-const XFADE_TYPES: Record<Exclude<TransitionPreset, 'none'>, string> = {
+export const XFADE_TYPES: Record<Exclude<TransitionPreset, 'none'>, string> = {
   fade: 'fade',
   slide: 'slideleft',
   scale: 'zoomin',
