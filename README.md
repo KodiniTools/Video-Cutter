@@ -226,3 +226,7 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
   Einrasten) liefern ein neues Dokument oder einen Ablehnungsgrund.
   Tests: `tests/timelineModel.spec.ts`.
+- **Store** (`src/stores/timeline.ts`): hält das Dokument, Auswahl, Abspielkopf,
+  Zoom und den Rückgängig-Verlauf (höchstens 200 Schritte; eine Geste zwischen
+  `beginGesture` und `endGesture` zählt als ein Schritt).
+  Tests: `tests/timeline.store.spec.ts`.
