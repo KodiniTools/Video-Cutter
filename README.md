@@ -353,6 +353,15 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Bild-in-Bild** (Feature `timelineLayout`): Ein Video-Clip kann eine Lage
+  im Bild tragen (`layout: { x, y, scale, opacity }`, `setClipLayout`,
+  Feld „Clip“): `scale` ist der Anteil des Projektformats, in den das Bild
+  eingepasst wird, `x`/`y` die Mitte, `opacity` die Deckkraft. Das Bild bleibt
+  immer ganz im Projektformat; Knöpfe legen es in eine Ecke. Darunter ist zu
+  sehen, was auf den Video-Spuren weiter unten liegt, auf der untersten Spur
+  der Hintergrund. Der Compiler passt den Clip in den verkleinerten Rahmen
+  ein und füllt den Rest durchsichtig (`fitSteps` in `compile.ts`); Übergänge
+  und Standbild gelten weiter. Verlustfrei ist damit ausgeschlossen.
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die

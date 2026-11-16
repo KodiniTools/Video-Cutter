@@ -11,11 +11,13 @@ import {
   MAX_CLIP_GAIN,
   MAX_TRANSITION,
   MIN_CROP_SIZE,
+  MIN_LAYOUT_SCALE,
   MIN_TRANSITION,
   repeatLimit,
   secondsToTime,
   timeToSeconds,
   type AudioClip,
+  type ClipLayout,
   type ClipTransitionPreset,
   type FadeCurve,
   type VideoClip,
@@ -24,7 +26,7 @@ import {
 /**
  * Einstellungen des markierten Video- bzw. Ton-Clips: Tempo (gilt für Bild
  * und verknüpften Ton gemeinsam), Lautstärke und Blende des Ton-Clips,
- * Zuschnitt und Übergang des Video-Clips. Jede Änderung
+ * Zuschnitt, Lage im Bild (Bild-in-Bild) und Übergang des Video-Clips. Jede Änderung
  * geht ins Dokument; die Vorschau rendert den betroffenen Abschnitt neu.
  */
 const { t, locale } = useI18n()
@@ -193,6 +195,54 @@ function onCrop(side: CropSide, e: Event): void {
 function resetCrop(): void {
   commit()
   if (video.value) store.setClipCrop(video.value.id, null)
+}
+
+// --- Bild-in-Bild (Größe, Lage, Deckkraft) -----------------------------------
+
+const LAYOUT_FIELDS = ['scale', 'opacity', 'x', 'y'] as const
+type LayoutField = (typeof LAYOUT_FIELDS)[number]
+const FULL_LAYOUT: ClipLayout = { x: 0.5, y: 0.5, scale: 1, opacity: 1 }
+const layout = computed<ClipLayout>(() => video.value?.layout ?? FULL_LAYOUT)
+const hasLayout = computed(() => video.value?.layout !== undefined)
+const layoutMin = (field: LayoutField) => (field === 'scale' ? MIN_LAYOUT_SCALE * 100 : 0)
+/** In voller Größe gibt es nichts zu verschieben. */
+const layoutDisabled = (field: LayoutField) =>
+  (field === 'x' || field === 'y') && layout.value.scale >= 1
+
+function onLayout(field: LayoutField, e: Event): void {
+  const clip = video.value
+  if (!clip) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const value = Number((e.target as HTMLInputElement).value) / 100
+  store.setClipLayout(clip.id, { ...layout.value, [field]: value })
+}
+
+/** Abstand zum Bildrand beim Legen in eine Ecke (Anteil des Projektformats). */
+const CORNER_MARGIN = 0.03
+const CORNERS = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'] as const
+type Corner = (typeof CORNERS)[number]
+
+/** In eine Ecke legen; ein Clip in voller Größe wird dabei auf ein Drittel verkleinert. */
+function toCorner(corner: Corner): void {
+  commit()
+  const clip = video.value
+  if (!clip) return
+  const scale = layout.value.scale >= 1 ? 0.33 : layout.value.scale
+  const near = CORNER_MARGIN + scale / 2
+  store.setClipLayout(clip.id, {
+    ...layout.value,
+    scale,
+    x: corner === 'topLeft' || corner === 'bottomLeft' ? near : 1 - near,
+    y: corner === 'topLeft' || corner === 'topRight' ? near : 1 - near,
+  })
+}
+
+function resetLayout(): void {
+  commit()
+  if (video.value) store.setClipLayout(video.value.id, null)
 }
 
 // --- Übergang am Anfang ------------------------------------------------------
@@ -403,6 +453,49 @@ onBeforeUnmount(commit)
       </button>
       <p class="hint">{{ t('timeline.clipInspector.cropHint') }}</p>
     </fieldset>
+    <fieldset v-if="video" class="crop" data-testid="clip-layout">
+      <legend>{{ t('timeline.clipInspector.layout') }}</legend>
+      <label v-for="field in LAYOUT_FIELDS" :key="field" class="side">
+        <span>{{ t(`timeline.clipInspector.layoutFields.${field}`) }}</span>
+        <input
+          type="range"
+          :min="layoutMin(field)"
+          max="100"
+          step="1"
+          :value="Math.round(layout[field] * 100)"
+          :disabled="layoutDisabled(field)"
+          :data-testid="`clip-layout-${field}`"
+          @input="onLayout(field, $event)"
+          @change="commit"
+        />
+        <span class="value">{{ Math.round(layout[field] * 100) }} %</span>
+      </label>
+      <div class="corners">
+        <span>{{ t('timeline.clipInspector.layoutCorner') }}</span>
+        <button
+          v-for="corner in CORNERS"
+          :key="corner"
+          type="button"
+          class="corner"
+          :title="t(`timeline.clipInspector.layoutCorners.${corner}`)"
+          :aria-label="t(`timeline.clipInspector.layoutCorners.${corner}`)"
+          :data-testid="`clip-layout-${corner}`"
+          @click="toCorner(corner)"
+        >
+          <span :class="['dot', corner]" aria-hidden="true"></span>
+        </button>
+      </div>
+      <button
+        v-if="hasLayout"
+        type="button"
+        class="plain"
+        data-testid="clip-layout-reset"
+        @click="resetLayout"
+      >
+        {{ t('timeline.clipInspector.layoutReset') }}
+      </button>
+      <p class="hint">{{ t('timeline.clipInspector.layoutHint') }}</p>
+    </fieldset>
     <p class="hint">
       {{ audio ? t('timeline.clipInspector.hint') : t('timeline.clipInspector.hintNoAudio') }}
     </p>
@@ -469,6 +562,44 @@ h3 {
 .value {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.corners {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.corner {
+  position: relative;
+  width: 2.4em;
+  height: 1.6em;
+  padding: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-2);
+  cursor: pointer;
+}
+.dot {
+  position: absolute;
+  width: 40%;
+  height: 40%;
+  border-radius: 2px;
+  background: var(--ds-accent);
+}
+.dot.topLeft {
+  top: 2px;
+  left: 2px;
+}
+.dot.topRight {
+  top: 2px;
+  right: 2px;
+}
+.dot.bottomLeft {
+  bottom: 2px;
+  left: 2px;
+}
+.dot.bottomRight {
+  bottom: 2px;
+  right: 2px;
 }
 .repeat {
   padding: var(--ds-space-2) var(--ds-space-3);

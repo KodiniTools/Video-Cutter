@@ -79,12 +79,24 @@ export interface DocTransition {
   duration: Time
 }
 
+export interface DocLayout {
+  x: number
+  y: number
+  scale: number
+  opacity: number
+}
+
+/** Kleinste Größe eines Clips im Bild (wie im Editor). */
+export const MIN_LAYOUT_SCALE = 0.05
+
 export interface DocVideoClip extends DocClipBase {
   kind: 'video' | 'still'
   asset: string
   sourceIn: Time
   speed: number
   crop: DocCrop | null
+  /** Lage im Bild (Bild-in-Bild): Mitte, Größe (Anteil des Projektformats), Deckkraft. */
+  layout?: DocLayout
   transitionIn?: DocTransition | null
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt. */
   hold?: boolean
@@ -493,6 +505,21 @@ export function parseTimelineDoc(
           const r = c as unknown as DocCrop
           crop = { x: r.x, y: r.y, width: r.width, height: r.height }
         }
+        let layout: DocLayout | null = null
+        if (rc.layout !== undefined && rc.layout !== null) {
+          const l = rc.layout
+          if (
+            !isObject(l) ||
+            !inRange(l.x, 0, 1) ||
+            !inRange(l.y, 0, 1) ||
+            !inRange(l.scale, MIN_LAYOUT_SCALE, 1) ||
+            !inRange(l.opacity, 0, 1)
+          )
+            return fail(`${cp}.layout`, 'Ungültige Lage im Bild.')
+          // Volle Größe und Deckkraft ist dasselbe wie keine Lage.
+          if (l.scale < 1 || l.opacity < 1)
+            layout = { x: l.x, y: l.y, scale: l.scale, opacity: l.opacity }
+        }
         if (rc.hold !== undefined && typeof rc.hold !== 'boolean')
           return fail(`${cp}.hold`, 'Ungültige Angabe zum Standbild.')
         let transitionIn: DocTransition | null = null
@@ -515,6 +542,7 @@ export function parseTimelineDoc(
           sourceIn: rc.sourceIn,
           speed: rc.speed,
           crop,
+          ...(layout ? { layout } : {}),
           ...(transitionIn ? { transitionIn } : {}),
           ...(rc.hold === true ? { hold: true } : {}),
         })
