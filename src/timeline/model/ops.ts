@@ -9,6 +9,7 @@ import {
   type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
   type AssetRef,
+  type AudioClip,
   type Clip,
   type ClipCrop,
   type ClipFade,
@@ -986,6 +987,76 @@ export function cutClipRanges(
     next = removed.doc
   }
   return ok(next)
+}
+
+/** So oft legt `repeatClip` einen Clip höchstens hintereinander. */
+export const MAX_CLIP_REPEATS = 200
+
+/**
+ * Bis wohin `repeatClip` einen Ton-Clip wiederholen würde: bis zum Ende der
+ * übrigen Spuren, höchstens bis zum nächsten Clip derselben Spur. `null`,
+ * wenn es nichts zu füllen gibt oder der Clip sich nicht eignet (kein Ton,
+ * mit einem Bild verknüpft, gesperrte Spur).
+ */
+export function repeatLimit(doc: TimelineDoc, clipId: string): Time | null {
+  const loc = findClip(doc, clipId)
+  if (!loc || loc.track.locked) return null
+  const clip = loc.clip
+  if (clip.kind !== 'audio' || clip.linkGroup) return null
+  const end = clipEnd(clip)
+  let limit = 0
+  doc.tracks.forEach((t, i) => {
+    if (i !== loc.trackIndex) limit = Math.max(limit, trackEnd(t))
+  })
+  for (const c of loc.track.clips) if (c.start >= end) limit = Math.min(limit, c.start)
+  return limit - end >= MIN_CLIP_DURATION ? limit : null
+}
+
+/**
+ * Ton-Clip (Musik) in Schleife legen: Kopien direkt dahinter, bis das Ende der
+ * übrigen Spuren erreicht ist (`repeatLimit`); die letzte Kopie wird passend
+ * gekürzt. Die Ausblendung wandert ans Ende der letzten Kopie, die
+ * Einblendung bleibt am ersten Clip. Lautstärke, Tempo und Ausschnitt gelten
+ * für alle Kopien.
+ */
+export function repeatClip(
+  doc: TimelineDoc,
+  clipId: string,
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'audio' || clip.linkGroup) return fail('kind-mismatch')
+  const limit = repeatLimit(doc, clipId)
+  if (limit === null) return fail('too-short')
+  const ids = opts.ids ?? createId
+  const copies: AudioClip[] = []
+  let at = clipEnd(clip)
+  while (limit - at >= MIN_CLIP_DURATION && copies.length < MAX_CLIP_REPEATS) {
+    const copy: AudioClip = {
+      ...clip,
+      id: ids(),
+      start: at,
+      duration: Math.min(clip.duration, limit - at),
+    }
+    delete copy.fadeIn
+    delete copy.fadeOut
+    copies.push(copy)
+    at += copy.duration
+  }
+  if (copies.length === 0) return fail('too-short')
+  const first: AudioClip = { ...clip }
+  if (clip.fadeOut) {
+    delete first.fadeOut
+    const last = copies[copies.length - 1]
+    last.fadeOut = { ...clip.fadeOut, duration: Math.min(clip.fadeOut.duration, last.duration) }
+  }
+  const clips = [...loc.track.clips.map((c) => (c.id === clipId ? first : c)), ...copies].sort(
+    (a, b) => a.start - b.start,
+  )
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
 function trackEnd(track: Track): Time {

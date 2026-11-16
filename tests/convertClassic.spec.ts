@@ -293,4 +293,61 @@ describe('convertClassicProject', () => {
     expect(validateDoc(r.state.doc)).toEqual([])
     expect(clips(r.state.doc, 'video')).toHaveLength(2)
   })
+
+  it('Hintergrundmusik: eigene Spur ab 0, Schleife, Blende und Lautstärken', () => {
+    const song = view('M', { name: 'musik.mp3', duration: 3, width: 0, height: 0, kind: 'audio' })
+    const music = { asset: 'c'.repeat(64), name: 'musik.mp3', type: 'audio/mpeg' }
+    const r = convertClassicProject(
+      classic({
+        items: [item('a', { end: 8 })],
+        music: { ...music, volume: 0.4, originalVolume: 0.5 },
+      }),
+      { a: view('A') },
+      song,
+    )
+    const doc = r.state.doc
+    expect(validateDoc(doc)).toEqual([])
+    expect(r.skipped).toEqual([])
+    expect(Object.keys(r.media).sort()).toEqual(['A', 'M'])
+    expect(doc.assets.M.kind).toBe('audio')
+    const [original, lane] = track(doc, 'audio')
+    expect(original.clips.map((c) => ('gain' in c ? c.gain : null))).toEqual([0.5])
+    // 8 s Video, 3 s Musik in Schleife: 3 + 3 + 2 s.
+    expect(brief([...lane.clips])).toEqual([
+      ['M', 0, 3, 0, 1],
+      ['M', 3, 3, 0, 1],
+      ['M', 6, 2, 0, 1],
+    ])
+    const sound = lane.clips as { gain: number; fadeIn?: unknown; fadeOut?: unknown }[]
+    expect(sound.map((c) => c.gain)).toEqual([0.4, 0.4, 0.4])
+    // Blende 2 s (ein Viertel von 8 s) am Anfang und am Ende der Musik.
+    expect(sound.map((c) => c.fadeIn)).toEqual([
+      { duration: 2_000_000, curve: 'tri' },
+      undefined,
+      undefined,
+    ])
+    expect(sound.map((c) => c.fadeOut)).toEqual([
+      undefined,
+      undefined,
+      { duration: 2_000_000, curve: 'tri' },
+    ])
+
+    // Ohne Schleife und Blende, längere Musik: auf die Länge des Videos gekürzt.
+    const plain = convertClassicProject(
+      classic({ items: [item('a', { end: 8 })], music: { ...music, loop: false, fade: false } }),
+      { a: view('A') },
+      { ...song, duration: 30 },
+    )
+    const second = track(plain.state.doc, 'audio')[1].clips as Clip[]
+    expect(brief(second)).toEqual([['M', 0, 8, 0, 1]])
+    expect('fadeIn' in second[0] || 'fadeOut' in second[0]).toBe(false)
+    expect(track(plain.state.doc, 'audio')[0].clips.map((c) => ('gain' in c ? c.gain : 0))).toEqual(
+      [1],
+    )
+
+    // Musik nicht ladbar: ausgelassen und gemeldet.
+    const none = convertClassicProject(classic({ items: [item('a')], music }), { a: view('A') })
+    expect(none.skipped).toEqual(['music'])
+    expect(track(none.state.doc, 'audio')).toHaveLength(1)
+  })
 })

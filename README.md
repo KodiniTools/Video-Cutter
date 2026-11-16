@@ -329,8 +329,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Musik-Spuren aus, und das erste Video bestimmt weiterhin das Projektformat.
   Lautstärke, Ton-Blende, Tempo, Teilen und Kürzen gelten wie bei jedem
   Ton-Clip. Der bisherige Editor und das Einbrennen lehnen Tondateien ab.
-  Noch offen: Musik aus Projekten des bisherigen Editors übernehmen und
-  Wiederholen (Schleife).
+  **Schleife:** „Bis zum Ende wiederholen“ im Feld „Clip“ (`repeatClip`,
+  `repeatLimit`) legt Kopien eines eigenständigen Ton-Clips direkt dahinter,
+  bis zum Ende der übrigen Spuren (höchstens bis zum nächsten Clip der Spur);
+  die letzte Kopie wird gekürzt, die Ausblendung wandert ans Ende. Die Kopien
+  sind gewöhnliche Clips, der Server braucht dafür nichts Neues.
 - **Übergänge** (Feature `timelineTransitions`): Ein Video-Clip kann mit
   einem Übergang beginnen (`transitionIn: { preset, duration }`, Arten wie im
   bisherigen Editor: `fade`, `slide`, `scale`, `flip`; `setClipTransition`,
@@ -383,8 +386,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   gespeicherte Projekt bleibt unverändert; das Ergebnis ist ein neues,
   ungespeichertes Projekt. Der Zuschnitt des markierten Videos wird zum
   Zuschnitt seines Clips, die Ton-Blende zur Einblendung des ersten und
-  Ausblendung des letzten Ton-Clips. Noch nicht übernommen und im Dialog
-  genannt: Übergänge, Hintergrundmusik, Standbilder in Lücken.
+  Ausblendung des letzten Ton-Clips. Die Hintergrundmusik wird beim Öffnen
+  als Medium hochgeladen und liegt ab 0 auf einer eigenen Ton-Spur: mit ihrer
+  Lautstärke, auf die Länge des Videos gekürzt oder in Schleife gelegt, auf
+  Wunsch mit 2 s Ein-/Ausblendung; die Lautstärke des Originaltons geht an
+  die übrigen Ton-Clips. Lässt sie sich nicht laden (fehlt, oder das Backend
+  kennt `mediaAudio` nicht), nennt der Dialog sie als nicht übernommen.
   **Automatisches Speichern:** Ein geöffnetes (bereits gespeichertes) Projekt
   wird 3 s nach der letzten Änderung von selbst überschrieben (abschaltbar im
   Dialog, der Browser merkt es sich). Nicht bei neuen Projekten ohne Namen und

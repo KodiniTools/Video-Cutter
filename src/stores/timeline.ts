@@ -9,6 +9,7 @@ import {
   findClip,
   createId,
   cutClipRanges as cutClipRangesOp,
+  repeatClip as repeatClipOp,
   insertClip as insertClipOp,
   insertOverlayClip,
   insertOverlayClips,
@@ -345,6 +346,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     apply((d) => setClipCropOp(d, clipId, crop))
 
   /** Letztes Bild eines Video-Clips bis zum nächsten Clip der Spur halten. */
+  const repeatClip = (clipId: string) => apply((d) => repeatClipOp(d, clipId))
   const setClipHold = (clipId: string, hold: boolean) =>
     apply((d) => setClipHoldOp(d, clipId, hold))
 
@@ -654,6 +656,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipCrop,
     setClipTransition,
     cutClipRanges,
+    repeatClip,
     setClipHold,
     updateSettings,
     setZoom,

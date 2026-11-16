@@ -14,8 +14,10 @@ import {
   nextTrackName,
   normalizeCrop,
   putAsset,
+  repeatClip,
   secondsToTime,
   setClipFade,
+  setClipGain,
   setClipHold,
   setClipTransition,
   snapToFrame,
@@ -44,7 +46,11 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  *    bisher das letzte Bild: Der Clip davor bekommt `hold`.
  *  - Die Ton-Blende wird zur Einblendung des ersten und Ausblendung des
  *    letzten Ton-Clips.
- *  - Was der neue Editor noch nicht kann, wird ausgelassen und in `skipped`
+ *  - Die Hintergrundmusik (als Medium `music` neu hochgeladen) liegt ab 0 auf
+ *    einer eigenen Ton-Spur: mit ihrer Lautstärke, auf die Länge des Videos
+ *    gekürzt bzw. in Schleife gelegt und auf Wunsch ein-/ausgeblendet. Die
+ *    Lautstärke des Originaltons geht an die übrigen Ton-Clips.
+ *  - Was nicht übernommen werden kann, wird ausgelassen und in `skipped`
  *    genannt.
  */
 
@@ -90,9 +96,14 @@ function overlayData(o: object): Record<string, unknown> {
   return data
 }
 
+/** Länge der Musik-Blende wie beim Zusammenfügen: 2 s, höchstens ein Viertel. */
+const MUSIC_FADE_SEC = 2
+
 export function convertClassicProject(
   classic: ProjectState,
   media: Readonly<Record<string, MediaView>>,
+  /** Die Musik des Projekts als Medium; `null`, wenn sie nicht geladen werden konnte. */
+  music: MediaView | null = null,
 ): ClassicConversion {
   const skipped = new Set<ClassicSkip>()
   let missingMedia = 0
@@ -148,7 +159,6 @@ export function convertClassicProject(
     const seam = classic.seams.find((s) => s.from === from && s.to === to)
     return seam?.preset ?? (classic.anim.animation as SeamPreset)
   }
-  if (classic.music) skipped.add('music')
   // Der Zuschnitt gehört zum markierten Video der Liste.
   const crop = normalizeCrop(classic.editor?.crop)
   const cropItem = classic.selected === null ? undefined : classic.items[classic.selected]
@@ -268,9 +278,64 @@ export function convertClassicProject(
     }
   }
 
+  // Hintergrundmusik: eigene Ton-Spur ab 0, so lang wie das Video.
+  const total = doc.tracks.reduce(
+    (end, t) => t.clips.reduce((e, c) => Math.max(e, c.start + c.duration), end),
+    0,
+  )
+  let musicUsed = false
+  if (classic.music && music && music.duration > 0 && total >= MIN_CLIP_DURATION) {
+    const original = Math.min(1, Math.max(0, classic.music.originalVolume))
+    if (original !== 1) {
+      for (const t of doc.tracks) {
+        if (t.kind !== 'audio') continue
+        for (const c of t.clips) doc = must(setClipGain(doc, c.id, c.gain * original))
+      }
+    }
+    doc = putAsset(doc, assetFromMedia(music))
+    const trackId = createId()
+    doc = must(
+      addTrack(
+        doc,
+        { id: trackId, kind: 'audio', name: nextTrackName(doc, 'A') },
+        doc.tracks.length,
+      ),
+    )
+    const clipId = createId()
+    const length = Math.min(doc.assets[music.id].duration ?? 0, total)
+    if (length >= MIN_CLIP_DURATION) {
+      doc = must(
+        insertClip(doc, trackId, {
+          id: clipId,
+          kind: 'audio',
+          asset: music.id,
+          start: 0,
+          duration: length,
+          sourceIn: 0,
+          speed: 1,
+          gain: Math.min(1, Math.max(0, classic.music.volume)),
+        }),
+      )
+      if (classic.music.loop) {
+        const looped = repeatClip(doc, clipId)
+        if (looped.ok) doc = looped.doc
+      }
+      const fade = Math.min(secondsToTime(MUSIC_FADE_SEC), Math.round(total / 4))
+      if (classic.music.fade && fade >= secondsToTime(0.1)) {
+        const clips = doc.tracks.find((t) => t.id === trackId)?.clips ?? []
+        doc = must(setClipFade(doc, clipId, 'in', { duration: fade }))
+        doc = must(setClipFade(doc, clips[clips.length - 1].id, 'out', { duration: fade }))
+      }
+      musicUsed = true
+    }
+  }
+  if (classic.music && !musicUsed) skipped.add('music')
+
   return {
     state: buildTimelineProject(doc, { ...classic.images }),
-    media: Object.fromEntries(present.map((p) => [p.view.id, p.view])),
+    media: Object.fromEntries(
+      [...present.map((p) => p.view), ...(musicUsed && music ? [music] : [])].map((v) => [v.id, v]),
+    ),
     skipped: [...skipped],
     missingMedia,
   }

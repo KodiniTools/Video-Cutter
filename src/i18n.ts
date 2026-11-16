@@ -719,6 +719,11 @@ const messages = {
         fadeSides: { in: 'Einblenden', out: 'Ausblenden' },
         fadeHint:
           'Blendet den Ton am Anfang bzw. Ende dieses Clips. Beim Teilen bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.',
+        repeat: 'Bis zum Ende wiederholen',
+        repeatHint:
+          'Legt Kopien dieses Clips direkt dahinter, bis {time} (Ende der übrigen Spuren); die letzte wird passend gekürzt. Die Ausblendung wandert ans Ende.',
+        repeatNone:
+          'In Schleife legen: Der Clip reicht schon bis zum Ende der übrigen Spuren oder bis zum nächsten Clip.',
         crop: 'Zuschneiden',
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
@@ -879,7 +884,7 @@ const messages = {
         'Projekt der bisherigen App. Es wird beim Öffnen umgewandelt; das gespeicherte Projekt bleibt unverändert.',
       converted:
         'Es stammt aus dem bisherigen Editor und wurde umgewandelt. Speichere es hier als neues Projekt; das ursprüngliche bleibt unverändert.',
-      notConverted: 'Noch nicht übernommen: {list}.',
+      notConverted: 'Nicht übernommen: {list}.',
       skipped: {
         music: 'Hintergrundmusik',
         audioFade: 'Ton ein-/ausblenden',
@@ -1602,6 +1607,10 @@ const messages = {
         fadeSides: { in: 'Fade in', out: 'Fade out' },
         fadeHint:
           'Fades the sound at the start or end of this clip. When you split it, the fade-in stays on the first part and the fade-out on the last.',
+        repeat: 'Repeat until the end',
+        repeatHint:
+          'Places copies of this clip right behind it, up to {time} (end of the other tracks); the last one is shortened to fit. The fade-out moves to the end.',
+        repeatNone: 'Loop: the clip already reaches the end of the other tracks or the next clip.',
         crop: 'Crop',
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',
@@ -1759,7 +1768,7 @@ const messages = {
         'Project of the previous app. It is converted when opened; the saved project stays unchanged.',
       converted:
         'It comes from the previous editor and was converted. Save it here as a new project; the original stays unchanged.',
-      notConverted: 'Not carried over yet: {list}.',
+      notConverted: 'Not carried over: {list}.',
       skipped: {
         music: 'background music',
         audioFade: 'audio fade in/out',

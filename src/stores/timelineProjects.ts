@@ -15,7 +15,7 @@ import {
   type AssetRef,
   type ProjectSummary,
 } from '@/lib/projectApi'
-import type { MediaView } from '@/lib/mediaApi'
+import { uploadMedia, type MediaView } from '@/lib/mediaApi'
 import { parseProjectState } from '@/lib/projectState'
 import { convertClassicProject, type ClassicSkip } from '@/timeline/convertClassic'
 import {
@@ -225,7 +225,21 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
       try {
         if (converted) {
           const classic = parseProjectState(raw)
-          const conversion = convertClassicProject(classic, await openProjectMedia(id))
+          const videos = await openProjectMedia(id)
+          // Die Musik liegt als Zusatzdatei im Projekt: als Medium neu hochladen.
+          let music: MediaView | null = null
+          if (classic.music) {
+            progress.value = { key: 'timelineProjects.progress.files', params: { i: 1, n: 1 } }
+            try {
+              const blob = await fetchAsset(id, classic.music.asset)
+              const type = classic.music.type || blob.type
+              const file = new File([blob], classic.music.name, { type })
+              music = await uploadMedia(file).promise
+            } catch {
+              // Fehlt, oder das Backend nimmt noch keine Tondateien an: ohne Musik öffnen.
+            }
+          }
+          const conversion = convertClassicProject(classic, videos, music)
           state = conversion.state
           skipped = conversion.skipped
           missing = conversion.missingMedia

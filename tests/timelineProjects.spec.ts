@@ -39,6 +39,12 @@ vi.mock('@/lib/projectApi', () => ({
   sha256Hex: async (b: Blob) => hashOfName((b as File).name ?? 'x'),
 }))
 
+const uploadMedia = vi.fn((_file: File): Promise<MediaView> => Promise.reject(new Error('nein')))
+vi.mock('@/lib/mediaApi', async (original) => ({
+  ...(await original<typeof import('@/lib/mediaApi')>()),
+  uploadMedia: (file: File) => ({ promise: uploadMedia(file), abort: () => {} }),
+}))
+
 const ensureDerived = vi.fn((_id: string) => new Promise<never>(() => {}))
 vi.mock('@/lib/derivedApi', async (original) => ({
   ...(await original<typeof import('@/lib/derivedApi')>()),
@@ -398,6 +404,45 @@ describe('timelineProjects-Store', () => {
     expect(req.assets.map((a) => a.hash)).toEqual([hash])
     expect(store.current?.id).toBe('neu')
     expect(store.suggestedName).toBe('')
+  })
+
+  it('lädt die Musik eines Projekts der bisherigen App als Medium hoch', async () => {
+    const store = useTimelineProjectStore()
+    const timeline = useTimelineStore()
+    const pool = useMediaPoolStore()
+    const hash = 'c'.repeat(64)
+    fetchProject.mockResolvedValue({
+      project: summary({ id: 'alt', kind: 'classic', name: 'Urlaub' }),
+      state: {
+        version: 1,
+        items: [{ media: 'm1', name: 'a.mp4', start: 0, end: null, include: true }],
+        music: { asset: hash, name: 'musik.mp3', type: 'audio/mpeg', volume: 0.5 },
+        anim: { animation: 'none' },
+      },
+    })
+    openProjectMedia.mockResolvedValue({ m1: media('live', 'a.mp4') })
+    uploadMedia.mockResolvedValueOnce({
+      ...media('song', 'musik.mp3'),
+      duration: 1.5,
+      width: 0,
+      height: 0,
+      kind: 'audio',
+    })
+
+    const r = await store.open('alt')
+    expect(r).toEqual({ missing: 0, converted: true, skipped: [], name: 'Urlaub' })
+    expect(fetchAsset).toHaveBeenCalledWith('alt', hash)
+    const sent = uploadMedia.mock.calls[0][0]
+    expect([sent.name, sent.type]).toEqual(['musik.mp3', 'audio/mpeg'])
+    expect(Object.keys(timeline.doc.assets).sort()).toEqual(['live', 'song'])
+    expect(pool.items.map((i) => i.media?.id).sort()).toEqual(['live', 'song'])
+    // 4 s Video, 1,5 s Musik in Schleife.
+    const lane = timeline.doc.tracks.filter((t) => t.kind === 'audio')[1]
+    expect(lane.clips.map((c) => [c.asset, c.start, c.duration])).toEqual([
+      ['song', 0, 1_500_000],
+      ['song', 1_500_000, 1_500_000],
+      ['song', 3_000_000, 1_000_000],
+    ])
   })
 })
 

@@ -12,6 +12,7 @@ import {
   MAX_TRANSITION,
   MIN_CROP_SIZE,
   MIN_TRANSITION,
+  repeatLimit,
   secondsToTime,
   timeToSeconds,
   type AudioClip,
@@ -131,6 +132,18 @@ function onFadeCurve(side: FadeSide, e: Event): void {
   if (!clip || !fade) return
   const curve = (e.target as HTMLSelectElement).value as FadeCurve
   store.setClipFade(clip.id, side, { duration: fade.duration, curve })
+}
+
+// --- Schleife ------------------------------------------------------------------
+
+/** Nur eigenständige Ton-Clips (Musik), nicht der Ton eines Videos. */
+const canRepeat = computed(() => audio.value !== null && !audio.value.linkGroup)
+/** Bis hierhin würde wiederholt; `null` = nichts zu füllen. */
+const repeatUntil = computed(() => (audio.value ? repeatLimit(store.doc, audio.value.id) : null))
+
+function onRepeat(): void {
+  commit()
+  if (audio.value && repeatUntil.value !== null) store.repeatClip(audio.value.id)
 }
 
 // --- Zuschnitt (Ränder in Anteilen der Quelle) ------------------------------
@@ -304,6 +317,26 @@ onBeforeUnmount(commit)
       </template>
       <p class="hint">{{ t('timeline.clipInspector.fadeHint') }}</p>
     </fieldset>
+    <template v-if="canRepeat">
+      <button
+        type="button"
+        class="repeat"
+        :disabled="repeatUntil === null"
+        data-testid="clip-repeat"
+        @click="onRepeat"
+      >
+        {{ t('timeline.clipInspector.repeat') }}
+      </button>
+      <p class="hint">
+        {{
+          repeatUntil === null
+            ? t('timeline.clipInspector.repeatNone')
+            : t('timeline.clipInspector.repeatHint', {
+                time: formatTimeMs(timeToSeconds(repeatUntil)),
+              })
+        }}
+      </p>
+    </template>
     <fieldset v-if="video" class="crop" data-testid="clip-transition">
       <legend>{{ t('timeline.clipInspector.transition') }}</legend>
       <label class="side curve">
@@ -436,6 +469,19 @@ h3 {
 .value {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.repeat {
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.repeat:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .plain {
   align-self: flex-start;
