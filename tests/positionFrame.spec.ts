@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { containRect, dragPosition, nudgePoint, tidyPoint } from '@/timeline/positionFrame'
+import {
+  containRect,
+  dragPosition,
+  layoutBox,
+  nudgePoint,
+  resizeScale,
+  tidyPoint,
+} from '@/timeline/positionFrame'
 
 describe('containRect', () => {
   it('passt das Bild zentriert ein (Ränder links/rechts oder oben/unten)', () => {
@@ -47,5 +54,44 @@ describe('nudgePoint', () => {
     expect(nudgePoint(from, 'ArrowRight', true)).toEqual({ x: 0.55, y: 0.5 })
     expect(nudgePoint({ x: 0.5, y: 0.02 }, 'ArrowUp', true)).toEqual({ x: 0.5, y: 0 })
     expect(nudgePoint(from, 'Enter')).toBeNull()
+  })
+})
+
+describe('layoutBox (Bild-in-Bild)', () => {
+  it('gleiches Seitenverhältnis: Kasten = Größe, Mitte wie angegeben', () => {
+    expect(layoutBox({ x: 0.5, y: 0.4, scale: 0.5 }, 1280, 720, 1920, 1080)).toEqual({
+      x: 0.5,
+      y: 0.4,
+      width: 0.5,
+      height: 0.5,
+    })
+  })
+
+  it('hält das Bild ganz im Format', () => {
+    const box = layoutBox({ x: 1, y: 0, scale: 0.4 }, 640, 360, 640, 360)
+    expect(box.x).toBeCloseTo(0.8)
+    expect(box.y).toBeCloseTo(0.2)
+  })
+
+  it('anderes Seitenverhältnis: eingepasst, also schmaler bzw. flacher', () => {
+    // Hochkant-Quelle im Querformat: volle Höhe des Rahmens, schmal.
+    const tall = layoutBox({ x: 0.5, y: 0.5, scale: 0.5 }, 1080, 1920, 1920, 1080)
+    expect(tall.height).toBeCloseTo(0.5)
+    expect(tall.width).toBeCloseTo((1080 * (540 / 1920)) / 1920)
+    // Ohne bekannte Größe: der Rahmen selbst.
+    expect(layoutBox({ x: 0.5, y: 0.5, scale: 0.3 }, 0, 0, 1920, 1080)).toMatchObject({
+      width: 0.3,
+      height: 0.3,
+    })
+  })
+})
+
+describe('resizeScale', () => {
+  it('wächst mit dem Abstand von der Mitte, begrenzt und auf Prozent gerundet', () => {
+    expect(resizeScale(0.4, 100, 150, 0.05)).toBe(0.6)
+    expect(resizeScale(0.4, 100, 1000, 0.05)).toBe(1)
+    expect(resizeScale(0.4, 100, 1, 0.05)).toBe(0.05)
+    expect(resizeScale(0.4, 100, 133, 0.05)).toBe(0.53)
+    expect(resizeScale(0.4, 0, 133, 0.05)).toBe(0.4)
   })
 })

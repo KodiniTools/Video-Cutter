@@ -698,6 +698,7 @@ const messages = {
       positionFrame: 'Position im Bild',
       positionFrameTitle:
         'Ziehen zum Verschieben (mit Umschalttaste fein), angeklickt auch mit den Pfeiltasten',
+      positionFrameResize: 'Ziehen ändert die Größe',
       addImage: '+ Bild',
       addImageTitle:
         'Eigenes Bild (JPEG, PNG, WebP) am Abspielkopf einfügen, z. B. ein Logo (liegt über allen Videos)',
@@ -739,7 +740,7 @@ const messages = {
         },
         layoutReset: 'Volle Größe und Deckkraft',
         layoutHint:
-          'Verkleinert den Clip und legt ihn an eine Stelle im Bild. Darunter ist zu sehen, was auf den Video-Spuren weiter unten liegt, sonst der Hintergrund. Das Bild bleibt immer ganz im Projektformat.',
+          'Verkleinert den Clip und legt ihn an eine Stelle im Bild. Darunter ist zu sehen, was auf den Video-Spuren weiter unten liegt, sonst der Hintergrund. Das Bild bleibt immer ganz im Projektformat. Ein verkleinerter Clip lässt sich auch direkt in der Vorschau ziehen; der Griff unten rechts ändert die Größe.',
         hold: 'Letztes Bild halten bis zum nächsten Clip',
         holdHint:
           'Folgt auf diesen Clip eine Lücke, zeigt sie sein letztes Bild als Standbild statt des Hintergrunds. Ohne folgenden Clip auf der Spur passiert nichts.',
@@ -1599,6 +1600,7 @@ const messages = {
       positionFrame: 'Position in the picture',
       positionFrameTitle:
         'Drag to move (hold Shift for fine steps), or use the arrow keys once clicked',
+      positionFrameResize: 'Drag to resize',
       addImage: '+ Image',
       addImageTitle:
         'Insert your own image (JPEG, PNG, WebP) at the playhead, e.g. a logo (shown above all videos)',
@@ -1639,7 +1641,7 @@ const messages = {
         },
         layoutReset: 'Full size and opacity',
         layoutHint:
-          'Scales the clip down and places it somewhere in the frame. Below it you see what lies on the video tracks further down, otherwise the background. The picture always stays fully inside the project format.',
+          'Scales the clip down and places it somewhere in the frame. Below it you see what lies on the video tracks further down, otherwise the background. The picture always stays fully inside the project format. A scaled-down clip can also be dragged right in the preview; the handle at the bottom right changes its size.',
         hold: 'Hold the last frame until the next clip',
         holdHint:
           'If a gap follows this clip, it shows the clip’s last frame as a still instead of the background. Without a following clip on the track nothing happens.',
