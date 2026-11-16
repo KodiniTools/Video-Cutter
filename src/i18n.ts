@@ -671,6 +671,11 @@ const messages = {
       label: 'Timeline',
       split: 'Teilen',
       splitTitle: 'Am Abspielkopf teilen (S)',
+      unlink: 'Ton lösen',
+      unlinkTitle:
+        'Bild und Ton des markierten Videos trennen: Danach lassen sie sich einzeln verschieben, kürzen und löschen',
+      link: 'Verbinden',
+      linkTitle: 'Markierte Clips verbinden: Sie wandern künftig gemeinsam',
       remove: 'Löschen',
       removeTitle: 'Markierte Clips löschen, Lücke bleibt (Entf)',
       rippleRemove: 'Löschen + Lücke schließen',
@@ -1430,6 +1435,11 @@ const messages = {
       label: 'Timeline',
       split: 'Split',
       splitTitle: 'Split at the playhead (S)',
+      unlink: 'Detach audio',
+      unlinkTitle:
+        'Separate picture and sound of the selected video: afterwards they can be moved, trimmed and deleted on their own',
+      link: 'Link',
+      linkTitle: 'Link the selected clips: they move together from now on',
       remove: 'Delete',
       removeTitle: 'Delete selected clips, keep the gap (Del)',
       rippleRemove: 'Delete + close gap',

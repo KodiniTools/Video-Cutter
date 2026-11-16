@@ -378,6 +378,27 @@ function onKeydown(event: KeyboardEvent): void {
         {{ t('timeline.split') }}
       </button>
       <button
+        v-if="store.canUnlink || !store.canLink"
+        type="button"
+        class="tool wide"
+        data-testid="timeline-unlink"
+        :disabled="!store.canUnlink"
+        :title="t('timeline.unlinkTitle')"
+        @click="run(() => store.unlinkSelection())"
+      >
+        {{ t('timeline.unlink') }}
+      </button>
+      <button
+        v-else
+        type="button"
+        class="tool wide"
+        data-testid="timeline-link"
+        :title="t('timeline.linkTitle')"
+        @click="run(() => store.linkSelection())"
+      >
+        {{ t('timeline.link') }}
+      </button>
+      <button
         type="button"
         class="tool wide"
         data-testid="timeline-delete"

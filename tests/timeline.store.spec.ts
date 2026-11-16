@@ -208,6 +208,54 @@ describe('Timeline-Store', () => {
     expect(store.removeSelection()).toBe(false)
   })
 
+  it('löst den Ton vom Video und verbindet beide wieder', () => {
+    const store = useTimelineStore()
+    store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10), hasAudio: true })
+    store.appendMedia('vid')
+    const [v, a] = [store.doc.tracks[0].clips[0].id, store.doc.tracks[1].clips[0].id]
+    expect(store.canUnlink).toBe(true)
+    expect(store.canLink).toBe(false)
+
+    expect(store.unlinkSelection()).toBe(true)
+    expect(store.doc.tracks.flatMap((t) => t.clips).every((c) => !c.linkGroup)).toBe(true)
+    // Auswahl ist aufgehoben: „Löschen“ träfe sonst weiter beide.
+    expect(store.selection).toEqual([])
+    expect(store.canUnlink).toBe(false)
+    expect(store.canLink).toBe(false)
+    expect(validateDoc(store.doc)).toEqual([])
+
+    // Getrennt: Anklicken markiert nur den einen Clip, Verschieben und Löschen wirken einzeln.
+    store.selectClip(a)
+    expect(store.selection).toEqual([a])
+    expect(store.canLink).toBe(false)
+    expect(store.moveClip(a, { start: s(3) })).toBe(true)
+    expect(store.doc.tracks[0].clips[0].start).toBe(0)
+    expect(store.doc.tracks[1].clips[0].start).toBe(s(3))
+    store.undo()
+
+    // Wieder verbinden: beide markieren, danach wandern sie gemeinsam.
+    store.select([v, a])
+    expect(store.canLink).toBe(true)
+    expect(store.linkSelection()).toBe(true)
+    expect(store.doc.tracks[0].clips[0].linkGroup).toBeTruthy()
+    expect(store.doc.tracks[0].clips[0].linkGroup).toBe(store.doc.tracks[1].clips[0].linkGroup)
+    store.selectClip(a)
+    expect(store.selection).toHaveLength(2)
+
+    // Rückgängig: verbinden, dann lösen zurück -> ursprüngliche Verknüpfung.
+    store.undo()
+    store.undo()
+    expect(store.doc.tracks[0].clips[0].linkGroup).toBeTruthy()
+
+    // Ton allein löschen.
+    store.select([v, a])
+    store.unlinkSelection()
+    store.selectClip(a)
+    expect(store.removeSelection()).toBe(true)
+    expect(store.doc.tracks[0].clips).toHaveLength(1)
+    expect(store.doc.tracks[1].clips).toHaveLength(0)
+  })
+
   it('legt ein Video in einem Schritt auf die Timeline und markiert die neuen Clips', () => {
     const store = useTimelineStore()
     store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10), hasAudio: true })

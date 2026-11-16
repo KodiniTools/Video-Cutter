@@ -336,6 +336,58 @@ export function updateClipData(
   return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
+/** Setzt bzw. löscht die Verknüpfungsgruppe der genannten Clips (nur geänderte Spuren neu). */
+function withLinkGroup(doc: TimelineDoc, ids: ReadonlySet<string>, group?: string): TimelineDoc {
+  let changed = false
+  const tracks = doc.tracks.map((track) => {
+    if (!track.clips.some((c) => ids.has(c.id) && c.linkGroup !== group)) return track
+    changed = true
+    const clips = track.clips.map((c) => {
+      if (!ids.has(c.id) || c.linkGroup === group) return c
+      const next = { ...c }
+      if (group === undefined) delete next.linkGroup
+      else next.linkGroup = group
+      return next
+    })
+    return { ...track, clips } as Track
+  })
+  return changed ? { ...doc, tracks } : doc
+}
+
+/**
+ * Verknüpfung lösen: Die genannten Clips und alles, was mit ihnen verknüpft
+ * ist, werden eigenständig (z. B. Ton getrennt vom Bild verschieben, kürzen
+ * oder löschen). Ohne Verknüpfung bleibt das Dokument unverändert.
+ */
+export function unlinkClips(doc: TimelineDoc, clipIds: readonly string[]): OpResult {
+  const ids = new Set<string>()
+  for (const id of clipIds) {
+    const loc = findClip(doc, id)
+    if (!loc) return fail('clip-not-found')
+    if (loc.clip.linkGroup) for (const m of linkedClips(doc, loc, true)) ids.add(m.clip.id)
+  }
+  return ok(withLinkGroup(doc, ids))
+}
+
+/**
+ * Clips verknüpfen: Die genannten Clips (samt ihren bisherigen Gruppen) bilden
+ * eine neue Gruppe und wandern künftig gemeinsam. Braucht mindestens zwei.
+ */
+export function linkClips(
+  doc: TimelineDoc,
+  clipIds: readonly string[],
+  group: string = createId(),
+): OpResult {
+  const ids = new Set<string>()
+  for (const id of clipIds) {
+    const loc = findClip(doc, id)
+    if (!loc) return fail('clip-not-found')
+    for (const m of linkedClips(doc, loc, true)) ids.add(m.clip.id)
+  }
+  if (ids.size < 2) return ok(doc)
+  return ok(withLinkGroup(doc, ids, group))
+}
+
 /**
  * Clip auf eine Ebenen-Spur legen: auf die oberste entsperrte Ebenen-Spur, die
  * an der Stelle frei ist – sonst entsteht ganz oben eine neue (`trackName`).

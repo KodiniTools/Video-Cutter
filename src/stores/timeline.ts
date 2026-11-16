@@ -11,6 +11,7 @@ import {
   insertClip as insertClipOp,
   insertOverlayClip,
   isTime,
+  linkClips as linkClipsOp,
   linkGroupIds,
   moveClip as moveClipOp,
   moveTrack as moveTrackOp,
@@ -25,6 +26,7 @@ import {
   splitClip as splitClipOp,
   trimClip as trimClipOp,
   trimRange,
+  unlinkClips as unlinkClipsOp,
   updateClipData as updateClipDataOp,
   updateSettings as updateSettingsOp,
   updateTrack as updateTrackOp,
@@ -463,6 +465,30 @@ export const useTimelineStore = defineStore('timeline', () => {
     )
   }
 
+  /** Ist in der Auswahl etwas verknüpft (z. B. Bild und Ton eines Videos)? */
+  const canUnlink = computed(() => selectedClips.value.some((c) => !!c.linkGroup))
+  /** Mindestens zwei markierte Clips, die noch nicht alle zusammengehören. */
+  const canLink = computed(() => {
+    const clips = selectedClips.value
+    if (clips.length < 2) return false
+    const group = clips[0].linkGroup
+    return !group || clips.some((c) => c.linkGroup !== group)
+  })
+
+  /**
+   * Verknüpfung der markierten Clips lösen: Bild und Ton lassen sich danach
+   * einzeln markieren, verschieben, kürzen und löschen. Die Auswahl wird
+   * aufgehoben.
+   */
+  function unlinkSelection(): boolean {
+    if (!apply((d) => unlinkClipsOp(d, selection.value))) return false
+    // Auswahl aufheben: Sonst träfe „Löschen“ weiter Bild und Ton zusammen.
+    select([])
+    return true
+  }
+  /** Markierte Clips (wieder) verknüpfen: Sie wandern künftig gemeinsam. */
+  const linkSelection = () => apply((d) => linkClipsOp(d, selection.value))
+
   function selectAll(): void {
     select(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
   }
@@ -550,6 +576,10 @@ export const useTimelineStore = defineStore('timeline', () => {
     togglePlay,
     addText,
     addGraphic,
+    canUnlink,
+    canLink,
+    unlinkSelection,
+    linkSelection,
     updateClipData,
     updateSettings,
     setZoom,

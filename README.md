@@ -289,6 +289,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   (0,5 %, mit Umschalttaste 5 %). Während des Ziehens zeigt der Rahmen bei
   Formen und Bildern eine blasse Kopie; erst das Loslassen ändert das Dokument
   (ein Rückgängig-Schritt, ein neuer Vorschau-Abschnitt).
+- **Ton lösen / Verbinden**: Bild und Ton eines Videos sind verknüpft
+  (`linkGroup`). „Ton lösen“ (`unlinkClips`) trennt die markierten Clips, danach
+  lassen sich Bild und Ton einzeln markieren, verschieben, kürzen und löschen.
+  Mehrere markierte Clips (Strg/Umschalt + Klick) verbindet „Verbinden“
+  (`linkClips`) wieder.
 - **Layout**: Vorschau und Timeline stehen gleich breit direkt untereinander
   und bleiben beim Scrollen stehen; die Seitenleiste (Medien, Einstellungen)
   scrollt für sich.
