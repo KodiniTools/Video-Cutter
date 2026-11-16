@@ -344,6 +344,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Übergang über Abschnittsgrenzen der Vorschau wie im Export aussieht.
   Übergänge aus Projekten des bisherigen Editors werden übernommen. Der Ton
   wird nicht automatisch geblendet, dafür gibt es die Ton-Blende je Clip.
+- **Standbild in der Lücke** (Feature `timelineHold`): Mit „Letztes Bild
+  halten bis zum nächsten Clip“ (`hold` am Video-Clip, `setClipHold`) zeigt
+  die Lücke hinter einem Clip sein letztes Bild statt des Hintergrunds, bis
+  der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
+  setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
+  Standbilder aus Projekten des bisherigen Editors werden so übernommen.
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die

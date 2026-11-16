@@ -86,6 +86,8 @@ export interface DocVideoClip extends DocClipBase {
   speed: number
   crop: DocCrop | null
   transitionIn?: DocTransition | null
+  /** Letztes Bild halten, bis der nächste Clip der Spur beginnt. */
+  hold?: boolean
 }
 
 export interface DocAudioClip extends DocClipBase {
@@ -491,6 +493,8 @@ export function parseTimelineDoc(
           const r = c as unknown as DocCrop
           crop = { x: r.x, y: r.y, width: r.width, height: r.height }
         }
+        if (rc.hold !== undefined && typeof rc.hold !== 'boolean')
+          return fail(`${cp}.hold`, 'Ungültige Angabe zum Standbild.')
         let transitionIn: DocTransition | null = null
         if (rc.transitionIn !== undefined && rc.transitionIn !== null) {
           const t = rc.transitionIn
@@ -512,6 +516,7 @@ export function parseTimelineDoc(
           speed: rc.speed,
           crop,
           ...(transitionIn ? { transitionIn } : {}),
+          ...(rc.hold === true ? { hold: true } : {}),
         })
       })
 

@@ -218,6 +218,11 @@ function onTransitionDuration(e: Event): void {
   })
 }
 
+function onHold(e: Event): void {
+  commit()
+  if (video.value) store.setClipHold(video.value.id, (e.target as HTMLInputElement).checked)
+}
+
 const timing = computed(() => {
   const clip = main.value
   if (!clip) return ''
@@ -328,6 +333,16 @@ onBeforeUnmount(commit)
       </label>
       <p class="hint">{{ t('timeline.clipInspector.transitionHint') }}</p>
     </fieldset>
+    <label v-if="video" class="check">
+      <input
+        type="checkbox"
+        :checked="video.hold === true"
+        data-testid="clip-hold"
+        @change="onHold"
+      />
+      <span>{{ t('timeline.clipInspector.hold') }}</span>
+    </label>
+    <p v-if="video" class="hint">{{ t('timeline.clipInspector.holdHint') }}</p>
     <fieldset v-if="video" class="crop" data-testid="clip-crop">
       <legend>{{ t('timeline.clipInspector.crop') }}</legend>
       <label v-for="side in CROP_SIDES" :key="side" class="side">

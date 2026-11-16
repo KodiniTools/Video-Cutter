@@ -91,6 +91,8 @@ export interface VideoClip extends MediaClipBase {
   crop?: ClipCrop | null
   /** Übergang vom vorigen Clip derselben Spur (oder aus dem Hintergrund). */
   transitionIn?: ClipTransition
+  /** Letztes Bild halten, bis der nächste Clip der Spur beginnt (Standbild in der Lücke). */
+  hold?: boolean
 }
 
 /** Kurvenformen der Ton-Blende (FFmpeg `afade curve=`, wie im bisherigen Editor). */

@@ -16,6 +16,7 @@ import {
   putAsset,
   secondsToTime,
   setClipFade,
+  setClipHold,
   setClipTransition,
   snapToFrame,
   type OpResult,
@@ -39,6 +40,8 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  *  - Der Zuschnitt des markierten Videos wird zum Zuschnitt seines Clips.
  *  - Übergänge je Nahtstelle (bzw. die globale Animation) werden zum Übergang
  *    am Anfang des jeweils folgenden Clips; die Clips überlappen dabei nicht.
+ *  - Eine Lücke bis zum nächsten Video (dessen „Von“ liegt später) zeigt wie
+ *    bisher das letzte Bild: Der Clip davor bekommt `hold`.
  *  - Die Ton-Blende wird zur Einblendung des ersten und Ausblendung des
  *    letzten Ton-Clips.
  *  - Was der neue Editor noch nicht kann, wird ausgelassen und in `skipped`
@@ -46,7 +49,7 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  */
 
 /** Was nicht übernommen werden konnte. */
-export type ClassicSkip = 'music' | 'audioFade' | 'holds' | 'crop'
+export type ClassicSkip = 'music' | 'audioFade' | 'crop'
 
 export interface ClassicConversion {
   /** Dokument mit den IDs der jetzt angemeldeten Videos; Bilder noch per Schlüssel. */
@@ -160,7 +163,6 @@ export function convertClassicProject(
 
     placed.forEach((p, i) => {
       const entry = layout.entries[i]
-      if (entry.hold > 0.001) skipped.add('holds')
       const start = starts[i]
       const sourceIn = secondsToTime(p.from)
       const assetDuration = doc.assets[p.view.id].duration ?? 0
@@ -186,6 +188,8 @@ export function convertClassicProject(
           ...(withCrop ? { crop } : {}),
         }),
       )
+      // Standbild bis zum nächsten Clip (Lücke durch „Von“ des folgenden Videos).
+      if (entry.hold > 0.001 && i + 1 < placed.length) doc = must(setClipHold(doc, videoId, true))
       // Übergang zur vorigen Nahtstelle. Anders als bisher überlappen die Clips
       // nicht: Die Länge bleibt, der Übergang liegt am Anfang dieses Clips.
       const preset = i > 0 ? seamBefore(i) : 'none'
