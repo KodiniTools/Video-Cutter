@@ -210,6 +210,19 @@ describe('convertClassicProject', () => {
     )
     expect(r.state.doc.settings).toMatchObject({ width: 1080, height: 1920, fps: 25 })
     expect(r.skipped.sort()).toEqual(['audioFade', 'crop', 'music', 'transitions'])
+    // Ist das Video markiert, wandert der Zuschnitt an seinen Clip.
+    const withSelection = convertClassicProject(
+      classic({
+        items: [item('a'), item('b')],
+        selected: 1,
+        editor: { startTime: 0, endTime: 5, crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } },
+      }),
+      { a: view('A'), b: view('B') },
+    )
+    expect(withSelection.skipped).toEqual([])
+    expect(
+      clips(withSelection.state.doc, 'video').map((c) => ('crop' in c ? c.crop : null)),
+    ).toEqual([null, { x: 0.1, y: 0.1, width: 0.5, height: 0.5 }])
     // Ohne Überblendung: harte Schnitte, nichts überlappt.
     expect(brief(clips(r.state.doc, 'video'))).toEqual([
       ['A', 0, 10, 0, 1],

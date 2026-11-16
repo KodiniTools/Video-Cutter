@@ -7,6 +7,7 @@ import {
   TIMELINE_DOC_VERSION,
   type AssetRef,
   type Clip,
+  type ClipCrop,
   type ClipKind,
   type OpError,
   type OpResult,
@@ -490,6 +491,145 @@ export function trimClip(
   const others = loc.track.clips.filter((c) => c.id !== clipId)
   if (overlaps(others, next.start, clipEnd(next))) return fail('overlap')
   return ok(withClips(doc, loc.trackIndex, [...others, next]))
+}
+
+/** Größte Lautstärke eines Ton-Clips (2 = doppelt so laut). */
+export const MAX_CLIP_GAIN = 2
+
+/**
+ * Tempo eines Video- oder Ton-Clips ändern. Der verwendete Bereich der Quelle
+ * bleibt gleich, die Länge auf der Timeline ändert sich (schneller = kürzer).
+ * Verknüpfte Clips (Bild + Ton) bekommen dasselbe Tempo (abschaltbar).
+ *
+ * Mit `ripple` rücken alle späteren Clips mit – auf allen nicht gesperrten
+ * Spuren um denselben Betrag: nach hinten, wenn der Clip länger wird, nach
+ * vorn (so weit frei ist), wenn er kürzer wird. Ohne `ripple` wird abgelehnt,
+ * wenn der längere Clip an seinen Nachbarn stößt.
+ */
+export function setClipSpeed(
+  doc: TimelineDoc,
+  clipId: string,
+  speed: number,
+  opts: { linked?: boolean; ripple?: boolean } = {},
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.clip.kind !== 'video' && loc.clip.kind !== 'audio') return fail('kind-mismatch')
+  if (!(speed >= MIN_SPEED && speed <= MAX_SPEED)) return fail('invalid-time')
+  const members = linkedClips(doc, loc, opts.linked ?? true)
+  if (members.some((m) => m.track.locked)) return fail('track-locked')
+
+  const changed = new Map<string, Clip>()
+  let oldEnd = 0
+  let newEnd = 0
+  for (const { clip } of members) {
+    if ((clip.kind !== 'video' && clip.kind !== 'audio') || clip.speed === speed) continue
+    // Abrunden: nie mehr Quelle verbrauchen als bisher (Ende der Quelle).
+    const duration = Math.floor(sourceSpan(clip.duration, clip.speed) / speed)
+    if (duration < MIN_CLIP_DURATION) return fail('too-short')
+    const next: Clip = { ...clip, speed, duration }
+    const error = checkClip(doc, next)
+    if (error) return fail(error)
+    changed.set(clip.id, next)
+    oldEnd = Math.max(oldEnd, clipEnd(clip))
+    newEnd = Math.max(newEnd, clipEnd(next))
+  }
+  if (changed.size === 0) return ok(doc)
+
+  const lanes = doc.tracks.map((t) => (t.clips as Clip[]).map((c) => changed.get(c.id) ?? c))
+  const later = (c: Clip) => !changed.has(c.id) && c.start >= oldEnd
+  let shift = opts.ripple ? newEnd - oldEnd : 0
+  if (shift < 0) {
+    // Nach vorn nur so weit, wie auf jeder Spur frei ist.
+    doc.tracks.forEach((track, i) => {
+      if (track.locked) return
+      let firstLater: Time | null = null
+      let earlierEnd = 0
+      for (const c of lanes[i]) {
+        if (later(c)) firstLater = firstLater === null ? c.start : Math.min(firstLater, c.start)
+        else earlierEnd = Math.max(earlierEnd, clipEnd(c))
+      }
+      if (firstLater !== null) shift = Math.max(shift, earlierEnd - firstLater)
+    })
+    shift = Math.min(0, shift)
+  }
+
+  let result = doc
+  for (let i = 0; i < doc.tracks.length; i++) {
+    const track = doc.tracks[i]
+    const touched = lanes[i].some((c) => changed.has(c.id))
+    const ripple = shift !== 0 && !track.locked && lanes[i].some(later)
+    if (!touched && !ripple) continue
+    const clips = ripple
+      ? lanes[i].map((c) => (later(c) ? { ...c, start: c.start + shift } : c))
+      : lanes[i]
+    const sorted = clips.slice().sort(byStart)
+    if (sorted.some((c, k) => k > 0 && clipEnd(sorted[k - 1]) > c.start)) return fail('overlap')
+    result = withClips(result, i, clips)
+  }
+  return ok(result)
+}
+
+/** Kleinster Zuschnitt: Anteil der Quelle, der mindestens sichtbar bleibt. */
+export const MIN_CROP_SIZE = 0.1
+
+/** Zuschnitt in gültige Grenzen bringen; das ganze Bild (oder Ungültiges) ergibt `null`. */
+export function normalizeCrop(crop: ClipCrop | null | undefined): ClipCrop | null {
+  if (!crop) return null
+  const { x, y, width, height } = crop
+  if (![x, y, width, height].every((v) => Number.isFinite(v))) return null
+  const round = (v: number) => Math.round(v * 10000) / 10000
+  const w = round(Math.min(1, Math.max(MIN_CROP_SIZE, width)))
+  const h = round(Math.min(1, Math.max(MIN_CROP_SIZE, height)))
+  const cx = round(Math.min(1 - w, Math.max(0, x)))
+  const cy = round(Math.min(1 - h, Math.max(0, y)))
+  if (cx === 0 && cy === 0 && w === 1 && h === 1) return null
+  return { x: cx, y: cy, width: w, height: h }
+}
+
+/**
+ * Zuschnitt eines Video-Clips (Anteile der Quelle). `null` oder das ganze Bild
+ * hebt ihn auf. Das zugeschnittene Bild wird wie jedes Video ins Projektformat
+ * eingepasst.
+ */
+export function setClipCrop(doc: TimelineDoc, clipId: string, crop: ClipCrop | null): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const next = normalizeCrop(crop)
+  const before = normalizeCrop(clip.crop)
+  if (
+    (next === null && before === null) ||
+    (next !== null &&
+      before !== null &&
+      next.x === before.x &&
+      next.y === before.y &&
+      next.width === before.width &&
+      next.height === before.height)
+  ) {
+    return ok(doc)
+  }
+  const changed: Clip = { ...clip }
+  if (next) changed.crop = next
+  else delete changed.crop
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
+/** Lautstärke eines Ton-Clips (0 = stumm, 1 = unverändert, höchstens `MAX_CLIP_GAIN`). */
+export function setClipGain(doc: TimelineDoc, clipId: string, gain: number): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'audio') return fail('kind-mismatch')
+  if (!Number.isFinite(gain)) return fail('invalid-settings')
+  const next = Math.min(MAX_CLIP_GAIN, Math.max(0, gain))
+  if (next === clip.gain) return ok(doc)
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? { ...clip, gain: next } : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
 /**

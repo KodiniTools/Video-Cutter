@@ -701,6 +701,22 @@ const messages = {
       graphicInspector: '{kind} bearbeiten',
       graphicInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
+      clipInspector: {
+        title: 'Clip',
+        timing: 'Länge {length} · Quelle {from} bis {to}',
+        speed: 'Tempo',
+        normal: 'normal',
+        ripple: 'Folgende Clips mitverschieben',
+        noRoom:
+          'Kein Platz: Der langsamere Clip würde in den nächsten ragen. „Folgende Clips mitverschieben“ einschalten oder den nächsten Clip verschieben.',
+        gain: 'Lautstärke',
+        crop: 'Zuschneiden',
+        cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
+        cropReset: 'Zuschnitt zurücksetzen',
+        cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
+        hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
+        hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
+      },
       textInspector: 'Text bearbeiten',
       textInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe – oder den Rahmen im Bild ziehen.',
@@ -1509,6 +1525,22 @@ const messages = {
       graphicInspector: 'Edit {kind}',
       graphicInspectorHint:
         'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',
+      clipInspector: {
+        title: 'Clip',
+        timing: 'Length {length} · source {from} to {to}',
+        speed: 'Speed',
+        normal: 'normal',
+        ripple: 'Move following clips along',
+        noRoom:
+          'No room: the slower clip would run into the next one. Turn on “Move following clips along” or move the next clip.',
+        gain: 'Volume',
+        crop: 'Crop',
+        cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
+        cropReset: 'Reset crop',
+        cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
+        hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
+        hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
+      },
       textInspector: 'Edit text',
       textInspectorHint:
         'Change length and timing on the clip in the timeline. Position: centre of the text in % of the frame width and height.',

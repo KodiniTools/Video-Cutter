@@ -29,7 +29,7 @@ const emit = defineEmits<{
   (e: 'grab', id: string, mode: ClipGrab, event: PointerEvent): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const pool = useMediaPoolStore()
 
 const left = computed(() => timeToPx(props.clip.start, props.zoom))
@@ -51,7 +51,13 @@ const name = computed(() => {
     if (g.kind === 'image') return getImageAsset(g.image)?.name ?? t('graphics.kinds.image')
     return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
   }
-  return item.value?.name ?? ''
+  const base = item.value?.name ?? ''
+  // Geändertes Tempo steht am Namen, z. B. „video.mp4 · 2×“.
+  if ('speed' in clip && clip.kind !== 'still' && Math.abs(clip.speed - 1) > 1e-6) {
+    const speed = `${clip.speed.toLocaleString(locale.value, { maximumFractionDigits: 2 })}×`
+    return base ? `${base} · ${speed}` : speed
+  }
+  return base
 })
 
 /** Vorschaubilder entlang eines Video-Clips (aus dem Filmstreifen). */

@@ -11,6 +11,7 @@ import {
   insertOverlayClip,
   MIN_CLIP_DURATION,
   nextTrackName,
+  normalizeCrop,
   putAsset,
   secondsToTime,
   snapToFrame,
@@ -32,6 +33,7 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  *    rechnet dieselbe Funktion wie beim Zusammenfügen (`mergeTimeline`).
  *  - Texte und Grafiken eines Videos werden zu Clips auf Ebenen-Spuren; ihre
  *    Zeiten (im Originalvideo) werden auf die Timeline umgerechnet.
+ *  - Der Zuschnitt des markierten Videos wird zum Zuschnitt seines Clips.
  *  - Was der neue Editor noch nicht kann, wird ausgelassen und in `skipped`
  *    genannt.
  */
@@ -140,7 +142,10 @@ export function convertClassicProject(
   if (classic.audioFade.fadeIn.enabled || classic.audioFade.fadeOut.enabled) {
     skipped.add('audioFade')
   }
-  if (classic.editor?.crop) skipped.add('crop')
+  // Der Zuschnitt gehört zum markierten Video der Liste.
+  const crop = normalizeCrop(classic.editor?.crop)
+  const cropItem = classic.selected === null ? undefined : classic.items[classic.selected]
+  let cropUsed = false
 
   if (layout && placed.length > 0) {
     const videoTrack = createId()
@@ -165,12 +170,15 @@ export function convertClassicProject(
       const withAudio = p.view.hasAudio && p.item.muted !== true
       const linkGroup = withAudio ? createId() : undefined
       const base = { asset: p.view.id, start, duration, sourceIn, speed: p.factor }
+      const withCrop = crop !== null && p.item === cropItem
+      if (withCrop) cropUsed = true
       doc = must(
         insertClip(doc, videoTrack, {
           ...base,
           id: createId(),
           kind: 'video',
           ...(linkGroup ? { linkGroup } : {}),
+          ...(withCrop ? { crop } : {}),
         }),
       )
       if (withAudio) {
@@ -217,6 +225,8 @@ export function convertClassicProject(
       }
     }
   }
+
+  if (crop !== null && !cropUsed) skipped.add('crop')
 
   return {
     state: buildTimelineProject(doc, { ...classic.images }),
