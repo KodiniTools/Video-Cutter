@@ -9,6 +9,7 @@ import {
   findClip,
   insertClip as insertClipOp,
   isTime,
+  linkGroupIds,
   moveClip as moveClipOp,
   putAsset as putAssetOp,
   removeAsset as removeAssetOp,
@@ -19,6 +20,7 @@ import {
   snapToFrame,
   splitClip as splitClipOp,
   trimClip as trimClipOp,
+  trimRange,
   updateTrack as updateTrackOp,
   validateDoc,
   type AssetRef,
@@ -247,13 +249,101 @@ export const useTimelineStore = defineStore('timeline', () => {
     return true
   }
 
-  /** Alle markierten Clips am Abspielkopf teilen (ein Verlaufsschritt). */
-  function splitSelectionAtPlayhead(): boolean {
+  // --- Ziehen mit der Maus ---------------------------------------------------
+
+  /** Einrast-Toleranz in Zeit (aus Pixeln über den Zoom). */
+  function snapTolerance(tolerancePx = 8): Time {
+    return Math.round((tolerancePx / zoom.value) * 1_000_000)
+  }
+
+  /**
+   * Clip beim Ziehen auf `start` legen (optional auf eine andere Spur).
+   * Anfang oder Ende rasten an Clip-Rändern, Markern und dem Abspielkopf ein,
+   * sonst gilt das Bildraster. Verknüpfte Clips wandern mit. Ist die Stelle
+   * belegt, bleibt der Clip, wo er zuletzt lag (`false`).
+   */
+  function dragClipTo(clipId: string, start: Time, trackId?: string): boolean {
+    const loc = findClip(doc.value, clipId)
+    if (!loc || !Number.isFinite(start)) return false
+    const members = linkGroupIds(doc.value, clipId)
+    // Kein Mitglied der Gruppe darf vor 0 rutschen.
+    let earliest = loc.clip.start
+    for (const id of members) earliest = Math.min(earliest, findClip(doc.value, id)!.clip.start)
+    const floor = loc.clip.start - earliest
+    let target = Math.max(floor, Math.round(start))
+    let snapped = false
+    if (snapping.value) {
+      const points = snapPoints(doc.value, { exclude: members, playhead: playhead.value })
+      const tolerance = snapTolerance()
+      const head = snapTime(target, points, tolerance)
+      const tail = snapTime(target + loc.clip.duration, points, tolerance)
+      const tailStart = tail.time - loc.clip.duration
+      const useTail =
+        tail.snapped &&
+        tailStart >= floor &&
+        (!head.snapped || Math.abs(tailStart - target) < Math.abs(head.time - target))
+      if (useTail) {
+        target = tailStart
+        snapped = true
+      } else if (head.snapped && head.time >= floor) {
+        target = head.time
+        snapped = true
+      }
+    }
+    if (!snapped) target = Math.max(floor, snapToFrame(target, doc.value.settings.fps))
+    if (trackId !== undefined && trackId !== loc.track.id) {
+      const moved = moveClipOp(doc.value, clipId, { start: target, trackId })
+      if (moved.ok) return apply(() => moved)
+    }
+    return apply((d) => moveClipOp(d, clipId, { start: target }))
+  }
+
+  /**
+   * Rand eines Clips beim Ziehen auf `time` legen: eingerastet wie beim
+   * Verschieben und auf das Mögliche begrenzt (Nachbarn, Quelle, Mindestlänge).
+   */
+  function dragTrimTo(clipId: string, edge: 'start' | 'end', time: Time): boolean {
+    const range = trimRange(doc.value, clipId, edge)
+    if (!range || !Number.isFinite(time)) return false
+    let target = Math.round(time)
+    let snapped = false
+    if (snapping.value) {
+      const points = snapPoints(doc.value, { exclude: [clipId], playhead: playhead.value })
+      const hit = snapTime(target, points, snapTolerance())
+      if (hit.snapped && hit.time >= range.min && hit.time <= range.max) {
+        target = hit.time
+        snapped = true
+      }
+    }
+    if (!snapped) target = snapToFrame(Math.max(0, target), doc.value.settings.fps)
+    target = Math.min(range.max, Math.max(range.min, target))
+    return apply((d) => trimClipOp(d, clipId, edge, target))
+  }
+
+  /** Clips, die „Teilen“ am Abspielkopf trifft (siehe `splitAtPlayhead`). */
+  const splitTargets = computed(() => {
     const at = playhead.value
+    const under = doc.value.tracks.flatMap((t) =>
+      t.clips
+        .filter((c) => c.start < at && at < c.start + c.duration)
+        .map((c) => ({ id: c.id, locked: t.locked })),
+    )
+    const chosen = under.filter((c) => selection.value.includes(c.id))
+    return (chosen.length > 0 ? chosen : under.filter((c) => !c.locked)).map((c) => c.id)
+  })
+
+  /**
+   * Am Abspielkopf teilen (ein Verlaufsschritt): die markierten Clips unter dem
+   * Abspielkopf; liegt keiner davon dort, alle Clips unter dem Abspielkopf auf
+   * nicht gesperrten Spuren.
+   */
+  function splitAtPlayhead(): boolean {
+    const at = playhead.value
+    const targets = splitTargets.value
     return apply((current) => {
       let next = current
       let split = false
-      for (const id of selection.value) {
+      for (const id of targets) {
         const loc = findClip(next, id)
         // Verknüpfte Clips wurden evtl. schon mitgeteilt und enden jetzt am Abspielkopf.
         if (!loc || !(loc.clip.start < at && at < loc.clip.start + loc.clip.duration)) continue
@@ -295,6 +385,25 @@ export const useTimelineStore = defineStore('timeline', () => {
         ? selection.value.filter((s) => s !== id)
         : [...selection.value, id],
     )
+  }
+
+  /**
+   * Clip samt verknüpften Clips markieren (Bild und Ton eines Videos gehören
+   * zusammen). `toggle`: zur Auswahl hinzufügen bzw. daraus entfernen.
+   */
+  function selectClip(id: string, toggle = false): void {
+    const group = linkGroupIds(doc.value, id)
+    if (!toggle) return select(group)
+    const drop = new Set(group)
+    select(
+      selection.value.includes(id)
+        ? selection.value.filter((s) => !drop.has(s))
+        : [...selection.value, ...group],
+    )
+  }
+
+  function selectAll(): void {
+    select(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
   }
 
   /** Abspielkopf setzen: nie negativ, auf das Bildraster des Projekts gelegt. */
@@ -352,10 +461,15 @@ export const useTimelineStore = defineStore('timeline', () => {
     splitClip,
     removeClip,
     appendMedia,
-    splitSelectionAtPlayhead,
+    splitTargets,
+    splitAtPlayhead,
+    dragClipTo,
+    dragTrimTo,
     removeSelection,
     select,
     toggleSelected,
+    selectClip,
+    selectAll,
     seek,
     setZoom,
     snap,

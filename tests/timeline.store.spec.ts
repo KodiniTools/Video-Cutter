@@ -187,7 +187,7 @@ describe('Timeline-Store', () => {
     expect(store.selectedClips.map((c) => c.id)).toEqual(['v', 'a'])
 
     store.seek(s(1))
-    expect(store.splitSelectionAtPlayhead()).toBe(true)
+    expect(store.splitAtPlayhead()).toBe(true)
     expect(clips(store, 'V1').map((c) => c[1])).toEqual([0, s(1), s(5)])
     expect(clips(store, 'A1').map((c) => c[1])).toEqual([0, s(1)])
     store.undo()
@@ -196,7 +196,7 @@ describe('Timeline-Store', () => {
 
     // Abspielkopf außerhalb aller markierten Clips: abgelehnt.
     store.seek(s(4.5))
-    expect(store.splitSelectionAtPlayhead()).toBe(false)
+    expect(store.splitAtPlayhead()).toBe(false)
     expect(store.lastError).toBe('invalid-time')
 
     expect(store.removeSelection({ ripple: true })).toBe(true)
@@ -295,5 +295,78 @@ describe('Timeline-Store', () => {
     ])
     store.reset()
     expect(store.doc.settings.fps).toBe(30)
+  })
+
+  it('zieht Clips: Einrasten an Anfang oder Ende, Bildraster, andere Spur, nie vor 0', () => {
+    const store = setup()
+    store.addTrack({ id: 'V2', kind: 'video', name: 'V2' })
+    store.insertClip('V1', video('v', 2, 2, { linkGroup: 'g' }))
+    store.insertClip('A1', audio('a', 1, 2, { linkGroup: 'g' }))
+    store.insertClip('V1', video('w', 6, 2))
+
+    // Ende rastet am Anfang von w ein (Toleranz 8 px = 0,08 s bei 100 px/s).
+    expect(store.dragClipTo('v', s(3.95))).toBe(true)
+    expect(clips(store, 'V1')[0]).toEqual(['v', s(4), s(2)])
+    expect(clips(store, 'A1')[0]).toEqual(['a', s(3), s(2)])
+    // Ohne Einrastpunkt in der Nähe: Bildraster (30 fps).
+    expect(store.dragClipTo('v', s(2.51))).toBe(true)
+    expect(clips(store, 'V1')[0][1]).toBe(s(2.5))
+    // Der verknüpfte Ton liegt 1 s früher: weiter als bis 1 s geht es nicht nach links.
+    expect(store.dragClipTo('v', s(-5))).toBe(true)
+    expect(clips(store, 'V1')[0][1]).toBe(s(1))
+    expect(clips(store, 'A1')[0][1]).toBe(0)
+    // Belegte Stelle: abgelehnt, Clip bleibt liegen.
+    expect(store.dragClipTo('v', s(5))).toBe(false)
+    expect(store.lastError).toBe('overlap')
+    expect(clips(store, 'V1')[0][1]).toBe(s(1))
+    // Auf eine andere Video-Spur; eine Ton-Spur als Ziel wird ignoriert.
+    expect(store.dragClipTo('v', s(5), 'V2')).toBe(true)
+    expect(clips(store, 'V2')).toEqual([['v', s(5), s(2)]])
+    expect(store.dragClipTo('v', s(3), 'A1')).toBe(true)
+    expect(clips(store, 'V2')).toEqual([['v', s(3), s(2)]])
+
+    store.snapping = false
+    expect(store.dragClipTo('w', s(5.03))).toBe(true)
+    expect(clips(store, 'V1')[0][1]).toBe(s(5 + 1 / 30))
+    expect(store.dragClipTo('gibt-es-nicht', 0)).toBe(false)
+    expect(validateDoc(store.doc)).toEqual([])
+  })
+
+  it('trimmt beim Ziehen innerhalb der Grenzen und rastet am Abspielkopf ein', () => {
+    const store = setup()
+    store.insertClip('V1', video('v', 2, 4, { sourceIn: s(1) }))
+    store.insertClip('V1', video('w', 8, 2))
+    store.seek(s(5))
+
+    expect(store.dragTrimTo('v', 'end', s(5.05))).toBe(true)
+    expect(clips(store, 'V1')[0]).toEqual(['v', s(2), s(3)])
+    // Ende: höchstens bis zum Nachbarn (8 s); die Quelle reichte bis 11 s.
+    expect(store.dragTrimTo('v', 'end', s(20))).toBe(true)
+    expect(clips(store, 'V1')[0]).toEqual(['v', s(2), s(6)])
+    // Anfang: höchstens 1 s nach links (Quelle beginnt dort), mindestens 0,05 s Länge.
+    expect(store.dragTrimTo('v', 'start', s(-3))).toBe(true)
+    expect(clips(store, 'V1')[0]).toEqual(['v', s(1), s(7)])
+    expect(store.dragTrimTo('v', 'start', s(30))).toBe(true)
+    expect(clips(store, 'V1')[0]).toEqual(['v', s(7.95), s(0.05)])
+    expect(store.dragTrimTo('gibt-es-nicht', 'end', 0)).toBe(false)
+    expect(validateDoc(store.doc)).toEqual([])
+  })
+
+  it('teilt ohne passende Auswahl alles unter dem Abspielkopf, außer auf gesperrten Spuren', () => {
+    const store = setup()
+    store.insertClip('V1', video('v', 0, 4))
+    store.insertClip('A1', audio('a', 0, 4))
+    store.insertClip('V1', video('w', 5, 2))
+    store.select(['w'])
+    store.updateTrack('A1', { locked: true })
+    store.seek(s(2))
+    expect(store.splitTargets).toEqual(['v'])
+    expect(store.splitAtPlayhead()).toBe(true)
+    expect(clips(store, 'V1')).toHaveLength(3)
+    expect(clips(store, 'A1')).toHaveLength(1)
+
+    store.selectClip('w')
+    store.selectAll()
+    expect(store.selection).toHaveLength(4)
   })
 })

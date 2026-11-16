@@ -229,6 +229,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
 - **Timeline-Ansicht** (`src/components/timeline/TimelineView.vue`): „+ Timeline“
   in der Medienliste hängt ein Video hinten an (Bild auf V1, Ton verknüpft auf
   A1). Lineal-Klick setzt den Abspielkopf, Zoom per Knopf oder Strg+Mausrad.
+- **Bearbeiten**: Clips ziehen (auch auf eine andere Spur gleicher Art), an den
+  Rändern trimmen, am Abspielkopf teilen, löschen. Tasten (Timeline fokussiert):
+  `S` teilen, `Entf` löschen, `Umschalt+Entf` löschen und Lücke schließen,
+  `Strg+Z` / `Strg+Umschalt+Z` rückgängig/wiederholen, `Strg+A` alles markieren,
+  `←`/`→` ein Bild (mit Umschalt 1 s), `Pos1`/`Ende`, `Esc` bricht das Ziehen ab.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
