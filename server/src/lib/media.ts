@@ -123,6 +123,7 @@ export class MediaStore {
   /** Seit dem letzten Schreiben wurde ein Video benutzt (`lastUsed` geändert). */
   private usedSinceSave = false
   private saving: Promise<void> = Promise.resolve()
+  private removeListeners: Array<(id: string) => void> = []
 
   constructor(
     private ttlMs = config.mediaTtlMs,
@@ -162,6 +163,11 @@ export class MediaStore {
     }
     if (restored !== entries.length) this.touch()
     return restored
+  }
+
+  /** Meldet, wenn ein Video endgültig entfernt wurde (z. B. um Abgeleitetes zu löschen). */
+  onRemove(listener: (id: string) => void): void {
+    this.removeListeners.push(listener)
   }
 
   /** Plant das Schreiben des Verzeichnisses ein (mehrere Änderungen = ein Schreiben). */
@@ -285,6 +291,15 @@ export class MediaStore {
     this.pendingDelete.delete(id)
     this.touch()
     if (m) await rm(m.path, { force: true }).catch(() => {})
+    if (m) {
+      for (const listener of this.removeListeners) {
+        try {
+          listener(id)
+        } catch (err) {
+          console.error('Aufräumen nach dem Löschen eines Videos fehlgeschlagen:', err)
+        }
+      }
+    }
   }
 
   /** Entfernt Videos, die länger als die TTL nicht benutzt wurden. */
