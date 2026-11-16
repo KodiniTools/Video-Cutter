@@ -118,6 +118,7 @@ export const SERVER_FEATURES = [
   'timelineProjects',
   'timelineAudioFade',
   'stillNoAudio',
+  'timelineLossless',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

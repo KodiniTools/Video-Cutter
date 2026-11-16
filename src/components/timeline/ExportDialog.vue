@@ -6,7 +6,7 @@ import {
   RENDER_QUALITIES,
   RENDER_UNSUPPORTED,
   renderDownloadUrl,
-  startRender,
+  startRenderJob,
   watchRender,
   type RenderQuality,
   type RenderWatch,
@@ -15,6 +15,7 @@ import { GRAPHICS_UNSUPPORTED, MissingGraphicsError } from '@/lib/graphicsApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import { graphicImages } from '@/timeline/graphics'
+import { losslessCheck } from '@/timeline/lossless'
 import { timeToSeconds } from '@/timeline/model'
 
 /**
@@ -31,12 +32,24 @@ type Phase = 'setup' | 'running' | 'done' | 'error'
 
 const dialogEl = ref<HTMLDialogElement | null>(null)
 const phase = ref<Phase>('setup')
-const quality = ref<RenderQuality>('standard')
+/** Qualitätsstufe oder `lossless` (kopieren ohne Neu-Kodieren). */
+const quality = ref<RenderQuality | 'lossless'>('standard')
 const name = ref('projekt')
 const normalizeAudio = ref(false)
 const progress = ref(0)
 const error = ref('')
 const downloaded = ref(false)
+/** Verlustfrei verlangt, aber der Server hat neu kodiert (altes Backend). */
+const losslessMissed = ref(false)
+
+/** Geht verlustfrei? Sonst der Grund. */
+const lossless = computed(() => losslessCheck(store.doc))
+const losslessHint = computed(() => {
+  const check = lossless.value
+  return check.ok
+    ? t(check.audio ? 'timelineExport.lossless.hint' : 'timelineExport.lossless.hintNoAudio')
+    : t(`timelineExport.lossless.blocked.${check.reason}`)
+})
 
 let jobId: string | null = null
 let watch: RenderWatch | null = null
@@ -59,22 +72,28 @@ async function start(): Promise<void> {
   progress.value = 0
   error.value = ''
   downloaded.value = false
+  losslessMissed.value = false
   const ctrl = (startCtrl = new AbortController())
   try {
+    const copy = quality.value === 'lossless' && lossless.value.ok
     const options = {
-      quality: quality.value,
+      // Fällt die Kopie aus (altes Backend), dann wenigstens in bester Qualität.
+      quality: quality.value === 'lossless' ? ('high' as const) : quality.value,
       name: name.value.trim() || 'projekt',
-      normalizeAudio: normalizeAudio.value,
+      normalizeAudio: !copy && normalizeAudio.value,
+      lossless: copy,
     }
     // Formen und Emojis zeichnet der Browser: Bilder vorab hochladen. Hat der
     // Server eines nicht mehr, einmal neu hochladen und wiederholen.
     const begin = async () =>
-      startRender(await graphicImages.prepare(store.doc), options, ctrl.signal)
-    const id = await begin().catch((e: unknown) => {
+      startRenderJob(await graphicImages.prepare(store.doc), options, ctrl.signal)
+    const job = await begin().catch((e: unknown) => {
       if (!(e instanceof MissingGraphicsError)) throw e
       graphicImages.forget(e.ids)
       return begin()
     })
+    const id = job.jobId
+    losslessMissed.value = copy && !job.lossless
     if (ctrl.signal.aborted) {
       void cancelRender(id)
       return
@@ -175,9 +194,28 @@ onBeforeUnmount(discard)
               <small>{{ t(`timelineExport.qualities.${q}.hint`) }}</small>
             </span>
           </label>
+          <label class="option" :class="{ off: !lossless.ok }">
+            <input
+              v-model="quality"
+              type="radio"
+              name="export-quality"
+              value="lossless"
+              :disabled="!lossless.ok"
+              data-testid="export-lossless"
+            />
+            <span>
+              <strong>{{ t('timelineExport.lossless.label') }}</strong>
+              <small data-testid="export-lossless-hint">{{ losslessHint }}</small>
+            </span>
+          </label>
         </fieldset>
         <label class="option">
-          <input v-model="normalizeAudio" type="checkbox" data-testid="export-normalize" />
+          <input
+            v-model="normalizeAudio"
+            type="checkbox"
+            :disabled="quality === 'lossless'"
+            data-testid="export-normalize"
+          />
           <span>
             <strong>{{ t('timelineExport.normalize') }}</strong>
             <small>{{ t('timelineExport.normalizeHint') }}</small>
@@ -207,6 +245,9 @@ onBeforeUnmount(discard)
       <div v-else class="form">
         <p role="status">
           {{ t(downloaded ? 'timelineExport.downloaded' : 'timelineExport.done') }}
+        </p>
+        <p v-if="losslessMissed" class="error" data-testid="export-lossless-missed">
+          {{ t('timelineExport.lossless.missed') }}
         </p>
         <div class="actions">
           <button type="button" class="btn" @click="close">{{ t('timelineExport.close') }}</button>
@@ -312,6 +353,12 @@ onBeforeUnmount(discard)
 .option span {
   display: flex;
   flex-direction: column;
+}
+.option.off {
+  cursor: default;
+}
+.option.off strong {
+  color: var(--ds-text-2);
 }
 .option small {
   color: var(--ds-text-2);

@@ -4,6 +4,7 @@ import {
   RENDER_UNSUPPORTED,
   renderDownloadUrl,
   startRender,
+  startRenderJob,
   watchRender,
 } from '@/lib/renderApi'
 import { createDoc } from '@/timeline/model'
@@ -41,6 +42,22 @@ describe('startRender', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toContain('/api/render')
     expect(JSON.parse(init.body as string)).toMatchObject({ quality: 'high', name: 'Film' })
+    expect(JSON.parse(init.body as string)).not.toHaveProperty('lossless')
+  })
+
+  it('verlangt verlustfrei und meldet, ob der Server es getan hat', async () => {
+    const fetchMock = vi.fn(async () => json(202, { jobId: 'job-2', lossless: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    const options = { quality: 'high', name: 'x', lossless: true } as const
+    expect(await startRenderJob(createDoc(), options)).toEqual({ jobId: 'job-2', lossless: true })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toMatchObject({ lossless: true })
+    // Altes Backend kennt die Option nicht: Antwort ohne `lossless`.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(202, { jobId: 'job-3' })),
+    )
+    expect(await startRenderJob(createDoc(), options)).toEqual({ jobId: 'job-3', lossless: false })
   })
 
   it('erkennt ein veraltetes Backend und reicht Server-Meldungen durch', async () => {
