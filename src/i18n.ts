@@ -783,6 +783,15 @@ const messages = {
       saved: 'Gespeicherte Projekte',
       startNew: 'Neues Projekt',
       unsaved: 'ungespeicherte Änderungen',
+      autosave: 'Automatisch speichern',
+      autosaveHint:
+        'Ein geöffnetes Projekt wird wenige Sekunden nach jeder Änderung von selbst gespeichert. Ein neues Projekt zuerst einmal unter einem Namen speichern.',
+      autosavePaused:
+        'Beim Öffnen fehlten Dateien. Es wird erst wieder automatisch gespeichert, nachdem du selbst auf „Speichern“ geklickt hast.',
+      autosaveFailed: 'Automatisches Speichern fehlgeschlagen: {error}',
+      statusSaved: 'Alle Änderungen gespeichert',
+      statusSaving: 'Wird gespeichert …',
+      statusError: 'Automatisches Speichern fehlgeschlagen',
       empty: 'Lade zuerst ein Video hoch – ein leeres Projekt wird nicht gespeichert.',
       mediaGone:
         'Mindestens ein Video liegt nicht mehr auf dem Server (nach längerer Pause aufgeräumt). Bitte das Video erneut hochladen, die Clips neu anlegen und dann speichern.',
@@ -1582,6 +1591,15 @@ const messages = {
       saved: 'Saved projects',
       startNew: 'New project',
       unsaved: 'unsaved changes',
+      autosave: 'Save automatically',
+      autosaveHint:
+        'An open project is saved by itself a few seconds after each change. Save a new project once under a name first.',
+      autosavePaused:
+        'Files were missing when opening. Automatic saving resumes after you click “Save” yourself.',
+      autosaveFailed: 'Automatic saving failed: {error}',
+      statusSaved: 'All changes saved',
+      statusSaving: 'Saving …',
+      statusError: 'Automatic saving failed',
       empty: 'Upload a video first – an empty project is not saved.',
       mediaGone:
         'At least one video is no longer on the server (cleaned up after a longer break). Please upload it again, recreate its clips and then save.',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
@@ -28,6 +28,23 @@ function openExport(): void {
   exporting.value = true
 }
 
+/** Hinweis am Projekt-Knopf: was mit den letzten Änderungen geschieht. */
+const projectStatus = computed(() => {
+  if (projects.autosaveState === 'error') return t('timelineProjects.statusError')
+  if (projects.autosaveState === 'saving') return t('timelineProjects.statusSaving')
+  if (projects.dirty) return t('timelineProjects.unsaved')
+  return projects.current ? t('timelineProjects.statusSaved') : ''
+})
+
+// Ungespeicherte Änderungen: Der Browser fragt nach, bevor die Seite verschwindet.
+function onBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!projects.dirty) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+
 function openProjects(): void {
   store.playing = false
   projectsOpen.value = true
@@ -50,12 +67,16 @@ function openProjects(): void {
             projects.current ? projects.current.name : t('timelineProjects.button')
           }}</span>
           <span
-            v-if="projects.dirty"
+            v-if="projects.dirty || projects.autosaveState === 'error'"
             class="project-dirty"
+            :class="{ failed: projects.autosaveState === 'error' }"
             data-testid="project-dirty"
-            :title="t('timelineProjects.unsaved')"
+            :title="projectStatus"
             >●</span
           >
+          <span class="sr-only" role="status" data-testid="project-status">{{
+            projectStatus
+          }}</span>
         </button>
         <ProjectSettings />
         <RouterLink :to="{ name: 'classic' }">{{ t('timelineEditor.back') }}</RouterLink>
@@ -153,6 +174,17 @@ function openProjects(): void {
 .project-dirty {
   color: var(--ds-accent);
   font-size: var(--ds-text-xs);
+}
+.project-dirty.failed {
+  color: var(--ds-danger);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .export-btn:disabled {
   opacity: 0.45;

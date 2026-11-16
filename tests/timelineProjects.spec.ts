@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import type { MediaView } from '@/lib/mediaApi'
 import type { ProjectSummary, SaveRequest } from '@/lib/projectApi'
@@ -65,6 +65,7 @@ const {
   TIMELINE_PROJECT_INVALID,
   TIMELINE_PROJECT_MEDIA_GONE,
   TIMELINE_PROJECT_UPLOADS_PENDING,
+  AUTOSAVE_DELAY_MS,
 } = await import('@/stores/timelineProjects')
 const { useTimelineStore } = await import('@/stores/timeline')
 const { useMediaPoolStore } = await import('@/stores/mediaPool')
@@ -118,10 +119,17 @@ function fill(): { imageId: string } {
 }
 
 beforeEach(() => {
+  // Das automatische Speichern arbeitet mit einer Frist: Zeit von Hand stellen.
+  vi.useFakeTimers()
+  localStorage.clear()
   setActivePinia(createPinia())
   vi.clearAllMocks()
   imageFiles.clear()
   listProjects.mockResolvedValue([])
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('projectFile', () => {
@@ -390,5 +398,125 @@ describe('timelineProjects-Store', () => {
     expect(req.assets.map((a) => a.hash)).toEqual([hash])
     expect(store.current?.id).toBe('neu')
     expect(store.suggestedName).toBe('')
+  })
+})
+
+describe('automatisches Speichern', () => {
+  /** Geöffnetes, gespeichertes Projekt mit einem Video. */
+  async function opened() {
+    const store = useTimelineProjectStore()
+    fill()
+    saveProject.mockResolvedValue({ project: summary(), missingAssets: [] })
+    await store.save('Film')
+    saveProject.mockClear()
+    return { store, timeline: useTimelineStore(), pool: useMediaPoolStore() }
+  }
+  const tick = (ms = AUTOSAVE_DELAY_MS) => vi.advanceTimersByTimeAsync(ms)
+
+  it('speichert ein geöffnetes Projekt kurz nach der letzten Änderung', async () => {
+    const { store, timeline } = await opened()
+    expect(store.autosaveState).toBe('idle')
+    timeline.addText({ text: 'eins' }, secondsToTime(1))
+    expect(store.autosaveState).toBe('pending')
+    await tick(AUTOSAVE_DELAY_MS - 500)
+    // Weitere Änderung: Die Frist beginnt neu.
+    timeline.addText({ text: 'zwei' }, secondsToTime(1))
+    await tick(AUTOSAVE_DELAY_MS - 500)
+    expect(saveProject).not.toHaveBeenCalled()
+    await tick(500)
+    expect(saveProject).toHaveBeenCalledTimes(1)
+    const req = saveProject.mock.calls[0][0] as SaveRequest
+    expect(req).toMatchObject({ id: 'p1', name: 'Film' })
+    expect(parseTimelineProject(JSON.parse(JSON.stringify(req.state))).doc).toEqual(timeline.doc)
+    expect(store.dirty).toBe(false)
+    expect(store.autosaveState).toBe('idle')
+    // Ohne weitere Änderung passiert nichts mehr.
+    await tick(3 * AUTOSAVE_DELAY_MS)
+    expect(saveProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('neues Projekt, abgeschaltet oder beim Öffnen unvollständig: speichert nicht von selbst', async () => {
+    const store = useTimelineProjectStore()
+    const timeline = useTimelineStore()
+    fill() // noch nie gespeichert
+    await tick(3 * AUTOSAVE_DELAY_MS)
+    expect(saveProject).not.toHaveBeenCalled()
+    expect(store.autosaveState).toBe('idle')
+
+    saveProject.mockResolvedValue({ project: summary(), missingAssets: [] })
+    await store.save('Film')
+    saveProject.mockClear()
+    store.setAutosave(false)
+    expect(localStorage.getItem('vc-timeline-autosave')).toBe('off')
+    timeline.addText({ text: 'x' }, secondsToTime(1))
+    await tick(3 * AUTOSAVE_DELAY_MS)
+    expect(saveProject).not.toHaveBeenCalled()
+    // Wieder an: die offene Änderung wird nachgeholt.
+    store.setAutosave(true)
+    await tick()
+    expect(saveProject).toHaveBeenCalledTimes(1)
+    saveProject.mockClear()
+
+    // Projekt, bei dem ein Video fehlt: erst nach bewusstem Speichern wieder.
+    const state = JSON.parse(JSON.stringify(buildTimelineProject(timeline.doc, {})))
+    fetchProject.mockResolvedValue({ project: summary(), state })
+    openProjectMedia.mockResolvedValue({})
+    expect((await store.open('p1')).missing).toBeGreaterThan(0)
+    expect(store.incomplete).toBe(true)
+    timeline.addText({ text: 'y' }, secondsToTime(1))
+    await tick(3 * AUTOSAVE_DELAY_MS)
+    expect(saveProject).not.toHaveBeenCalled()
+    await store.save('Film')
+    expect(store.incomplete).toBe(false)
+    saveProject.mockClear()
+    timeline.addText({ text: 'z' }, secondsToTime(1))
+    await tick()
+    expect(saveProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('wartet auf laufende Uploads und meldet Fehler ohne Dauerversuch', async () => {
+    const { store, timeline, pool } = await opened()
+    pool.items[0].state = 'uploading'
+    timeline.addText({ text: 'x' }, secondsToTime(1))
+    await tick()
+    expect(saveProject).not.toHaveBeenCalled()
+    expect(store.autosaveState).toBe('pending')
+    pool.items[0].state = 'ready'
+    saveProject.mockRejectedValueOnce(new Error('Server nicht erreichbar'))
+    await tick()
+    expect(saveProject).toHaveBeenCalledTimes(1)
+    expect(store.autosaveState).toBe('error')
+    expect(store.autosaveError).toBe('Server nicht erreichbar')
+    expect(store.dirty).toBe(true)
+    await tick(3 * AUTOSAVE_DELAY_MS)
+    expect(saveProject).toHaveBeenCalledTimes(1)
+    // Nächste Änderung versucht es erneut.
+    timeline.addText({ text: 'y' }, secondsToTime(1))
+    await tick()
+    expect(saveProject).toHaveBeenCalledTimes(2)
+    expect(store.autosaveState).toBe('idle')
+    expect(store.autosaveError).toBe('')
+  })
+
+  it('Änderung während des Speicherns wird danach gespeichert', async () => {
+    const { store, timeline } = await opened()
+    let finish!: () => void
+    saveProject.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ project: summary(), missingAssets: [] })
+        }),
+    )
+    timeline.addText({ text: 'eins' }, secondsToTime(1))
+    await tick()
+    expect(store.autosaveState).toBe('saving')
+    timeline.addText({ text: 'zwei' }, secondsToTime(1))
+    finish()
+    await tick(0)
+    expect(store.dirty).toBe(true)
+    await tick()
+    expect(saveProject).toHaveBeenCalledTimes(2)
+    expect(store.dirty).toBe(false)
+    expect(store.autosaveState).toBe('idle')
   })
 })
