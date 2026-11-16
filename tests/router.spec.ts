@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '@/router'
-import { TIMELINE_EDITOR_KEY } from '@/lib/featureFlags'
+import { enableTimelineEditor, TIMELINE_EDITOR_KEY } from '@/lib/featureFlags'
 
 async function go(path: string) {
   const router = createAppRouter(createMemoryHistory())
@@ -25,6 +25,12 @@ describe('Router', () => {
 
   it('öffnet /editor nach Freischaltung', async () => {
     localStorage.setItem(TIMELINE_EDITOR_KEY, '1')
+    expect((await go('/editor')).name).toBe('timeline')
+  })
+
+  it('öffnet /editor nach dem Schalter in der Kopfzeile', async () => {
+    expect(enableTimelineEditor()).toBe(true)
+    expect(localStorage.getItem(TIMELINE_EDITOR_KEY)).toBe('1')
     expect((await go('/editor')).name).toBe('timeline')
   })
 

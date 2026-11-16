@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import MediaPool from '@/components/timeline/MediaPool.vue'
+import TimelineView from '@/components/timeline/TimelineView.vue'
 
-// Timeline-Ansicht, Vorschau und Export folgen in den nächsten Phasen.
+// Vorschau und Export folgen in den nächsten Phasen.
 const { t } = useI18n()
 </script>
 
@@ -18,6 +19,7 @@ const { t } = useI18n()
         <p>{{ t('timelineEditor.placeholder') }}</p>
       </section>
     </div>
+    <TimelineView />
   </div>
 </template>
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addTrack,
+  appendMedia,
   createDoc,
   docDuration,
   findClip,
@@ -350,6 +351,83 @@ describe('removeClip', () => {
     const locked = unwrap(updateTrack(three(), 'V1', { locked: true }))
     expect(errorOf(removeClip(locked, 'b'))).toBe('track-locked')
     expect(errorOf(removeClip(three(), 'x'))).toBe('clip-not-found')
+  })
+})
+
+describe('appendMedia', () => {
+  const counter = () => {
+    let n = 0
+    return () => `n${++n}`
+  }
+  function empty(): TimelineDoc {
+    let doc = createDoc()
+    doc = putAsset(doc, {
+      id: 'vid',
+      kind: 'video',
+      name: 'a.mp4',
+      duration: s(10),
+      width: 1080,
+      height: 1920,
+      fps: 25,
+      hasAudio: true,
+    })
+    doc = putAsset(doc, { id: 'stumm', kind: 'video', name: 's.mp4', duration: s(4) })
+    doc = putAsset(doc, { id: 'img', kind: 'image', name: 'b.png', duration: null })
+    return doc
+  }
+
+  it('legt in einer leeren Timeline Spuren an und übernimmt Größe und Bildrate', () => {
+    const doc = unwrap(appendMedia(empty(), 'vid', { ids: counter() }))
+    expect(doc.tracks.map((t) => [t.kind, t.name])).toEqual([
+      ['video', 'V1'],
+      ['audio', 'A1'],
+    ])
+    expect(doc.settings).toMatchObject({ width: 1080, height: 1920, fps: 25 })
+    const [v] = doc.tracks[0].clips
+    const [a] = doc.tracks[1].clips
+    expect(v).toMatchObject({ kind: 'video', asset: 'vid', start: 0, duration: s(10), sourceIn: 0 })
+    expect(a).toMatchObject({ kind: 'audio', asset: 'vid', start: 0, duration: s(10), gain: 1 })
+    expect(v.linkGroup).toBeTruthy()
+    expect(v.linkGroup).toBe(a.linkGroup)
+  })
+
+  it('hängt weitere Videos hinten an und lässt die Projekt-Einstellungen stehen', () => {
+    const ids = counter()
+    let doc = unwrap(appendMedia(empty(), 'stumm', { ids }))
+    // Ohne Ton: nur die Bild-Spur, kein verknüpfter Clip; ohne Maße bleibt der Standard.
+    expect(doc.tracks.map((t) => t.name)).toEqual(['V1'])
+    expect(doc.tracks[0].clips[0].linkGroup).toBeUndefined()
+    expect(doc.settings).toMatchObject({ width: 1920, height: 1080, fps: 30 })
+
+    doc = unwrap(appendMedia(doc, 'vid', { ids }))
+    expect(doc.settings).toMatchObject({ width: 1920, height: 1080, fps: 30 })
+    expect(doc.tracks.map((t) => t.name)).toEqual(['V1', 'A1'])
+    expect(starts(doc, doc.tracks[0].id).map((c) => c[1])).toEqual([0, s(4)])
+    // Der Ton beginnt gemeinsam mit seinem Bild, nicht bei 0.
+    expect(doc.tracks[1].clips[0].start).toBe(s(4))
+  })
+
+  it('weicht gesperrten Spuren auf neue aus', () => {
+    let doc = unwrap(appendMedia(empty(), 'vid', { ids: counter() }))
+    doc = unwrap(updateTrack(doc, doc.tracks[0].id, { locked: true }))
+    const ids = (() => {
+      let n = 0
+      return () => `m${++n}`
+    })()
+    doc = unwrap(appendMedia(doc, 'vid', { ids }))
+    expect(doc.tracks.map((t) => [t.name, t.clips.length])).toEqual([
+      ['V2', 1],
+      ['V1', 1],
+      ['A1', 2],
+    ])
+    // Bild und Ton liegen wieder gleichauf: hinter dem Ton auf A1.
+    expect(doc.tracks[0].clips[0].start).toBe(s(10))
+    expect(doc.tracks[2].clips[1].start).toBe(s(10))
+  })
+
+  it('lehnt Unbekanntes und Bilder ab', () => {
+    expect(errorOf(appendMedia(empty(), 'nope'))).toBe('asset-not-found')
+    expect(errorOf(appendMedia(empty(), 'img'))).toBe('kind-mismatch')
   })
 })
 

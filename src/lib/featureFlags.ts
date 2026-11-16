@@ -16,3 +16,16 @@ export function isTimelineEditorEnabled(): boolean {
     return false
   }
 }
+
+/**
+ * Schaltet den neuen Editor in diesem Browser frei (Schalter in der Kopfzeile).
+ * Liefert `false`, wenn der Speicher gesperrt ist – dann bleibt `/editor` zu.
+ */
+export function enableTimelineEditor(): boolean {
+  try {
+    localStorage.setItem(TIMELINE_EDITOR_KEY, '1')
+  } catch {
+    // gesperrter Speicher: unten entscheidet der tatsächliche Stand
+  }
+  return isTimelineEditorEnabled()
+}

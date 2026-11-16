@@ -8,6 +8,9 @@ const props = defineProps<{
   peaks: Uint8Array | null
 }>()
 
+/** Höchstzahl gezeichneter Balken (= Breite der Zeichenfläche in CSS-Pixeln). */
+const MAX_COLUMNS = 4096
+
 const canvas = ref<HTMLCanvasElement | null>(null)
 let observer: ResizeObserver | null = null
 
@@ -17,8 +20,11 @@ function draw(): void {
   const width = el.clientWidth
   const height = el.clientHeight
   if (width <= 0 || height <= 0) return
+  // Sehr breite Clips: Zeichenfläche begrenzen (Browser-Grenze für Canvas-Größen),
+  // das Bild wird dann per CSS auf die volle Breite gestreckt.
+  const columns = Math.min(Math.floor(width), MAX_COLUMNS)
   const ratio = Math.min(3, window.devicePixelRatio || 1)
-  el.width = Math.round(width * ratio)
+  el.width = Math.round(columns * ratio)
   el.height = Math.round(height * ratio)
   let ctx: CanvasRenderingContext2D | null = null
   try {
@@ -28,10 +34,10 @@ function draw(): void {
   }
   if (!ctx) return
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-  ctx.clearRect(0, 0, width, height)
+  ctx.clearRect(0, 0, columns, height)
   ctx.fillStyle = getComputedStyle(el).color
   const mid = height / 2
-  waveformBars(props.peaks, Math.floor(width)).forEach((bar, x) => {
+  waveformBars(props.peaks, columns).forEach((bar, x) => {
     // Auch Stille bekommt eine dünne Linie, damit die Länge erkennbar bleibt.
     const h = Math.max(1, bar * height)
     ctx.fillRect(x, mid - h / 2, 1, h)

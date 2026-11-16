@@ -6,10 +6,12 @@ import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
 import { UPLOAD_ABORTED } from '@/lib/mediaApi'
 import { formatClockDuration } from '@/lib/timeFormat'
 import { useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
+import { useTimelineStore } from '@/stores/timeline'
 
 /** Medienliste des Timeline-Editors: Videos hochladen, ansehen, entfernen. */
 const { t } = useI18n()
 const pool = useMediaPoolStore()
+const timeline = useTimelineStore()
 
 /** Breite des Vorschaubilds in px (Höhe folgt dem Seitenverhältnis des Filmstreifens). */
 const THUMB_WIDTH = 96
@@ -134,6 +136,16 @@ const rejectedText = computed(() =>
           <div class="row">
             <span class="name" :title="item.name">{{ item.name }}</span>
             <button
+              v-if="item.media"
+              type="button"
+              class="to-timeline"
+              :title="t('mediaPool.addToTimelineNamed', { name: item.name })"
+              :aria-label="t('mediaPool.addToTimelineNamed', { name: item.name })"
+              @click="timeline.appendMedia(item.media.id)"
+            >
+              {{ t('mediaPool.addToTimeline') }}
+            </button>
+            <button
               type="button"
               class="icon"
               :title="t('mediaPool.remove')"
@@ -226,6 +238,22 @@ const rejectedText = computed(() =>
 .add:hover {
   background: var(--ds-accent-soft);
 }
+.to-timeline {
+  flex: none;
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-2);
+  border: 1px solid var(--ds-accent);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
+  color: var(--ds-text);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-semibold);
+  cursor: pointer;
+}
+.to-timeline:hover {
+  background: var(--ds-accent-soft);
+}
+.to-timeline:focus-visible,
 .add:focus-visible,
 .icon:focus-visible,
 .link:focus-visible {

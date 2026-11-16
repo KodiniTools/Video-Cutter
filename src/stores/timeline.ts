@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import {
   addTrack as addTrackOp,
+  appendMedia as appendMediaOp,
   assetInUse,
   createDoc,
   docDuration,
@@ -233,6 +234,19 @@ export const useTimelineStore = defineStore('timeline', () => {
   const removeClip = (clipId: string, opts?: { ripple?: boolean; linked?: boolean }) =>
     apply((d) => removeClipOp(d, clipId, opts))
 
+  /**
+   * Video aus der Medienliste ans Ende der Timeline legen (ein Verlaufsschritt)
+   * und die neuen Clips markieren.
+   */
+  function appendMedia(assetId: string): boolean {
+    const before = new Set(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
+    if (!apply((d) => appendMediaOp(d, assetId))) return false
+    selection.value = doc.value.tracks
+      .flatMap((t) => t.clips.map((c) => c.id))
+      .filter((id) => !before.has(id))
+    return true
+  }
+
   /** Alle markierten Clips am Abspielkopf teilen (ein Verlaufsschritt). */
   function splitSelectionAtPlayhead(): boolean {
     const at = playhead.value
@@ -337,6 +351,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     trimClip,
     splitClip,
     removeClip,
+    appendMedia,
     splitSelectionAtPlayhead,
     removeSelection,
     select,
