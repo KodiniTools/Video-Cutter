@@ -277,6 +277,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Editor. Fehlt ein Bild auf dem Server (`missingGraphics` im Plan, 409 beim
   Export), lädt der Editor es erneut hoch. Einstellungen: `GRAPHICS_DIR`,
   `GRAPHICS_CACHE_MB`.
+- **Eigene Bilder**: „+ Bild“ lädt JPEG, PNG oder WebP in den Browser
+  (`imageAssets`, wie im bisherigen Editor) und legt einen Grafik-Clip der Art
+  `image` an. Breite, Drehung, Rahmen, Ecken, Deckkraft, Zuschnitt, Spiegeln
+  und Schatten im selben Feld; der Server bekommt wie bei Formen nur das fertig
+  bearbeitete PNG. Die Originale liegen bis zu den Projekten (Phase 5) nur im
+  Browser.
 - **Layout**: Vorschau und Timeline stehen gleich breit direkt untereinander
   und bleiben beim Scrollen stehen; die Seitenleiste (Medien, Einstellungen)
   scrollt für sich.

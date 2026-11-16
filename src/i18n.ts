@@ -685,6 +685,11 @@ const messages = {
       addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
       addGraphic: '+ Form / Emoji',
       addGraphicTitle: 'Form, Symbol oder Emoji am Abspielkopf einfügen (liegt über allen Videos)',
+      addImage: '+ Bild',
+      addImageTitle:
+        'Eigenes Bild (JPEG, PNG, WebP) am Abspielkopf einfügen, z. B. ein Logo (liegt über allen Videos)',
+      imageMissing:
+        'Das Bild ist nicht mehr geladen. Bitte den Clip löschen und das Bild neu einfügen.',
       graphicInspector: '{kind} bearbeiten',
       graphicInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
@@ -1436,6 +1441,11 @@ const messages = {
       addTextTitle: 'Insert text at the playhead (shown above all videos)',
       addGraphic: '+ Shape / emoji',
       addGraphicTitle: 'Insert a shape, symbol or emoji at the playhead (shown above all videos)',
+      addImage: '+ Image',
+      addImageTitle:
+        'Insert your own image (JPEG, PNG, WebP) at the playhead, e.g. a logo (shown above all videos)',
+      imageMissing:
+        'The image is no longer loaded. Please delete the clip and insert the image again.',
       graphicInspector: 'Edit {kind}',
       graphicInspectorHint:
         'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',
