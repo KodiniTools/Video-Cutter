@@ -348,7 +348,7 @@ describe('compileTimeline', () => {
       '[aout]',
     ])
     expect(args.join(' ')).toContain('-g 25 -keyint_min 25 -sc_threshold 0')
-    expect(args.join(' ')).toContain('-threads 2 -t 4.000000 -movflags +faststart /o.mp4')
+    expect(args.join(' ')).toContain('-threads 2 -t 4.000000 -movflags +faststart -f mp4 /o.mp4')
   })
 })
 
