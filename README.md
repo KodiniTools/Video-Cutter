@@ -283,6 +283,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   und Schatten im selben Feld; der Server bekommt wie bei Formen nur das fertig
   bearbeitete PNG. Die Originale liegen bis zu den Projekten (Phase 5) nur im
   Browser.
+- **Positionsrahmen** (`PositionFrame.vue`, `src/timeline/positionFrame.ts`):
+  Der markierte Text, die Form oder das Bild hat im Vorschaubild einen Rahmen
+  zum Ziehen (mit Umschalttaste fein) bzw. Verschieben mit den Pfeiltasten
+  (0,5 %, mit Umschalttaste 5 %). Während des Ziehens zeigt der Rahmen bei
+  Formen und Bildern eine blasse Kopie; erst das Loslassen ändert das Dokument
+  (ein Rückgängig-Schritt, ein neuer Vorschau-Abschnitt).
 - **Layout**: Vorschau und Timeline stehen gleich breit direkt untereinander
   und bleiben beim Scrollen stehen; die Seitenleiste (Medien, Einstellungen)
   scrollt für sich.

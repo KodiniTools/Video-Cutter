@@ -685,6 +685,9 @@ const messages = {
       addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
       addGraphic: '+ Form / Emoji',
       addGraphicTitle: 'Form, Symbol oder Emoji am Abspielkopf einfügen (liegt über allen Videos)',
+      positionFrame: 'Position im Bild',
+      positionFrameTitle:
+        'Ziehen zum Verschieben (mit Umschalttaste fein), angeklickt auch mit den Pfeiltasten',
       addImage: '+ Bild',
       addImageTitle:
         'Eigenes Bild (JPEG, PNG, WebP) am Abspielkopf einfügen, z. B. ein Logo (liegt über allen Videos)',
@@ -695,7 +698,7 @@ const messages = {
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
       textInspector: 'Text bearbeiten',
       textInspectorHint:
-        'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe.',
+        'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe – oder den Rahmen im Bild ziehen.',
       track: {
         rename: 'Name der Spur',
         renameTitle: 'Doppelklick zum Umbenennen',
@@ -1441,6 +1444,9 @@ const messages = {
       addTextTitle: 'Insert text at the playhead (shown above all videos)',
       addGraphic: '+ Shape / emoji',
       addGraphicTitle: 'Insert a shape, symbol or emoji at the playhead (shown above all videos)',
+      positionFrame: 'Position in the picture',
+      positionFrameTitle:
+        'Drag to move (hold Shift for fine steps), or use the arrow keys once clicked',
       addImage: '+ Image',
       addImageTitle:
         'Insert your own image (JPEG, PNG, WebP) at the playhead, e.g. a logo (shown above all videos)',
