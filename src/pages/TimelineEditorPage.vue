@@ -1,24 +1,47 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 
-// Der Export folgt in der nächsten Phase.
+import { useTimelineStore } from '@/stores/timeline'
+
 const { t } = useI18n()
+const store = useTimelineStore()
+const exporting = ref(false)
+
+function openExport(): void {
+  store.playing = false
+  exporting.value = true
+}
 </script>
 
 <template>
   <div class="editor" data-testid="timeline-editor">
     <header class="editor-head">
       <h2>{{ t('timelineEditor.title') }}</h2>
-      <RouterLink :to="{ name: 'classic' }">{{ t('timelineEditor.back') }}</RouterLink>
+      <span class="head-actions">
+        <RouterLink :to="{ name: 'classic' }">{{ t('timelineEditor.back') }}</RouterLink>
+        <button
+          type="button"
+          class="export-btn"
+          data-testid="open-export"
+          :disabled="store.duration <= 0"
+          :title="store.duration <= 0 ? t('timelineExport.empty') : undefined"
+          @click="openExport"
+        >
+          {{ t('timelineExport.open') }}
+        </button>
+      </span>
     </header>
     <div class="layout">
       <MediaPool class="side" />
       <PreviewPlayer />
     </div>
     <TimelineView />
+    <ExportDialog v-if="exporting" @close="exporting = false" />
   </div>
 </template>
 
@@ -41,6 +64,29 @@ const { t } = useI18n()
 .editor-head a {
   color: var(--ds-link);
   font-size: var(--ds-text-sm);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-4);
+}
+.export-btn {
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-4);
+  border: 1px solid var(--ds-accent);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+  font-weight: var(--ds-weight-semibold);
+  cursor: pointer;
+}
+.export-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.export-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .layout {
   display: grid;

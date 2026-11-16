@@ -37,7 +37,14 @@ function limitReached(req: Request, res: Response, _next: NextFunction, options:
   })
 }
 
-const isWrite = (req: Request) => req.method === 'POST'
+/**
+ * Billige POSTs, die in normaler Nutzung sehr häufig sind und deshalb wie
+ * lesende Anfragen zählen: Der Timeline-Editor fragt nach jeder Änderung den
+ * Vorschau-Plan ab (gerendert wird begrenzt und im Hintergrund).
+ */
+const CHEAP_POSTS = new Set(['/preview/plan'])
+
+const isWrite = (req: Request) => req.method === 'POST' && !CHEAP_POSTS.has(req.path)
 
 /** Beide Limiter als eine Middleware (jede Anfrage zählt nur bei einem). */
 export function createApiRateLimit(s: RateLimitSettings): RequestHandler[] {
