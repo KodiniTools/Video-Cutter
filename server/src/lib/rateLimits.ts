@@ -42,7 +42,7 @@ function limitReached(req: Request, res: Response, _next: NextFunction, options:
  * lesende Anfragen zählen: Der Timeline-Editor fragt nach jeder Änderung den
  * Vorschau-Plan ab (gerendert wird begrenzt und im Hintergrund).
  */
-const CHEAP_POSTS = new Set(['/preview/plan'])
+const CHEAP_POSTS = new Set(['/preview/plan', '/graphics'])
 
 const isWrite = (req: Request) => req.method === 'POST' && !CHEAP_POSTS.has(req.path)
 

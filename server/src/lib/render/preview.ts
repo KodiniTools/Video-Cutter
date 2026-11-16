@@ -9,6 +9,7 @@ import {
   compileTimeline,
   fpsRational,
   type CompiledTimeline,
+  type RenderGraphic,
   type RenderSource,
 } from './compile'
 import { MICROS_PER_SECOND, docDuration, type DocSettings, type RenderDoc, type Time } from './doc'
@@ -30,7 +31,7 @@ export const PREVIEW_MAX_HEIGHT = 540
 /** So viele Abschnitte ab dem Abspielkopf werden vorab gerendert; der Rest bei Abruf. */
 export const PREVIEW_AHEAD = 30
 /** Ändert sich das Encoding, werden alte Abschnitte nicht wiederverwendet. */
-const CACHE_VERSION = 3
+const CACHE_VERSION = 4
 const ENCODE = {
   preset: 'veryfast',
   crf: 27,
@@ -184,14 +185,19 @@ export class PreviewStore {
    * Abschnitte ab `at` werden zum Rendern eingereiht; was zu einem früheren
    * Plan gehörte und nicht mehr gebraucht wird, wird verworfen bzw. abgebrochen.
    */
-  plan(doc: RenderDoc, sources: Record<string, RenderSource>, at: Time = 0): PreviewPlan {
+  plan(
+    doc: RenderDoc,
+    sources: Record<string, RenderSource>,
+    at: Time = 0,
+    graphics: Record<string, RenderGraphic> = {},
+  ): PreviewPlan {
     const size = previewSize(doc.settings)
     const ranges = planSegments(doc)
     const gop = Math.max(1, Math.round(doc.settings.fps))
     const wanted = new Map<string, CompiledTimeline>()
     const keys: string[] = []
     for (const range of ranges) {
-      const compiled = compileTimeline(doc, { sources, range, size })
+      const compiled = compileTimeline(doc, { sources, graphics, range, size })
       const key = createHash('sha256')
         .update(
           JSON.stringify([

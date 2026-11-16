@@ -9,8 +9,10 @@ import { mediaRouter } from './routes/media'
 import { textRouter } from './routes/text'
 import { projectsRouter } from './routes/projects'
 import { previewRouter } from './routes/preview'
+import { graphicsRouter } from './routes/graphics'
 import { renderRouter } from './routes/render'
 import { previewStore } from './lib/render/preview'
+import { graphicStore } from './lib/render/graphics'
 import { mediaStore } from './lib/media'
 import { derivedStore } from './lib/derived'
 import { ValidationError } from './lib/validate'
@@ -31,6 +33,7 @@ async function bootstrap(): Promise<void> {
   )
   await derivedStore.init()
   await previewStore.init()
+  await graphicStore.init()
   await mkdir(config.projectsDir, { recursive: true })
   console.log(`Projekte: ${config.projectsDir}`)
   await gallery.init()
@@ -88,6 +91,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api', aiRouter)
   app.use('/api', projectsRouter)
   app.use('/api', previewRouter)
+  app.use('/api', graphicsRouter)
   app.use('/api', renderRouter)
 
   // 404
@@ -139,6 +143,7 @@ async function bootstrap(): Promise<void> {
     aiJobs.shutdown()
     derivedStore.shutdown()
     void previewStore.shutdown()
+    void graphicStore.shutdown()
     server.close(() => {
       void jobManager
         .shutdown()

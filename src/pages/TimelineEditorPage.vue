@@ -5,14 +5,19 @@ import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
 import ProjectSettings from '@/components/timeline/ProjectSettings.vue'
+import GraphicInspector from '@/components/timeline/GraphicInspector.vue'
 import TextInspector from '@/components/timeline/TextInspector.vue'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 
+import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 import { useTimelineStore } from '@/stores/timeline'
 
 const { t } = useI18n()
 const store = useTimelineStore()
 const exporting = ref(false)
+
+// Höhe der fixierten Website-Navigation -> --site-nav-offset (fixierter Arbeitsbereich).
+useSiteNavOffset()
 
 function openExport(): void {
   store.playing = false
@@ -43,10 +48,13 @@ function openExport(): void {
       <div class="side">
         <MediaPool />
         <TextInspector />
+        <GraphicInspector />
       </div>
-      <PreviewPlayer />
+      <div class="stage">
+        <PreviewPlayer />
+        <TimelineView />
+      </div>
     </div>
-    <TimelineView />
     <ExportDialog v-if="exporting" @close="exporting = false" />
   </div>
 </template>
@@ -104,8 +112,44 @@ function openExport(): void {
 }
 .layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   gap: var(--ds-gap);
   align-items: start;
+}
+/* Vorschau und Timeline: gleich breit, direkt untereinander. */
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+  min-width: 0;
+}
+/* Hoch und breit genug: Vorschau und Timeline bleiben beim Scrollen stehen –
+   direkt unter der fixierten Website-Navigation (--site-nav-offset). Die
+   Seitenleiste (Medien, Einstellungen) scrollt für sich. Vorschau und Spuren
+   sind in der Höhe so begrenzt, dass beides zusammen ins Fenster passt. */
+@media (min-width: 1100px) and (min-height: 640px) {
+  .stage,
+  .side {
+    position: sticky;
+    top: calc(var(--site-nav-offset, 0px) + var(--ds-space-3));
+  }
+  .side {
+    max-height: calc(100dvh - var(--site-nav-offset, 0px) - 2 * var(--ds-space-3));
+    padding-right: var(--ds-space-1, 4px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .stage {
+    /* Freie Höhe ohne Bedienleisten, Ränder und Abstände (zusammen rund 230 px). */
+    --stage-free: calc(100dvh - var(--site-nav-offset, 0px) - 230px);
+  }
+  .stage :deep(.screen) {
+    max-height: max(180px, calc(var(--stage-free) * 0.6));
+  }
+  .stage :deep(.scroller) {
+    max-height: max(140px, calc(var(--stage-free) * 0.4));
+    overflow-y: auto;
+  }
 }
 </style>

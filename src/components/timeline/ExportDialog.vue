@@ -11,8 +11,10 @@ import {
   type RenderQuality,
   type RenderWatch,
 } from '@/lib/renderApi'
+import { GRAPHICS_UNSUPPORTED, MissingGraphicsError } from '@/lib/graphicsApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
+import { graphicImages } from '@/timeline/graphics'
 import { timeToSeconds } from '@/timeline/model'
 
 /**
@@ -59,15 +61,20 @@ async function start(): Promise<void> {
   downloaded.value = false
   const ctrl = (startCtrl = new AbortController())
   try {
-    const id = await startRender(
-      store.doc,
-      {
-        quality: quality.value,
-        name: name.value.trim() || 'projekt',
-        normalizeAudio: normalizeAudio.value,
-      },
-      ctrl.signal,
-    )
+    const options = {
+      quality: quality.value,
+      name: name.value.trim() || 'projekt',
+      normalizeAudio: normalizeAudio.value,
+    }
+    // Formen und Emojis zeichnet der Browser: Bilder vorab hochladen. Hat der
+    // Server eines nicht mehr, einmal neu hochladen und wiederholen.
+    const begin = async () =>
+      startRender(await graphicImages.prepare(store.doc), options, ctrl.signal)
+    const id = await begin().catch((e: unknown) => {
+      if (!(e instanceof MissingGraphicsError)) throw e
+      graphicImages.forget(e.ids)
+      return begin()
+    })
     if (ctrl.signal.aborted) {
       void cancelRender(id)
       return
@@ -84,7 +91,10 @@ async function start(): Promise<void> {
     watch = null
     jobId = null
     const msg = e instanceof Error ? e.message : String(e)
-    error.value = msg === RENDER_UNSUPPORTED ? t('timelineExport.unsupported') : msg
+    error.value =
+      msg === RENDER_UNSUPPORTED || msg === GRAPHICS_UNSUPPORTED
+        ? t('timelineExport.unsupported')
+        : msg
     phase.value = 'error'
   }
 }

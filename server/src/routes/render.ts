@@ -8,6 +8,7 @@ import { jobManager } from '../lib/jobs'
 import { mediaStore } from '../lib/media'
 import { buildRenderArgs, compileTimeline } from '../lib/render/compile'
 import { docDuration, parseTimelineDoc } from '../lib/render/doc'
+import { graphicStore, resolveDocGraphics } from '../lib/render/graphics'
 import { safeBaseName } from '../lib/validate'
 import { resolvePreviewSources } from './preview'
 
@@ -72,8 +73,18 @@ renderRouter.post(
       res.status(422).json({ error: 'Die Timeline ist leer.' })
       return
     }
+    const { graphics, missing } = resolveDocGraphics(parsed.doc, (g) => graphicStore.get(g))
+    if (missing.length > 0) {
+      // Der Editor lädt die Bilder erneut hoch und startet den Export noch einmal.
+      res.status(409).json({
+        error: 'Eine Grafik liegt nicht mehr auf dem Server. Bitte erneut versuchen.',
+        missingGraphics: missing,
+      })
+      return
+    }
     const compiled = compileTimeline(parsed.doc, {
       sources,
+      graphics,
       normalizeAudio: settings.normalizeAudio,
     })
     if (compiled.duration > config.maxDurationSec) {

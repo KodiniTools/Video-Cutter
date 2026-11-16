@@ -261,6 +261,10 @@ h3 {
   min-width: 0;
   color: var(--ds-text-2);
 }
+/* Direkt im Feld-Stapel: natürliche Höhe (die Basis oben gilt nur in Zeilen). */
+.inspector > .field {
+  flex: none;
+}
 .field.color {
   flex: 0 0 auto;
 }

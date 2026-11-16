@@ -6,6 +6,12 @@ import TrackHeader from './TrackHeader.vue'
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
+import {
+  DEFAULT_GRAPHIC_DURATION,
+  isTimelineGraphicKind,
+  newGraphicData,
+  TIMELINE_GRAPHIC_KINDS,
+} from '@/timeline/graphics'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
 import {
   findClip,
@@ -256,6 +262,17 @@ function addText(): void {
   )
 }
 
+/** Form, Symbol oder Emoji am Abspielkopf anlegen (Auswahl aus der Liste). */
+function addGraphic(e: Event): void {
+  const el = e.target as HTMLSelectElement
+  const kind = el.value
+  el.value = ''
+  if (!isTimelineGraphicKind(kind)) return
+  run(
+    () => store.addGraphic(newGraphicData(kind), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null,
+  )
+}
+
 const canSplit = computed(() => store.splitTargets.length > 0)
 
 function stepPlayhead(frames: number): void {
@@ -383,6 +400,18 @@ function onKeydown(event: KeyboardEvent): void {
       >
         {{ t('timeline.addText') }}
       </button>
+      <select
+        class="tool wide add-graphic"
+        data-testid="timeline-add-graphic"
+        :title="t('timeline.addGraphicTitle')"
+        :aria-label="t('timeline.addGraphicTitle')"
+        @change="addGraphic"
+      >
+        <option value="">{{ t('timeline.addGraphic') }}</option>
+        <option v-for="k in TIMELINE_GRAPHIC_KINDS" :key="k" :value="k">
+          {{ t(`graphics.kinds.${k}`) }}
+        </option>
+      </select>
       <span class="time" data-testid="timeline-time">{{ timeText }}</span>
       <span v-if="hint" class="hint" role="status">{{ hint }}</span>
       <span class="spacer"></span>
@@ -503,6 +532,7 @@ function onKeydown(event: KeyboardEvent): void {
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--ds-space-2);
 }
 .timeline:focus-visible {
@@ -607,8 +637,13 @@ function onKeydown(event: KeyboardEvent): void {
 .track[data-off='true'] .lane {
   opacity: 0.45;
 }
+/* Bleibt oben stehen, wenn viele Spuren in der Höhe scrollen. */
 .ruler-row {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   height: 28px;
+  background: var(--ds-surface-0);
 }
 .ruler {
   position: relative;

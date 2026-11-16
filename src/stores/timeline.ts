@@ -266,12 +266,26 @@ export const useTimelineStore = defineStore('timeline', () => {
    * eine) und markieren. Liefert die ID des neuen Clips oder `null`.
    */
   function addText(data: Record<string, unknown>, duration: Time): string | null {
+    return addOverlay('text', data, duration, 'T')
+  }
+
+  /** Form, Symbol oder Emoji am Abspielkopf anlegen und markieren (wie `addText`). */
+  function addGraphic(data: Record<string, unknown>, duration: Time): string | null {
+    return addOverlay('graphic', data, duration, 'G')
+  }
+
+  function addOverlay(
+    kind: 'text' | 'graphic',
+    data: Record<string, unknown>,
+    duration: Time,
+    prefix: string,
+  ): string | null {
     const id = createId()
     const done = apply((d) =>
       insertOverlayClip(
         d,
-        { id, kind: 'text', start: playhead.value, duration, data },
-        nextTrackName(d, 'T'),
+        { id, kind, start: playhead.value, duration, data },
+        nextTrackName(d, prefix),
       ),
     )
     if (!done) return null
@@ -535,6 +549,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     seek,
     togglePlay,
     addText,
+    addGraphic,
     updateClipData,
     updateSettings,
     setZoom,

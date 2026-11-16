@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase'
+import { parseMissingGraphics } from './graphicsApi'
 import { fallbackErrorMessage, retryAfterOf } from './httpError'
 import type { TimelineDoc } from '@/timeline/model'
 
@@ -27,6 +28,8 @@ export interface PreviewPlan {
   /** Länge der Timeline in µs. */
   duration: number
   segments: PreviewSegment[]
+  /** IDs von Grafiken, deren Bild der Server nicht (mehr) hat. */
+  missingGraphics: string[]
 }
 
 export interface PreviewStats {
@@ -59,6 +62,7 @@ export function parsePreviewPlan(data: unknown): PreviewPlan {
     fps: num(d.fps),
     duration: num(d.duration),
     segments,
+    missingGraphics: parseMissingGraphics(d.missingGraphics),
   }
 }
 

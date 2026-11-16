@@ -683,6 +683,11 @@ const messages = {
       addAudioTrackTitle: 'Leere Ton-Spur unten anlegen',
       addText: '+ Text',
       addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
+      addGraphic: '+ Form / Emoji',
+      addGraphicTitle: 'Form, Symbol oder Emoji am Abspielkopf einfügen (liegt über allen Videos)',
+      graphicInspector: '{kind} bearbeiten',
+      graphicInspectorHint:
+        'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
       textInspector: 'Text bearbeiten',
       textInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe.',
@@ -1429,6 +1434,11 @@ const messages = {
       addAudioTrackTitle: 'Add an empty audio track at the bottom',
       addText: '+ Text',
       addTextTitle: 'Insert text at the playhead (shown above all videos)',
+      addGraphic: '+ Shape / emoji',
+      addGraphicTitle: 'Insert a shape, symbol or emoji at the playhead (shown above all videos)',
+      graphicInspector: 'Edit {kind}',
+      graphicInspectorHint:
+        'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',
       textInspector: 'Edit text',
       textInspectorHint:
         'Change length and timing on the clip in the timeline. Position: centre of the text in % of the frame width and height.',

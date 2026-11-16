@@ -267,6 +267,19 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `MAX_CONCURRENT` und `MAX_DURATION_SEC`.
   `normalizeAudio: true` gleicht die Lautstärke des fertigen Tons an
   (`loudnorm`, −16 LUFS; nur im Export, Feature `timelineNormalize`).
+- **Formen, Symbole, Emojis** (Feature `timelineGraphics`): „+ Form / Emoji“
+  legt einen Grafik-Clip auf eine Ebenen-Spur; Einstellungen im Feld daneben
+  (`GraphicInspector.vue`). Im Dokument stehen nur die Einstellungen. Vor
+  Vorschau und Export zeichnet der Browser je Aussehen ein PNG, lädt es einmal
+  hoch (`POST /api/graphics`, ID = Hash des Inhalts) und schreibt die ID in die
+  gesendete Kopie (`src/timeline/graphics.ts`). Der Compiler legt die Bilder per
+  `overlay` unter die Texte, mit denselben Animationen wie der bisherige
+  Editor. Fehlt ein Bild auf dem Server (`missingGraphics` im Plan, 409 beim
+  Export), lädt der Editor es erneut hoch. Einstellungen: `GRAPHICS_DIR`,
+  `GRAPHICS_CACHE_MB`.
+- **Layout**: Vorschau und Timeline stehen gleich breit direkt untereinander
+  und bleiben beim Scrollen stehen; die Seitenleiste (Medien, Einstellungen)
+  scrollt für sich.
 - **Texte** (Feature `timelineText`): „+ Text“ legt am Abspielkopf einen
   Text-Clip auf eine Ebenen-Spur (`insertOverlayClip`, bei Bedarf entsteht
   eine). Länge und Zeitpunkt wie bei jedem Clip in der Timeline; Inhalt,

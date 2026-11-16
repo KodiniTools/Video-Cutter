@@ -3,6 +3,7 @@ import { derivedStore } from '../lib/derived'
 import { isMediaId, mediaStore } from '../lib/media'
 import type { RenderSource } from '../lib/render/compile'
 import { parseTimelineDoc, type RenderDoc } from '../lib/render/doc'
+import { graphicStore, resolveDocGraphics } from '../lib/render/graphics'
 import { isPreviewKey, previewStore } from '../lib/render/preview'
 import { ValidationError } from '../lib/validate'
 
@@ -50,7 +51,8 @@ export const previewRouter = Router()
  * POST /api/preview/plan  { doc, at? }
  * Prüft das Timeline-Dokument, teilt es in Abschnitte und reiht fehlende ab
  * der Zeit `at` (µs) zum Rendern ein. Antwort: Größe, Länge und je Abschnitt
- * Schlüssel + Stand (ready | queued | rendering | error).
+ * Schlüssel + Stand (ready | queued | rendering | error) sowie `missingGraphics`
+ * (IDs von Grafiken, deren Bild der Server nicht mehr hat).
  */
 previewRouter.post(
   '/preview/plan',
@@ -68,7 +70,13 @@ previewRouter.post(
       get: (id) => mediaStore.get(id),
       proxy: (id) => derivedStore.file(id, 'proxy'),
     })
-    res.json(previewStore.plan(parsed.doc, sources, at))
+    // Fehlende Grafiken werden ausgelassen und gemeldet: Der Editor lädt sie
+    // erneut hoch und fragt dann noch einmal.
+    const { graphics, missing } = resolveDocGraphics(parsed.doc, (id) => graphicStore.get(id))
+    res.json({
+      ...previewStore.plan(parsed.doc, sources, at, graphics),
+      missingGraphics: missing,
+    })
   }),
 )
 
