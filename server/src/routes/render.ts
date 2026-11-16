@@ -7,8 +7,9 @@ import { customFontsEnv } from '../lib/customFonts'
 import { jobManager } from '../lib/jobs'
 import { mediaStore } from '../lib/media'
 import { buildRenderArgs, compileTimeline } from '../lib/render/compile'
-import { docDuration, parseTimelineDoc } from '../lib/render/doc'
+import { MICROS_PER_SECOND, docDuration, parseTimelineDoc } from '../lib/render/doc'
 import { graphicStore, resolveDocGraphics } from '../lib/render/graphics'
+import { LOSSLESS_BLOCKER_TEXT, buildLosslessArgs, checkLossless } from '../lib/render/lossless'
 import { safeBaseName } from '../lib/validate'
 import { resolvePreviewSources } from './preview'
 
@@ -27,6 +28,8 @@ export interface RenderRequest {
   outputName: string
   /** Lautstärke des fertigen Tons angleichen. */
   normalizeAudio: boolean
+  /** Ohne Neu-Kodieren kopieren (nur im Sonderfall möglich, sonst 422). */
+  lossless: boolean
 }
 
 /** Liest die Export-Einstellungen; Unbekanntes fällt auf den Standard zurück. */
@@ -41,13 +44,20 @@ export function parseRenderRequest(body: unknown): RenderRequest {
     quality,
     outputName: `${base === 'video' ? 'projekt' : base}.mp4`,
     normalizeAudio: b.normalizeAudio === true,
+    lossless: b.lossless === true,
   }
+}
+
+/** Endung der Quelldatei (nur bekannte Container), sonst mp4. */
+export function losslessExt(file: string): string {
+  const ext = path.extname(file).slice(1).toLowerCase()
+  return ['mp4', 'mov', 'm4v', 'webm', 'mkv'].includes(ext) ? ext : 'mp4'
 }
 
 export const renderRouter = Router()
 
 /**
- * POST /api/render  { doc, quality?, name?, normalizeAudio? }
+ * POST /api/render  { doc, quality?, name?, normalizeAudio?, lossless? }
  * Rendert die ganze Timeline in voller Größe (H.264 + AAC, MP4) – mit demselben
  * Compiler wie die Vorschau. Antwort 202 `{ jobId }`; Fortschritt, Download und
  * Abbrechen laufen über die Job-Endpunkte `/api/cut/:id/events`,
@@ -100,6 +110,43 @@ renderRouter.post(
     }
 
     const id = randomUUID()
+    if (settings.lossless) {
+      // Sonderfall: ein unveränderter Clip wird kopiert statt neu kodiert.
+      const plan = checkLossless(parsed.doc, (assetId) => mediaStore.get(assetId)?.info)
+      const item = plan.ok ? mediaStore.get(plan.asset) : undefined
+      if (!plan.ok || !item) {
+        res.status(422).json({
+          error: plan.ok
+            ? 'Video nicht (mehr) auf dem Server vorhanden.'
+            : LOSSLESS_BLOCKER_TEXT[plan.reason],
+          ...(plan.ok ? {} : { losslessBlocker: plan.reason }),
+        })
+        return
+      }
+      // Der Container der Quelle bleibt erhalten (wie beim verlustfreien Schneiden).
+      const ext = losslessExt(item.path)
+      const outputPath = path.join(config.tmpDir, `${id}-out.${ext}`)
+      const duration = plan.duration / MICROS_PER_SECOND
+      mediaStore.acquire([item.id])
+      const job = jobManager.create({
+        id,
+        inputPath: '',
+        ownsInput: false,
+        extraInputPaths: [],
+        mediaRefs: [item.id],
+        outputPath,
+        outputName: settings.outputName.replace(/\.mp4$/, `.${ext}`),
+      })
+      void jobManager.run(job, buildLosslessArgs(item.path, outputPath, plan), duration)
+      res.status(202).json({
+        jobId: id,
+        width: parsed.doc.settings.width,
+        height: parsed.doc.settings.height,
+        duration,
+        lossless: true,
+      })
+      return
+    }
     const outputPath = path.join(config.tmpDir, `${id}-out.mp4`)
     // Texte: Die Untertitel-Datei gehört dem Auftrag und wird danach gelöscht.
     const assPath = compiled.ass === undefined ? null : path.join(config.tmpDir, `${id}-text.ass`)

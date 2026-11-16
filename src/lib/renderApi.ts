@@ -21,6 +21,14 @@ export interface RenderOptions {
   name: string
   /** Lautstärke des fertigen Tons angleichen (EBU R128). */
   normalizeAudio?: boolean
+  /** Ohne Neu-Kodieren kopieren (nur im Sonderfall möglich, siehe `losslessCheck`). */
+  lossless?: boolean
+}
+
+export interface RenderJob {
+  jobId: string
+  /** Hat der Server verlustfrei kopiert? `false` auch bei altem Backend, das die Option nicht kennt. */
+  lossless: boolean
 }
 
 /** Export starten; liefert die Job-ID. */
@@ -29,6 +37,15 @@ export async function startRender(
   options: RenderOptions,
   signal?: AbortSignal,
 ): Promise<string> {
+  return (await startRenderJob(doc, options, signal)).jobId
+}
+
+/** Export starten; liefert die Job-ID und ob verlustfrei kopiert wird. */
+export async function startRenderJob(
+  doc: TimelineDoc,
+  options: RenderOptions,
+  signal?: AbortSignal,
+): Promise<RenderJob> {
   const res = await fetch(`${API_BASE}/api/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -37,10 +54,11 @@ export async function startRender(
       quality: options.quality,
       name: options.name,
       normalizeAudio: options.normalizeAudio === true,
+      ...(options.lossless === true ? { lossless: true } : {}),
     }),
     signal,
   })
-  let data: { jobId?: unknown; error?: unknown; missingGraphics?: unknown } = {}
+  let data: { jobId?: unknown; error?: unknown; missingGraphics?: unknown; lossless?: unknown } = {}
   try {
     data = (await res.json()) as typeof data
   } catch {
@@ -58,7 +76,7 @@ export async function startRender(
   }
   if (typeof data.jobId !== 'string' || !data.jobId)
     throw new Error(fallbackErrorMessage(502, null))
-  return data.jobId
+  return { jobId: data.jobId, lossless: data.lossless === true }
 }
 
 export interface RenderWatch {

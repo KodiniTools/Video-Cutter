@@ -805,6 +805,23 @@ const messages = {
       normalize: 'Lautstärke angleichen',
       normalizeHint:
         'Bringt den fertigen Ton auf eine einheitliche Lautheit (EBU R128, −16 LUFS). Wirkt nur im Export, nicht in der Vorschau.',
+      lossless: {
+        label: 'Verlustfrei (ohne Neu-Kodieren)',
+        hint: 'Kopiert Bild und Ton unverändert aus dem Video: sehr schnell, Originalqualität und Originalformat. Der Anfang liegt am nächsten Schlüsselbild davor und kann deshalb etwas früher beginnen.',
+        hintNoAudio:
+          'Kopiert das Bild unverändert aus dem Video, ohne Tonspur: sehr schnell, Originalqualität und Originalformat. Der Anfang liegt am nächsten Schlüsselbild davor und kann deshalb etwas früher beginnen.',
+        blocked: {
+          clips: 'Nicht möglich: geht nur mit genau einem Video-Clip am Anfang der Timeline.',
+          overlays: 'Nicht möglich: Texte, Grafiken oder Bilder müssen eingerechnet werden.',
+          speed: 'Nicht möglich: Der Clip hat ein geändertes Tempo.',
+          crop: 'Nicht möglich: Der Clip ist zugeschnitten.',
+          audio:
+            'Nicht möglich: Der Ton ist verändert (Lautstärke, Blende, verschoben oder weitere Ton-Clips).',
+          format: 'Nicht möglich: Das Projektformat weicht von der Größe des Videos ab.',
+        },
+        missed:
+          'Das Backend kennt den verlustfreien Export noch nicht (veraltet). Das Video wurde in hoher Qualität neu kodiert.',
+      },
       unsupported:
         'Das Backend kennt den Export des neuen Editors noch nicht (veraltet). Bitte das Backend neu deployen.',
     },
@@ -1649,6 +1666,22 @@ const messages = {
       normalize: 'Normalise loudness',
       normalizeHint:
         'Brings the finished audio to a uniform loudness (EBU R128, −16 LUFS). Applies to the export only, not the preview.',
+      lossless: {
+        label: 'Lossless (no re-encoding)',
+        hint: 'Copies picture and sound unchanged from the video: very fast, original quality and format. The start lies on the keyframe before the cut and may therefore begin slightly earlier.',
+        hintNoAudio:
+          'Copies the picture unchanged from the video, without sound: very fast, original quality and format. The start lies on the keyframe before the cut and may therefore begin slightly earlier.',
+        blocked: {
+          clips: 'Not possible: needs exactly one video clip at the start of the timeline.',
+          overlays: 'Not possible: texts, graphics or images have to be rendered in.',
+          speed: 'Not possible: the clip has a changed speed.',
+          crop: 'Not possible: the clip is cropped.',
+          audio: 'Not possible: the sound is changed (volume, fade, moved or further audio clips).',
+          format: 'Not possible: the project format differs from the size of the video.',
+        },
+        missed:
+          'The backend does not know lossless export yet (outdated). The video was re-encoded in high quality.',
+      },
       unsupported:
         'The backend does not know the new editor’s export yet (outdated). Please redeploy the backend.',
     },

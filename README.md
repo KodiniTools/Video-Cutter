@@ -299,6 +299,17 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `afade` mit Zeiten im Clip (`clipFadeFilters`), damit eine Blende über
   Abschnittsgrenzen der Vorschau hinweg wie im Export klingt. Beim Teilen
   bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.
+- **Verlustfreier Export** (Feature `timelineLossless`): Im Export-Dialog
+  gibt es neben den Qualitätsstufen „Verlustfrei (ohne Neu-Kodieren)“. Das
+  geht nur im einfachsten Fall: genau ein Video-Clip ab Zeit 0 in
+  Originalgröße, ohne Tempo, Zuschnitt, Texte oder Grafiken, und der Ton ist
+  der unveränderte Ton dieses Clips oder fehlt ganz. Sonst nennt der Dialog
+  den Grund. Dieselbe Prüfung steht im Editor (`src/timeline/lossless.ts`)
+  und im Server (`server/src/lib/render/lossless.ts`, maßgeblich);
+  `POST /api/render` mit `lossless: true` kopiert dann mit `-c copy` in den
+  Container der Quelle und antwortet mit `lossless: true`, andernfalls 422
+  mit `losslessBlocker`. Wie beim bisherigen verlustfreien Schneiden beginnt
+  die Kopie am Schlüsselbild vor dem Schnitt.
 - **Bild-Clip, KI-Bild, KI-Video** (`StillClipForm.vue` in der Medienliste):
   Ein Bild (hochgeladen, mit KI erzeugt oder aus der KI-Galerie) oder nur
   eine Farbe wird über `POST /api/media/still` zu einem Video im
