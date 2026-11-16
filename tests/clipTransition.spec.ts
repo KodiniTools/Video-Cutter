@@ -12,6 +12,7 @@ import {
   MAX_TRANSITION,
   MIN_TRANSITION,
   putAsset,
+  setClipHold,
   setClipTransition,
   splitClip,
   validateDoc,
@@ -106,6 +107,25 @@ describe('setClipTransition', () => {
   })
 })
 
+describe('setClipHold', () => {
+  it('schaltet das Standbild ein und aus; beim Teilen bleibt es am letzten Teil', () => {
+    let doc = twoClips()
+    const first = videos(doc)[0]
+    const held = must(setClipHold(doc, first.id, true))
+    expect(videos(held)[0].hold).toBe(true)
+    expect(must(setClipHold(held, first.id, true))).toBe(held)
+    expect(validateDoc(held)).toEqual([])
+    const split = must(splitClip(held, first.id, 4 * S))
+    expect(videos(split).map((c) => c.hold === true)).toEqual([false, true, false])
+    doc = must(setClipHold(held, first.id, false))
+    expect('hold' in videos(doc)[0]).toBe(false)
+    expect(error(setClipHold(doc, audios(doc)[0].id, true))).toBe('kind-mismatch')
+    const broken = structuredClone(doc)
+    ;(broken.tracks[0].clips[0] as unknown as { hold: unknown }).hold = 'ja'
+    expect(validateDoc(broken).map((i) => i.error)).toEqual(['invalid-settings'])
+  })
+})
+
 describe('Übergang im Feld „Clip“ und auf der Timeline', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
@@ -134,6 +154,24 @@ describe('Übergang im Feld „Clip“ und auf der Timeline', () => {
 
     await wrapper.get('[data-testid=clip-transition-preset]').setValue('')
     expect(clip().transitionIn).toBeUndefined()
+  })
+
+  it('Standbild: Häkchen im Feld „Clip“, Marke am Clip-Ende', async () => {
+    const store = useTimelineStore()
+    store.putAsset(asset('a'))
+    store.appendMedia('a')
+    const wrapper = mount(ClipInspector, { global: { plugins: [i18n] } })
+    const box = wrapper.get('[data-testid=clip-hold]')
+    expect((box.element as HTMLInputElement).checked).toBe(false)
+    await box.setValue(true)
+    expect(videos(store.doc)[0].hold).toBe(true)
+    const clip = mount(TimelineClip, {
+      props: { clip: videos(store.doc)[0], zoom: 50, height: 40, selected: false },
+      global: { plugins: [i18n] },
+    })
+    expect(clip.find('.hold').exists()).toBe(true)
+    store.undo()
+    expect(videos(store.doc)[0].hold).toBeUndefined()
   })
 
   it('zeigt die Marke am Clip-Anfang, so breit wie die halbe Dauer', () => {

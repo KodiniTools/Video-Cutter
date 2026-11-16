@@ -184,6 +184,12 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
   } else if (clip.asset !== undefined && !doc.assets[clip.asset]) {
     return 'asset-not-found'
   }
+  if (
+    (clip.kind === 'video' || clip.kind === 'still') &&
+    clip.hold !== undefined &&
+    typeof clip.hold !== 'boolean'
+  )
+    return 'invalid-settings'
   if ((clip.kind === 'video' || clip.kind === 'still') && clip.transitionIn !== undefined) {
     const t = clip.transitionIn
     if (
@@ -716,6 +722,24 @@ export function setClipTransition(
   return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
+/**
+ * Letztes Bild eines Video-Clips halten, bis der nächste Clip derselben Spur
+ * beginnt: Die Lücke dazwischen zeigt dann ein Standbild statt des Hintergrunds.
+ */
+export function setClipHold(doc: TimelineDoc, clipId: string, hold: boolean): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  if ((clip.hold === true) === hold) return ok(doc)
+  const changed: Clip = { ...clip }
+  if (hold) changed.hold = true
+  else delete changed.hold
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
 /** Längste Ton-Blende, die sich einstellen lässt. */
 export const MAX_CLIP_FADE: Time = 10 * MICROS_PER_SECOND
 
@@ -838,6 +862,8 @@ export function splitClip(
     if (right.kind === 'audio') delete right.fadeIn
     // Der Übergang gehört zum Anfang und bleibt am ersten Teil.
     if (right.kind === 'video' || right.kind === 'still') delete right.transitionIn
+    // Das Standbild folgt auf das Ende und bleibt am letzten Teil.
+    if (left.kind === 'video' || left.kind === 'still') delete left.hold
     if (rightGroup) right.linkGroup = rightGroup
     else delete right.linkGroup
     if (hasId(next, right.id)) return fail('duplicate-id')

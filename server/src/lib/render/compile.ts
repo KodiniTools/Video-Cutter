@@ -26,6 +26,8 @@ import {
  *    höhere Spuren sind in den Lücken durchsichtig und werden per `overlay`
  *    darübergelegt: ein `overlay` je Spur, nicht je Clip.
  *  - Ton-Spuren werden mit `amix` gemischt.
+ *  - `hold` an einem Video-Clip füllt die Lücke bis zum nächsten Clip der Spur
+ *    mit seinem letzten Bild.
  *  - Übergänge (`transitionIn`) ändern keine Zeiten: `fade` blendet den
  *    vorigen Clip aus und diesen ein; die übrigen laufen am Clip-Anfang über
  *    dem angehaltenen letzten Bild des vorigen Clips (`xfade`).
@@ -252,7 +254,27 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
   /** Von unten nach oben (im Dokument liegt Index 0 oben). */
   const layers: string[] = []
   for (const track of videoTracks.slice().reverse()) {
-    const parts = pieces(track.clips, frameOf, timeOf, f0, f1)
+    /**
+     * Clip, dessen letztes Bild die Lücke am Bild `frame` füllt (`hold`): der
+     * letzte Clip davor, sofern danach noch ein Clip folgt.
+     */
+    const holderAt = (frame: number) => {
+      let held: DocVideoClip | undefined
+      let next: DocVideoClip | undefined
+      for (const c of track.clips) {
+        if (frameOf(clipEnd(c)) <= frame) held = c
+        else {
+          next = c
+          break
+        }
+      }
+      if (!held?.hold || !next || frameOf(next.start) <= frame) return null
+      return { clip: held, next, start: frameOf(clipEnd(held)), end: frameOf(next.start) }
+    }
+    const parts =
+      pieces(track.clips, frameOf, timeOf, f0, f1) ??
+      // Der ganze Abschnitt liegt in einer gehaltenen Lücke.
+      (holderAt(f0) ? [{ frames, clip: null, offset: 0 }] : null)
     if (!parts) continue
     const opaque = layers.length === 0
     const format = opaque ? 'yuv420p' : 'yuva420p'
@@ -288,9 +310,42 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         (opaque ? `:color=${background}` : ':alpha=1'),
       'setpts=PTS-STARTPTS',
     ]
+    /** Letztes Bild von `clip`, `count` Bilder lang angehalten. */
+    const frozenSteps = (clip: DocVideoClip, count: number): string => {
+      const total = clipFrames(clip)
+      const tail = Math.min(total, Math.max(1, Math.ceil(rate.num / rate.den / 2)))
+      const offset = Math.max(0, timeOf(frameOf(clip.start) + total - tail) - clip.start)
+      const index = addInput(clip, { frames: tail, clip, offset }, 'v')
+      return `[${index}:v:0]${[
+        ...fitSteps(clip),
+        `trim=end_frame=${tail}`,
+        // Letztes vorhandenes Bild, auch wenn die Quelle etwas früher endet.
+        'reverse',
+        'trim=end_frame=1',
+        ...lengthSteps(count),
+      ].join(',')}`
+    }
+    /** Erstes Bild des Stücks auf der Timeline. */
+    let cursor = f0
     for (const piece of parts) {
       const out = label('v')
-      if (!piece.clip) {
+      const pieceStart = cursor
+      cursor += piece.frames
+      const holder = piece.clip ? null : holderAt(pieceStart)
+      if (holder) {
+        // Lücke mit gehaltenem Bild; beginnt der nächste Clip mit „Blende“,
+        // blendet das Standbild an seinem Ende aus.
+        const gap = holder.end - holder.start
+        const local = pieceStart - holder.start
+        const nOut = holder.next.transitionIn?.preset === 'fade' ? halfFrames(holder.next, gap) : 0
+        const fade =
+          nOut > 0 && local + piece.frames > gap - nOut
+            ? fadeSteps('out', gap - nOut, nOut, local)
+            : []
+        chains.push(
+          `${frozenSteps(holder.clip, piece.frames)}${fade.map((f) => `,${f}`).join('')}[${out}]`,
+        )
+      } else if (!piece.clip) {
         chains.push(
           `color=c=${fill}:s=${size}:r=${fps},format=${format},trim=end_frame=${piece.frames}[${out}]`,
         )
@@ -298,7 +353,9 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         const clip = piece.clip
         const at = track.clips.indexOf(clip)
         const before = at > 0 ? track.clips[at - 1] : undefined
-        const prev = before && frameOf(clipEnd(before)) === frameOf(clip.start) ? before : undefined
+        const adjacent = before !== undefined && frameOf(clipEnd(before)) === frameOf(clip.start)
+        // Voriges Bild für den Übergang: direkt davor oder über die Lücke gehalten.
+        const prev = before && (adjacent || before.hold) ? before : undefined
         const after = track.clips[at + 1]
         const next = after && frameOf(after.start) === frameOf(clipEnd(clip)) ? after : undefined
         const total = clipFrames(clip)
@@ -319,20 +376,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           // Bild des vorigen Clips ein; danach wird auf das Stück gekürzt.
           const from = label('xa')
           if (prev) {
-            const prevTotal = clipFrames(prev)
-            const tail = Math.min(prevTotal, Math.max(1, Math.ceil(rate.num / rate.den / 2)))
-            const offset = Math.max(0, timeOf(frameOf(prev.start) + prevTotal - tail) - prev.start)
-            const pi = addInput(prev, { frames: tail, clip: prev, offset }, 'v')
-            chains.push(
-              `[${pi}:v:0]${[
-                ...fitSteps(prev),
-                `trim=end_frame=${tail}`,
-                // Letztes vorhandenes Bild, auch wenn die Quelle etwas früher endet.
-                'reverse',
-                'trim=end_frame=1',
-                ...lengthSteps(nIn),
-              ].join(',')}[${from}]`,
-            )
+            chains.push(`${frozenSteps(prev, nIn)}[${from}]`)
           } else {
             chains.push(
               `color=c=${fill}:s=${size}:r=${fps},format=${format},trim=end_frame=${nIn}[${from}]`,

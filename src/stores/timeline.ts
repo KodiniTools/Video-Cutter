@@ -23,6 +23,7 @@ import {
   removeTrack as removeTrackOp,
   setClipCrop as setClipCropOp,
   setClipFade as setClipFadeOp,
+  setClipHold as setClipHoldOp,
   setClipTransition as setClipTransitionOp,
   setClipGain as setClipGainOp,
   setClipSpeed as setClipSpeedOp,
@@ -339,6 +340,10 @@ export const useTimelineStore = defineStore('timeline', () => {
   const setClipCrop = (clipId: string, crop: ClipCrop | null) =>
     apply((d) => setClipCropOp(d, clipId, crop))
 
+  /** Letztes Bild eines Video-Clips bis zum nächsten Clip der Spur halten. */
+  const setClipHold = (clipId: string, hold: boolean) =>
+    apply((d) => setClipHoldOp(d, clipId, hold))
+
   /** Übergang am Anfang eines Video-Clips; `null` hebt ihn auf. */
   const setClipTransition = (
     clipId: string,
@@ -644,6 +649,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipFade,
     setClipCrop,
     setClipTransition,
+    setClipHold,
     updateSettings,
     setZoom,
     snap,

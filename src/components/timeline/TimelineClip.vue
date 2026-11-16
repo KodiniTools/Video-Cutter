@@ -102,6 +102,11 @@ const transition = computed(() => {
   }
 })
 
+/** Letztes Bild wird gehalten: Marke am Clip-Ende. */
+const hold = computed(
+  () => (props.clip.kind === 'video' || props.clip.kind === 'still') && props.clip.hold === true,
+)
+
 function grab(mode: ClipGrab, event: PointerEvent): void {
   if (event.button !== 0) return
   emit('grab', props.clip.id, mode, event)
@@ -127,6 +132,12 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       class="transition"
       :style="{ width: `${transition.width}px` }"
       :title="transition.title"
+      aria-hidden="true"
+    ></span>
+    <span
+      v-if="hold"
+      class="hold"
+      :title="t('timeline.clipInspector.hold')"
       aria-hidden="true"
     ></span>
     <span v-if="name" class="label">{{ name }}</span>
@@ -158,6 +169,15 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   pointer-events: none;
   background: linear-gradient(to top right, var(--ds-accent) 50%, transparent 50%);
   opacity: 0.75;
+}
+.hold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, var(--ds-accent) 0 4px, transparent 4px 8px);
 }
 .handle {
   position: absolute;

@@ -723,6 +723,9 @@ const messages = {
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
         cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
+        hold: 'Letztes Bild halten bis zum nächsten Clip',
+        holdHint:
+          'Folgt auf diesen Clip eine Lücke, zeigt sie sein letztes Bild als Standbild statt des Hintergrunds. Ohne folgenden Clip auf der Spur passiert nichts.',
         transition: 'Übergang am Anfang',
         transitionType: 'Art',
         transitionDuration: 'Dauer',
@@ -872,7 +875,6 @@ const messages = {
       skipped: {
         music: 'Hintergrundmusik',
         audioFade: 'Ton ein-/ausblenden',
-        holds: 'Standbilder in Lücken (die Lücken bleiben leer)',
         crop: 'Zuschnitt',
       },
       busy: 'Bitte warten …',
@@ -1596,6 +1598,9 @@ const messages = {
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
+        hold: 'Hold the last frame until the next clip',
+        holdHint:
+          'If a gap follows this clip, it shows the clip’s last frame as a still instead of the background. Without a following clip on the track nothing happens.',
         transition: 'Transition at the start',
         transitionType: 'Type',
         transitionDuration: 'Duration',
@@ -1742,7 +1747,6 @@ const messages = {
       skipped: {
         music: 'background music',
         audioFade: 'audio fade in/out',
-        holds: 'still frames in gaps (the gaps stay empty)',
         crop: 'crop',
       },
       busy: 'Please wait …',

@@ -108,7 +108,13 @@ describe('convertClassicProject', () => {
       ['B', 6, 10, 0, 1],
       ['C', 20, 10, 0, 1],
     ])
-    expect(r.skipped).toEqual(['holds'])
+    // Die Lücke hinter B zeigt wie bisher dessen letztes Bild.
+    expect(r.skipped).toEqual([])
+    expect(clips(r.state.doc, 'video').map((c) => ('hold' in c ? c.hold : false))).toEqual([
+      false,
+      true,
+      false,
+    ])
     expect(validateDoc(r.state.doc)).toEqual([])
   })
 
