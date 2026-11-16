@@ -107,6 +107,8 @@ textRouter.post(
     if (!isMediaId(body.mediaId)) throw new ValidationError('Kein Video angegeben.')
     const item = mediaStore.get(body.mediaId)
     if (!item) throw new ValidationError('Video nicht (mehr) auf dem Server vorhanden.')
+    if (item.info.hasVideo === false)
+      throw new ValidationError('Tondateien lassen sich nur im Timeline-Editor verwenden.')
     const { width, height, duration } = item.info
     const graphics = parseGraphicOverlays(body.graphics, duration)
     const noTexts =

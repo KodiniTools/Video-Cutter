@@ -19,6 +19,8 @@ const deleteMedia = vi.fn((_id: string) => Promise.resolve())
 vi.mock('@/lib/mediaApi', () => ({
   UPLOAD_ABORTED: 'UPLOAD_ABORTED',
   MEDIA_UNSUPPORTED: 'MEDIA_UNSUPPORTED',
+  MEDIA_AUDIO_UNSUPPORTED: 'MEDIA_AUDIO_UNSUPPORTED',
+  isAudioFile: (f: File) => f.type.startsWith('audio/'),
   uploadMedia: (file: File, onProgress: (ratio: number) => void) => {
     let resolve!: (m: MediaView) => void
     let reject!: (e: Error) => void
@@ -130,11 +132,15 @@ describe('Medienliste (Store)', () => {
     expect(fetchPeaks).toHaveBeenCalledTimes(1)
   })
 
-  it('lehnt Dateien ab, die keine Videos sind', () => {
+  it('nimmt Videos und Tondateien an, lehnt alles andere ab', () => {
     const pool = useMediaPoolStore()
-    pool.add([new File(['x'], 'notiz.txt', { type: 'text/plain' }), video('a.mp4')])
+    pool.add([
+      new File(['x'], 'notiz.txt', { type: 'text/plain' }),
+      video('a.mp4'),
+      new File(['x'], 'lied.mp3', { type: 'audio/mpeg' }),
+    ])
     expect(pool.rejected).toEqual(['notiz.txt'])
-    expect(pool.items.map((i) => i.name)).toEqual(['a.mp4'])
+    expect(pool.items.map((i) => i.name)).toEqual(['a.mp4', 'lied.mp3'])
     pool.add([video('b.mp4')])
     expect(pool.rejected).toEqual([])
   })
@@ -261,7 +267,7 @@ describe('Medienliste (Komponente)', () => {
   it('zeigt Leerzustand, Upload, Vorschaubild aus dem Filmstreifen und Stand', async () => {
     ensureDerived.mockResolvedValue(status('ready', 'ready', 'ready'))
     const wrapper = mountPool()
-    expect(wrapper.text()).toContain('Noch keine Videos')
+    expect(wrapper.text()).toContain('Noch keine Medien')
 
     const input = wrapper.get('[data-testid=media-pool-input]')
     Object.defineProperty(input.element, 'files', { value: [video('a.mp4')], configurable: true })
@@ -281,6 +287,29 @@ describe('Medienliste (Komponente)', () => {
     expect(thumb).toContain('/api/media/m1/strip')
     expect(thumb).toContain('background-size: 960px 108px')
     expect(thumb).toContain('background-position: -576px 0px')
+  })
+
+  it('zeigt Tondateien mit Note und legt sie auf eine Ton-Spur', async () => {
+    ensureDerived.mockResolvedValue(status('ready', 'unavailable', 'unavailable'))
+    const wrapper = mountPool()
+    const pool = useMediaPoolStore()
+    const timeline = useTimelineStore()
+    pool.add([new File([new Uint8Array([0])], 'lied.mp3', { type: 'audio/mpeg' })])
+    uploads[0].resolve(
+      media({ name: 'lied.mp3', width: 0, height: 0, fps: 0, duration: 30, kind: 'audio' }),
+    )
+    await flushPromises()
+    expect(wrapper.get('.item').attributes('data-kind')).toBe('audio')
+    expect(wrapper.get('.thumb').text()).toBe('♪')
+    expect(wrapper.text()).toContain('0:30 · Tondatei')
+    expect(wrapper.text()).toContain('Bereit')
+    expect(timeline.doc.assets.m1).toMatchObject({ kind: 'audio', hasAudio: true })
+
+    const add = wrapper.get('.to-timeline')
+    expect(add.attributes('title')).toBe('lied.mp3 auf eine Ton-Spur legen')
+    await add.trigger('click')
+    expect(timeline.doc.tracks.map((t) => [t.kind, t.clips.length])).toEqual([['audio', 1]])
+    expect(timeline.doc.tracks[0].clips[0]).toMatchObject({ asset: 'm1', start: 0, kind: 'audio' })
   })
 
   it('erklärt, warum ein verwendetes Video nicht entfernt wird', async () => {
@@ -307,7 +336,7 @@ describe('Medienliste (Komponente)', () => {
 
     timeline.removeClip('c')
     await wrapper.get('button.icon').trigger('click')
-    expect(wrapper.text()).toContain('Noch keine Videos')
+    expect(wrapper.text()).toContain('Noch keine Medien')
   })
 
   it('zeigt Fortschritt der Vorbereitung und den Hinweis bei veraltetem Backend', async () => {
@@ -319,7 +348,7 @@ describe('Medienliste (Komponente)', () => {
     uploads[0].resolve(media())
     await flushPromises()
     expect(wrapper.text()).toContain('Vorschau wird vorbereitet … 42 %')
-    expect(wrapper.text()).toContain('Keine Videodatei, übersprungen: b.txt')
+    expect(wrapper.text()).toContain('Weder Video noch Ton, übersprungen: b.txt')
 
     pool.remove(pool.items[0].key)
     ensureDerived.mockRejectedValueOnce(new Error('DERIVED_UNSUPPORTED'))

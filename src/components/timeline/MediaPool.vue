@@ -4,12 +4,12 @@ import { useI18n } from 'vue-i18n'
 import StillClipForm from './StillClipForm.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
-import { UPLOAD_ABORTED } from '@/lib/mediaApi'
+import { MEDIA_AUDIO_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
 import { formatClockDuration } from '@/lib/timeFormat'
 import { useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 
-/** Medienliste des Timeline-Editors: Videos hochladen, ansehen, entfernen. */
+/** Medienliste des Timeline-Editors: Videos und Tondateien hochladen, ansehen, entfernen. */
 const { t } = useI18n()
 const pool = useMediaPoolStore()
 const timeline = useTimelineStore()
@@ -55,9 +55,18 @@ function thumbStyle(item: PoolItem): Record<string, string> {
   }
 }
 
+const isAudio = (item: PoolItem) => item.media?.kind === 'audio'
+
+function addLabel(item: PoolItem): string {
+  return t(isAudio(item) ? 'mediaPool.addAudioToTimelineNamed' : 'mediaPool.addToTimelineNamed', {
+    name: item.name,
+  })
+}
+
 function details(item: PoolItem): string {
   const m = item.media
   if (!m) return ''
+  if (m.kind === 'audio') return `${formatClockDuration(m.duration)} · ${t('mediaPool.audioFile')}`
   const size = m.width > 0 && m.height > 0 ? ` · ${m.width}×${m.height}` : ''
   return `${formatClockDuration(m.duration)}${size}`
 }
@@ -74,7 +83,9 @@ function status(item: PoolItem): { text: string; tone: 'info' | 'ok' | 'error' }
         ? t('mediaPool.gone')
         : item.error === UPLOAD_ABORTED
           ? t('mediaPool.aborted')
-          : (item.error ?? t('mediaPool.uploadFailed'))
+          : item.error === MEDIA_AUDIO_UNSUPPORTED
+            ? t('mediaPool.audioUnsupported')
+            : (item.error ?? t('mediaPool.uploadFailed'))
     return { text, tone: 'error' }
   }
   switch (item.prepare) {
@@ -122,7 +133,7 @@ const rejectedText = computed(() =>
       ref="input"
       class="file"
       type="file"
-      accept="video/*"
+      accept="video/*,audio/*"
       multiple
       data-testid="media-pool-input"
       @change="onPick"
@@ -143,8 +154,21 @@ const rejectedText = computed(() =>
     <p v-if="!pool.items.length" class="note">{{ t('mediaPool.empty') }}</p>
 
     <ul v-else class="items">
-      <li v-for="item in pool.items" :key="item.key" class="item" :data-state="item.state">
-        <div class="thumb" :style="thumbStyle(item)" aria-hidden="true"></div>
+      <li
+        v-for="item in pool.items"
+        :key="item.key"
+        class="item"
+        :data-state="item.state"
+        :data-kind="item.media?.kind"
+      >
+        <div
+          class="thumb"
+          :class="{ audio: isAudio(item) }"
+          :style="thumbStyle(item)"
+          aria-hidden="true"
+        >
+          <span v-if="isAudio(item)">♪</span>
+        </div>
         <div class="body">
           <div class="row">
             <span class="name" :title="item.name">{{ item.name }}</span>
@@ -152,8 +176,8 @@ const rejectedText = computed(() =>
               v-if="item.media"
               type="button"
               class="to-timeline"
-              :title="t('mediaPool.addToTimelineNamed', { name: item.name })"
-              :aria-label="t('mediaPool.addToTimelineNamed', { name: item.name })"
+              :title="addLabel(item)"
+              :aria-label="addLabel(item)"
               @click="timeline.appendMedia(item.media.id)"
             >
               {{ t('mediaPool.addToTimeline') }}
@@ -306,6 +330,12 @@ const rejectedText = computed(() =>
   border-radius: var(--ds-radius-sm);
   background-color: var(--ds-surface-3);
   background-repeat: no-repeat;
+}
+.thumb.audio {
+  display: grid;
+  place-items: center;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xl);
 }
 .body {
   flex: 1;

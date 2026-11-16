@@ -10,7 +10,13 @@ import {
   fetchPeaks,
   type DerivedStatus,
 } from '@/lib/derivedApi'
-import { deleteMedia, uploadMedia, UPLOAD_ABORTED, type MediaView } from '@/lib/mediaApi'
+import {
+  deleteMedia,
+  isAudioFile,
+  uploadMedia,
+  UPLOAD_ABORTED,
+  type MediaView,
+} from '@/lib/mediaApi'
 import { assetFromMedia } from '@/timeline/assets'
 import { useTimelineStore } from './timeline'
 
@@ -55,13 +61,13 @@ interface Running {
 let keySeq = 0
 
 /**
- * Medienliste des Timeline-Editors: lädt Videos auf den Server, meldet sie als
+ * Medienliste des Timeline-Editors: lädt Videos und Tondateien auf den Server, meldet sie als
  * Medien im Timeline-Dokument an und lässt den Server Wellenform, Filmstreifen
  * und Vorschau-Kopie vorbereiten.
  */
 export const useMediaPoolStore = defineStore('mediaPool', () => {
   const items = ref<PoolItem[]>([])
-  /** Zuletzt abgelehnte Dateien (keine Videos). */
+  /** Zuletzt abgelehnte Dateien (weder Video noch Ton). */
   const rejected = ref<string[]>([])
   const running = new Map<string, Running>()
 
@@ -81,11 +87,12 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     return items.value.find((i) => i.media?.id === assetId)
   }
 
-  /** Videos hochladen. Dateien, die keine Videos sind, werden abgelehnt (siehe `rejected`). */
+  /** Videos und Tondateien hochladen. Alles andere wird abgelehnt (siehe `rejected`). */
   function add(files: readonly File[]): void {
-    rejected.value = files.filter((f) => !f.type.startsWith('video/')).map((f) => f.name)
+    const accepted = (f: File) => f.type.startsWith('video/') || isAudioFile(f)
+    rejected.value = files.filter((f) => !accepted(f)).map((f) => f.name)
     for (const file of files) {
-      if (!file.type.startsWith('video/')) continue
+      if (!accepted(file)) continue
       const key = `pool-${++keySeq}`
       items.value.push({
         key,

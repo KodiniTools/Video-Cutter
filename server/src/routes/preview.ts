@@ -16,7 +16,7 @@ const asyncHandler =
 const WAIT_MS = 25_000
 
 export interface SourceLookup {
-  get: (id: string) => { path: string; info: { hasAudio: boolean } } | undefined
+  get: (id: string) => { path: string; info: { hasAudio: boolean; hasVideo?: boolean } } | undefined
   proxy: (id: string) => Promise<string | null>
 }
 
@@ -30,8 +30,14 @@ export async function resolvePreviewSources(
   lookup: SourceLookup,
 ): Promise<Record<string, RenderSource>> {
   const used = new Set<string>()
+  /** Medien, die als Bild gebraucht werden (Clips auf Video-Spuren). */
+  const asPicture = new Set<string>()
   for (const track of doc.tracks)
-    if (track.kind !== 'overlay') for (const clip of track.clips) used.add(clip.asset)
+    if (track.kind !== 'overlay')
+      for (const clip of track.clips) {
+        used.add(clip.asset)
+        if (track.kind === 'video') asPicture.add(clip.asset)
+      }
   const sources: Record<string, RenderSource> = {}
   for (const id of used) {
     const item = isMediaId(id) ? lookup.get(id) : undefined
@@ -40,6 +46,8 @@ export async function resolvePreviewSources(
         'Ein verwendetes Video liegt nicht mehr auf dem Server. Bitte erneut hochladen.',
         409,
       )
+    if (asPicture.has(id) && item.info.hasVideo === false)
+      throw new ValidationError('Eine Tondatei liegt auf einer Video-Spur.')
     sources[id] = { path: (await lookup.proxy(id)) ?? item.path, hasAudio: item.info.hasAudio }
   }
   return sources

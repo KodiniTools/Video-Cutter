@@ -15,7 +15,7 @@ import {
   previewTargetSize,
   PREVIEW_CODECS,
 } from '../src/lib/args'
-import { parseFrameRate, parseProbeOutput } from '../src/lib/probe'
+import { isAudioOnly, parseFrameRate, parseProbeOutput } from '../src/lib/probe'
 import {
   parseAppendMeta,
   parseCutParams,
@@ -506,7 +506,31 @@ describe('parseProbeOutput', () => {
       hasAudio: true,
       duration: 12.5,
       fps: 0,
+      hasVideo: true,
     })
+  })
+
+  it('erkennt reine Tondateien, ein Titelbild zählt nicht als Bild', () => {
+    const plain = JSON.stringify({ streams: [{ codec_type: 'audio' }], format: { duration: '3' } })
+    expect(parseProbeOutput(plain)).toMatchObject({ hasVideo: false, hasAudio: true, width: 0 })
+    const cover = JSON.stringify({
+      streams: [
+        { codec_type: 'audio' },
+        { codec_type: 'video', width: 500, height: 500, disposition: { attached_pic: 1 } },
+      ],
+      format: { duration: '3' },
+    })
+    expect(parseProbeOutput(cover)).toEqual({
+      width: 0,
+      height: 0,
+      hasAudio: true,
+      duration: 3,
+      fps: 0,
+      hasVideo: false,
+    })
+    expect(isAudioOnly(parseProbeOutput(cover))).toBe(true)
+    // Ältere Datensätze ohne Angabe gelten als Video.
+    expect(isAudioOnly({})).toBe(false)
   })
 
   it('liest die Bildrate (avg_frame_rate bevorzugt, Unsinn -> 0)', () => {
@@ -537,6 +561,7 @@ describe('parseProbeOutput', () => {
       hasAudio: false,
       duration: 0,
       fps: 0,
+      hasVideo: false,
     })
     expect(() => parseProbeOutput('kein json')).toThrow()
   })

@@ -8,6 +8,7 @@ import {
   frameIndex,
   insertClip,
   insertOverlayClip,
+  isMusicTrack,
   moveTrack,
   nextTrackName,
   moveClip,
@@ -408,8 +409,63 @@ describe('appendMedia', () => {
     })
     doc = putAsset(doc, { id: 'stumm', kind: 'video', name: 's.mp4', duration: s(4) })
     doc = putAsset(doc, { id: 'img', kind: 'image', name: 'b.png', duration: null })
+    doc = putAsset(doc, {
+      id: 'lied',
+      kind: 'audio',
+      name: 'l.mp3',
+      duration: s(30),
+      hasAudio: true,
+    })
     return doc
   }
+
+  it('legt Tondateien auf eine eigene Musik-Spur ab 0, weitere dahinter', () => {
+    const ids = counter()
+    let doc = unwrap(appendMedia(empty(), 'vid', { ids }))
+    doc = unwrap(appendMedia(doc, 'lied', { ids }))
+    expect(doc.tracks.map((t) => [t.kind, t.name, t.clips.length])).toEqual([
+      ['video', 'V1', 1],
+      ['audio', 'A1', 1],
+      ['audio', 'A2', 1],
+    ])
+    // Die Musik läuft unter dem Video mit, unverknüpft und ohne das Projekt zu ändern.
+    const music = doc.tracks[2].clips[0]
+    expect(music).toMatchObject({
+      kind: 'audio',
+      asset: 'lied',
+      start: 0,
+      duration: s(30),
+      gain: 1,
+    })
+    expect(music.linkGroup).toBeUndefined()
+    expect(isMusicTrack(doc, doc.tracks[2])).toBe(true)
+    expect(isMusicTrack(doc, doc.tracks[1])).toBe(false)
+
+    doc = unwrap(appendMedia(doc, 'lied', { ids }))
+    expect(doc.tracks[2].clips.map((c) => c.start)).toEqual([0, s(30)])
+    // Das nächste Video landet hinter dem ersten Video, nicht hinter der Musik.
+    doc = unwrap(appendMedia(doc, 'vid', { ids }))
+    expect(doc.tracks[0].clips.map((c) => c.start)).toEqual([0, s(10)])
+    expect(doc.tracks[1].clips.map((c) => c.start)).toEqual([0, s(10)])
+    expect(doc.tracks).toHaveLength(3)
+  })
+
+  it('Musik zuerst: Das Video beginnt trotzdem bei 0 auf einer eigenen Ton-Spur', () => {
+    const ids = counter()
+    let doc = unwrap(appendMedia(empty(), 'lied', { ids }))
+    expect(doc.tracks.map((t) => t.name)).toEqual(['A1'])
+    expect(doc.settings).toMatchObject({ width: 1920, height: 1080 })
+    doc = unwrap(appendMedia(doc, 'vid', { ids }))
+    // Das erste Video bestimmt das Format, auch wenn schon Musik liegt.
+    expect(doc.settings).toMatchObject({ width: 1080, height: 1920, fps: 25 })
+    expect(doc.tracks.map((t) => [t.name, t.clips[0].start])).toEqual([
+      ['V1', 0],
+      ['A1', 0],
+      ['A2', 0],
+    ])
+    expect(doc.tracks[2].clips[0].asset).toBe('vid')
+    expect(validateDoc(doc)).toEqual([])
+  })
 
   it('legt in einer leeren Timeline Spuren an und übernimmt Größe und Bildrate', () => {
     const doc = unwrap(appendMedia(empty(), 'vid', { ids: counter() }))
