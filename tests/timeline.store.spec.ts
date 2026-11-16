@@ -405,4 +405,30 @@ describe('Timeline-Store', () => {
     expect(store.removeTrack(v2)).toBe(false)
     expect(store.lastError).toBe('track-locked')
   })
+
+  it('legt Text am Abspielkopf an, markiert ihn und fasst Tippen zu einem Schritt zusammen', () => {
+    const store = useTimelineStore()
+    store.seek(s(2))
+    const id = store.addText({ text: 'Hallo', size: 0.06 }, s(3))
+    expect(id).not.toBeNull()
+    expect(store.selection).toEqual([id])
+    expect(store.doc.tracks[0]).toMatchObject({ kind: 'overlay', name: 'T1' })
+    expect(store.doc.tracks[0].clips[0]).toMatchObject({
+      kind: 'text',
+      start: s(2),
+      duration: s(3),
+    })
+    expect(store.duration).toBe(s(5))
+
+    const before = store.doc
+    store.beginGesture()
+    store.updateClipData(id as string, { text: 'Hallo W' })
+    store.updateClipData(id as string, { text: 'Hallo Welt' })
+    store.endGesture()
+    expect(store.selectedClips[0]).toMatchObject({ data: { text: 'Hallo Welt', size: 0.06 } })
+    store.undo()
+    expect(store.doc.tracks).toBe(before.tracks)
+    store.undo()
+    expect(store.doc.tracks).toHaveLength(0)
+  })
 })

@@ -681,6 +681,11 @@ const messages = {
       addVideoTrackTitle: 'Leere Video-Spur oben anlegen (liegt im Bild vorn)',
       addAudioTrack: '+ Ton-Spur',
       addAudioTrackTitle: 'Leere Ton-Spur unten anlegen',
+      addText: '+ Text',
+      addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
+      textInspector: 'Text bearbeiten',
+      textInspectorHint:
+        'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe.',
       track: {
         rename: 'Name der Spur',
         renameTitle: 'Doppelklick zum Umbenennen',
@@ -1422,6 +1427,11 @@ const messages = {
       addVideoTrackTitle: 'Add an empty video track on top (in front)',
       addAudioTrack: '+ Audio track',
       addAudioTrackTitle: 'Add an empty audio track at the bottom',
+      addText: '+ Text',
+      addTextTitle: 'Insert text at the playhead (shown above all videos)',
+      textInspector: 'Edit text',
+      textInspectorHint:
+        'Change length and timing on the clip in the timeline. Position: centre of the text in % of the frame width and height.',
       track: {
         rename: 'Track name',
         renameTitle: 'Double-click to rename',

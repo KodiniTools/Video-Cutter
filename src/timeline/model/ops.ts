@@ -10,6 +10,7 @@ import {
   type ClipKind,
   type OpError,
   type OpResult,
+  type OverlayClip,
   type Time,
   type TimelineDoc,
   type TimelineSettings,
@@ -307,6 +308,50 @@ export function insertClip(doc: TimelineDoc, trackId: string, clip: Clip): OpRes
   if (error) return fail(error)
   if (overlaps(track.clips, clip.start, clipEnd(clip))) return fail('overlap')
   return ok(withClips(doc, trackIndex, [...track.clips, clip]))
+}
+
+/**
+ * Darstellungsdaten eines Clips auf einer Ebenen-Spur ändern (Text, später
+ * Grafik/Bild). Felder mit `undefined` bleiben, wie sie sind.
+ */
+export function updateClipData(
+  doc: TimelineDoc,
+  clipId: string,
+  patch: Record<string, unknown>,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (!('data' in clip)) return fail('kind-mismatch')
+  const data = { ...clip.data }
+  let changed = false
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined || data[key] === value) continue
+    data[key] = value
+    changed = true
+  }
+  if (!changed) return ok(doc)
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? { ...clip, data } : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
+/**
+ * Clip auf eine Ebenen-Spur legen: auf die oberste entsperrte Ebenen-Spur, die
+ * an der Stelle frei ist – sonst entsteht ganz oben eine neue (`trackName`).
+ */
+export function insertOverlayClip(
+  doc: TimelineDoc,
+  clip: OverlayClip,
+  trackName: string,
+  trackId: string = createId(),
+): OpResult {
+  const free = doc.tracks.find(
+    (t) => t.kind === 'overlay' && !t.locked && !overlaps(t.clips, clip.start, clipEnd(clip)),
+  )
+  if (free) return insertClip(doc, free.id, clip)
+  const added = addTrack(doc, { kind: 'overlay', name: trackName, id: trackId }, 0)
+  return added.ok ? insertClip(added.doc, trackId, clip) : added
 }
 
 export interface MoveTarget {

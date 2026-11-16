@@ -5,6 +5,7 @@ import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
 import ProjectSettings from '@/components/timeline/ProjectSettings.vue'
+import TextInspector from '@/components/timeline/TextInspector.vue'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 
 import { useTimelineStore } from '@/stores/timeline'
@@ -39,7 +40,10 @@ function openExport(): void {
       </span>
     </header>
     <div class="layout">
-      <MediaPool class="side" />
+      <div class="side">
+        <MediaPool />
+        <TextInspector />
+      </div>
       <PreviewPlayer />
     </div>
     <TimelineView />
@@ -91,6 +95,12 @@ function openExport(): void {
 .export-btn:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-gap);
+  min-width: 0;
 }
 .layout {
   display: grid;

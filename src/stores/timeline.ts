@@ -7,7 +7,9 @@ import {
   createDoc,
   docDuration,
   findClip,
+  createId,
   insertClip as insertClipOp,
+  insertOverlayClip,
   isTime,
   linkGroupIds,
   moveClip as moveClipOp,
@@ -23,6 +25,7 @@ import {
   splitClip as splitClipOp,
   trimClip as trimClipOp,
   trimRange,
+  updateClipData as updateClipDataOp,
   updateSettings as updateSettingsOp,
   updateTrack as updateTrackOp,
   validateDoc,
@@ -257,6 +260,28 @@ export const useTimelineStore = defineStore('timeline', () => {
     apply((d) => splitClipOp(d, clipId, at, opts))
   const removeClip = (clipId: string, opts?: { ripple?: boolean; linked?: boolean }) =>
     apply((d) => removeClipOp(d, clipId, opts))
+
+  /**
+   * Text am Abspielkopf anlegen (auf einer Ebenen-Spur, bei Bedarf entsteht
+   * eine) und markieren. Liefert die ID des neuen Clips oder `null`.
+   */
+  function addText(data: Record<string, unknown>, duration: Time): string | null {
+    const id = createId()
+    const done = apply((d) =>
+      insertOverlayClip(
+        d,
+        { id, kind: 'text', start: playhead.value, duration, data },
+        nextTrackName(d, 'T'),
+      ),
+    )
+    if (!done) return null
+    select([id])
+    return id
+  }
+
+  /** Darstellungsdaten eines Clips auf einer Ebenen-Spur ändern (z. B. Text). */
+  const updateClipData = (clipId: string, patch: Record<string, unknown>) =>
+    apply((d) => updateClipDataOp(d, clipId, patch))
 
   /**
    * Video aus der Medienliste ans Ende der Timeline legen (ein Verlaufsschritt)
@@ -509,6 +534,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     selectAll,
     seek,
     togglePlay,
+    addText,
+    updateClipData,
     updateSettings,
     setZoom,
     snap,
