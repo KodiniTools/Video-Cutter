@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
+import ProjectDialog from '@/components/timeline/ProjectDialog.vue'
 import ProjectSettings from '@/components/timeline/ProjectSettings.vue'
 import GraphicInspector from '@/components/timeline/GraphicInspector.vue'
 import TextInspector from '@/components/timeline/TextInspector.vue'
@@ -11,10 +12,13 @@ import TimelineView from '@/components/timeline/TimelineView.vue'
 
 import { useSiteNavOffset } from '@/composables/useSiteNavOffset'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTimelineProjectStore } from '@/stores/timelineProjects'
 
 const { t } = useI18n()
 const store = useTimelineStore()
+const projects = useTimelineProjectStore()
 const exporting = ref(false)
+const projectsOpen = ref(false)
 
 // Höhe der fixierten Website-Navigation -> --site-nav-offset (fixierter Arbeitsbereich).
 useSiteNavOffset()
@@ -23,6 +27,11 @@ function openExport(): void {
   store.playing = false
   exporting.value = true
 }
+
+function openProjects(): void {
+  store.playing = false
+  projectsOpen.value = true
+}
 </script>
 
 <template>
@@ -30,6 +39,24 @@ function openExport(): void {
     <header class="editor-head">
       <h2>{{ t('timelineEditor.title') }}</h2>
       <span class="head-actions">
+        <button
+          type="button"
+          class="project-btn"
+          data-testid="open-projects"
+          :title="t('timelineProjects.openTitle')"
+          @click="openProjects"
+        >
+          <span class="project-name">{{
+            projects.current ? projects.current.name : t('timelineProjects.button')
+          }}</span>
+          <span
+            v-if="projects.dirty"
+            class="project-dirty"
+            data-testid="project-dirty"
+            :title="t('timelineProjects.unsaved')"
+            >●</span
+          >
+        </button>
         <ProjectSettings />
         <RouterLink :to="{ name: 'classic' }">{{ t('timelineEditor.back') }}</RouterLink>
         <button
@@ -56,6 +83,7 @@ function openExport(): void {
       </div>
     </div>
     <ExportDialog v-if="exporting" @close="exporting = false" />
+    <ProjectDialog v-if="projectsOpen" @close="projectsOpen = false" />
   </div>
 </template>
 
@@ -95,6 +123,36 @@ function openExport(): void {
   color: var(--ds-on-accent);
   font-weight: var(--ds-weight-semibold);
   cursor: pointer;
+}
+.project-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  max-width: 260px;
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm);
+  cursor: pointer;
+}
+.project-btn:hover {
+  border-color: var(--ds-accent);
+}
+.project-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+.project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-dirty {
+  color: var(--ds-accent);
+  font-size: var(--ds-text-xs);
 }
 .export-btn:disabled {
   opacity: 0.45;

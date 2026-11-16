@@ -776,6 +776,28 @@ const messages = {
       background: 'Hintergrund',
       backgroundTitle: 'Farbe hinter den Clips (sichtbar an Rändern und in Lücken)',
     },
+    timelineProjects: {
+      button: 'Projekt',
+      openTitle: 'Projekt speichern, öffnen oder neu beginnen',
+      title: 'Projekt',
+      saved: 'Gespeicherte Projekte',
+      startNew: 'Neues Projekt',
+      unsaved: 'ungespeicherte Änderungen',
+      empty: 'Lade zuerst ein Video hoch – ein leeres Projekt wird nicht gespeichert.',
+      mediaGone:
+        'Mindestens ein Video liegt nicht mehr auf dem Server (nach längerer Pause aufgeräumt). Bitte das Video erneut hochladen, die Clips neu anlegen und dann speichern.',
+      tooMany: 'Zu viele Dateien: Ein Projekt fasst höchstens 50 Videos und 200 Bilder.',
+      invalid: 'Dieses Projekt lässt sich im neuen Editor nicht öffnen.',
+      busy: 'Bitte warten …',
+      outdated:
+        'Das Server-Backend ist veraltet und kennt Projekte des neuen Editors noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      hint: 'Speichert Videos, Spuren, Clips, Texte, Formen, eigene Bilder und das Projektformat auf dem Server. Der Rückgängig-Verlauf beginnt nach dem Öffnen neu.',
+      progress: {
+        saving: 'Projekt wird gespeichert …',
+        files: 'Bilder werden übertragen ({i}/{n}) …',
+        opening: 'Projekt wird geöffnet …',
+      },
+    },
     timelineEditor: {
       title: 'Neuer Editor (Beta)',
       back: 'Zurück zum bisherigen Editor',
@@ -1539,6 +1561,28 @@ const messages = {
       fps: 'Frames/s',
       background: 'Background',
       backgroundTitle: 'Colour behind the clips (visible at borders and in gaps)',
+    },
+    timelineProjects: {
+      button: 'Project',
+      openTitle: 'Save, open or start a project',
+      title: 'Project',
+      saved: 'Saved projects',
+      startNew: 'New project',
+      unsaved: 'unsaved changes',
+      empty: 'Upload a video first – an empty project is not saved.',
+      mediaGone:
+        'At least one video is no longer on the server (cleaned up after a longer break). Please upload it again, recreate its clips and then save.',
+      tooMany: 'Too many files: a project holds at most 50 videos and 200 images.',
+      invalid: 'This project cannot be opened in the new editor.',
+      busy: 'Please wait …',
+      outdated:
+        'The server backend is outdated and does not support projects of the new editor yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      hint: 'Saves videos, tracks, clips, texts, shapes, your own images and the project format on the server. Undo history starts fresh after opening.',
+      progress: {
+        saving: 'Saving project …',
+        files: 'Transferring images ({i}/{n}) …',
+        opening: 'Opening project …',
+      },
     },
     timelineEditor: {
       title: 'New editor (beta)',

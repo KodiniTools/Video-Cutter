@@ -61,12 +61,25 @@ interface ProjectFile {
   assets: Record<string, ProjectAsset>
 }
 
+export type ProjectKind = 'classic' | 'timeline'
+
+/**
+ * Art des Projekts. Der Stand selbst bleibt für den Server undurchsichtig; der
+ * Timeline-Editor kennzeichnet seine Stände mit `format: 'timeline'`.
+ */
+export function projectKind(state: unknown): ProjectKind {
+  const format = (state as { format?: unknown } | null)?.format
+  return format === 'timeline' ? 'timeline' : 'classic'
+}
+
 /** Listeneintrag. */
 export interface ProjectSummary {
   id: string
   name: string
   createdAt: number
   updatedAt: number
+  /** Womit das Projekt bearbeitet wird: bisherige App oder Timeline-Editor. */
+  kind: ProjectKind
   videoCount: number
   /** Belegter Speicher (Videos + Zusatzdateien) in Bytes. */
   size: number
@@ -183,6 +196,7 @@ function summary(p: ProjectFile): ProjectSummary {
     name: p.name,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    kind: projectKind(p.state),
     videoCount: Object.keys(p.media).length,
     size,
   }
