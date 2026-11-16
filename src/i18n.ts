@@ -721,6 +721,18 @@ const messages = {
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
         hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
       },
+      ai: {
+        pickClip:
+          'Einen Clip mit Ton in der Timeline markieren, dann lassen sich Untertitel erzeugen.',
+        forClip: 'Für: {name}',
+        subtitleLanguage: 'Sprache der Untertitel',
+        subtitlesHint:
+          'Erkennt die Sprache (dauert je nach Länge einige Minuten) und legt die Untertitel als Text-Clips auf eine Ebenen-Spur, passend zu Lage, Schnitt und Tempo des Clips. Jeder Text lässt sich danach einzeln bearbeiten.',
+        subtitlesPartly:
+          '{n} Untertitel eingefügt, {m} ausgelassen (außerhalb des Clips oder zu kurz).',
+        translateHint:
+          'Ersetzt alle Texte auf nicht gesperrten Spuren durch die Übersetzung. Zeit, Position und Design bleiben. Mit Rückgängig zurückholbar.',
+      },
       textInspector: 'Text bearbeiten',
       textInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe – oder den Rahmen im Bild ziehen.',
@@ -1548,6 +1560,16 @@ const messages = {
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
         hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
+      },
+      ai: {
+        pickClip: 'Select a clip with sound in the timeline to create subtitles.',
+        forClip: 'For: {name}',
+        subtitleLanguage: 'Subtitle language',
+        subtitlesHint:
+          'Recognises the speech (takes a few minutes depending on length) and puts the subtitles as text clips on a layer track, matching the position, trim and speed of the clip. Each text can be edited afterwards.',
+        subtitlesPartly: '{n} subtitles added, {m} left out (outside the clip or too short).',
+        translateHint:
+          'Replaces all texts on unlocked tracks with the translation. Timing, position and design stay. Undo brings them back.',
       },
       textInspector: 'Edit text',
       textInspectorHint:
