@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import VideoTrimmer from '@/components/VideoTrimmer.vue'
 import { useSettingsStore } from '@/stores/settings'
 
 // Settings-Store früh initialisieren: Theme-Watcher und Listener der globalen
@@ -23,7 +22,7 @@ const { t } = useI18n()
     </header>
 
     <main class="content">
-      <VideoTrimmer />
+      <RouterView />
     </main>
 
     <footer class="footer" data-slot="footer">{{ t('footer') }}</footer>

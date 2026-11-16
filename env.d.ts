@@ -15,6 +15,8 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE?: string
   /** Optional: Ziel des Dev-Proxys für /api (Standard http://localhost:4021). */
   readonly VITE_DEV_API?: string
+  /** Optional: '1' schaltet den neuen Timeline-Editor (Beta) unter /editor frei. */
+  readonly VITE_TIMELINE_EDITOR?: string
 }
 
 interface ImportMeta {

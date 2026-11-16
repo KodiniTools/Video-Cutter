@@ -210,3 +210,19 @@ Job-basiert mit SSE-Fortschritt).
   Bildausschnitt (`crop`); das Frontend bricht den Schnitt dann mit einem
   Hinweis ab. Prüfen: `curl https://kodinitools.com/video-cutter/api/health`
   → `"features":["crop"]`.
+
+## Neuer Timeline-Editor (in Arbeit)
+
+Die App wird schrittweise zu einem Video-Editor mit Mehrspur-Timeline umgebaut.
+Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
+
+- **Routen** (`src/router/`): `/` bisheriger Editor, `/editor` neuer Editor (Beta).
+  Unbekannte Adressen führen zu `/`.
+- **Freischalten** von `/editor`: Build-Variable `VITE_TIMELINE_EDITOR=1` oder im
+  Browser `localStorage.setItem('videoCutter.timelineEditor', '1')`. Ohne
+  Freischaltung leitet `/editor` auf `/` um.
+- **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
+  ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
+  (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
+  Einrasten) liefern ein neues Dokument oder einen Ablehnungsgrund.
+  Tests: `tests/timelineModel.spec.ts`.
