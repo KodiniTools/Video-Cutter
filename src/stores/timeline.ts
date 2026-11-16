@@ -21,6 +21,7 @@ import {
   removeClip as removeClipOp,
   removeTrack as removeTrackOp,
   setClipCrop as setClipCropOp,
+  setClipFade as setClipFadeOp,
   setClipGain as setClipGainOp,
   setClipSpeed as setClipSpeedOp,
   snapPoints,
@@ -38,6 +39,7 @@ import {
   type Clip,
   type ClipCrop,
   type DocIssue,
+  type FadeCurve,
   type MoveTarget,
   type NewTrack,
   type OpError,
@@ -310,6 +312,13 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Zuschnitt eines Video-Clips (`null` = ganzes Bild). */
   const setClipCrop = (clipId: string, crop: ClipCrop | null) =>
     apply((d) => setClipCropOp(d, clipId, crop))
+
+  /** Ton eines Clips ein- (`in`) bzw. ausblenden (`out`); Dauer 0 oder `null` = aus. */
+  const setClipFade = (
+    clipId: string,
+    side: 'in' | 'out',
+    fade: { duration: Time; curve?: FadeCurve } | null,
+  ) => apply((d) => setClipFadeOp(d, clipId, side, fade))
 
   /** Lautstärke eines Ton-Clips. */
   const setClipGain = (clipId: string, gain: number) => apply((d) => setClipGainOp(d, clipId, gain))
@@ -598,6 +607,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateClipData,
     setClipSpeed,
     setClipGain,
+    setClipFade,
     setClipCrop,
     updateSettings,
     setZoom,

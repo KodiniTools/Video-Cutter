@@ -152,6 +152,37 @@ function pieces<C extends { start: Time; duration: Time }>(
   return out
 }
 
+/** Kürzeste Blende, die noch gerendert wird. */
+const MIN_FADE: Time = 20_000
+
+/**
+ * `afade` für das Stück eines Ton-Clips, das bei `offset` (Zeit im Clip)
+ * beginnt und `length` lang ist. Die Zeitstempel werden dafür auf die Zeit im
+ * Clip gesetzt, damit eine Blende über Abschnittsgrenzen der Vorschau hinweg
+ * genauso klingt wie im Export. Überschneiden sich beide Blenden, werden sie
+ * anteilig gekürzt.
+ */
+export function clipFadeFilters(clip: DocAudioClip, offset: Time, length: Time): string[] {
+  let fin = Math.min(clip.fadeIn?.duration ?? 0, clip.duration)
+  let fout = Math.min(clip.fadeOut?.duration ?? 0, clip.duration)
+  if (fin + fout > clip.duration) {
+    const scale = clip.duration / (fin + fout)
+    fin = Math.floor(fin * scale)
+    fout = Math.floor(fout * scale)
+  }
+  const s = (t: Time) => (t / MICROS_PER_SECOND).toFixed(6)
+  const fx: string[] = []
+  if (clip.fadeIn && fin >= MIN_FADE && offset < fin) {
+    fx.push(`afade=t=in:st=0:d=${s(fin)}:curve=${clip.fadeIn.curve}`)
+  }
+  const outStart = clip.duration - fout
+  if (clip.fadeOut && fout >= MIN_FADE && offset + length > outStart) {
+    fx.push(`afade=t=out:st=${s(outStart)}:d=${s(fout)}:curve=${clip.fadeOut.curve}`)
+  }
+  if (fx.length === 0) return []
+  return [`asetpts=PTS+${s(offset)}/TB`, ...fx, 'asetpts=PTS-STARTPTS']
+}
+
 export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledTimeline {
   const { settings } = doc
   const rate = fpsRational(settings.fps)
@@ -377,6 +408,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           `aresample=${sr}`,
           'aformat=sample_fmts=fltp:channel_layouts=stereo',
           ...(Math.abs(volume - 1) > 1e-6 ? [`volume=${num(volume)}`] : []),
+          ...clipFadeFilters(clip, piece.offset, timeOf(piece.frames)),
           'apad',
           `atrim=duration=${length}`,
           'asetpts=PTS-STARTPTS',

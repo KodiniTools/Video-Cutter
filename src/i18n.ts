@@ -710,6 +710,10 @@ const messages = {
         noRoom:
           'Kein Platz: Der langsamere Clip würde in den nächsten ragen. „Folgende Clips mitverschieben“ einschalten oder den nächsten Clip verschieben.',
         gain: 'Lautstärke',
+        fade: 'Ton-Blende',
+        fadeSides: { in: 'Einblenden', out: 'Ausblenden' },
+        fadeHint:
+          'Blendet den Ton am Anfang bzw. Ende dieses Clips. Beim Teilen bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.',
         crop: 'Zuschneiden',
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
@@ -1534,6 +1538,10 @@ const messages = {
         noRoom:
           'No room: the slower clip would run into the next one. Turn on “Move following clips along” or move the next clip.',
         gain: 'Volume',
+        fade: 'Audio fade',
+        fadeSides: { in: 'Fade in', out: 'Fade out' },
+        fadeHint:
+          'Fades the sound at the start or end of this clip. When you split it, the fade-in stays on the first part and the fade-out on the last.',
         crop: 'Crop',
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',

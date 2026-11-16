@@ -8,6 +8,8 @@ import {
   putAsset,
   normalizeCrop,
   setClipCrop,
+  setClipFade,
+  splitClip,
   setClipGain,
   setClipSpeed,
   updateTrack,
@@ -192,6 +194,51 @@ describe('Zuschnitt', () => {
     expect(error(setClipCrop(locked, video.id, { x: 0, y: 0, width: 0.5, height: 0.5 }))).toBe(
       'track-locked',
     )
+  })
+})
+
+describe('Ton-Blende', () => {
+  type Faded = { fadeIn?: { duration: number; curve: string }; fadeOut?: unknown }
+  const first = (doc: TimelineDoc) => lane(doc, 'audio')[0] as Clip & Faded
+
+  it('setClipFade setzt, begrenzt und entfernt die Blenden', () => {
+    const doc = twoClips()
+    const [video] = lane(doc, 'video')
+    const [audio] = lane(doc, 'audio')
+    let next = must(setClipFade(doc, audio.id, 'in', { duration: 2 * S }))
+    expect(first(next).fadeIn).toEqual({ duration: 2 * S, curve: 'tri' })
+    // Kurve wechseln; ohne Angabe bleibt sie beim Ändern der Dauer erhalten.
+    next = must(setClipFade(next, audio.id, 'in', { duration: 2 * S, curve: 'exp' }))
+    next = must(setClipFade(next, audio.id, 'in', { duration: 3 * S }))
+    expect(first(next).fadeIn).toEqual({ duration: 3 * S, curve: 'exp' })
+    expect(must(setClipFade(next, audio.id, 'in', { duration: 3 * S }))).toBe(next)
+    // Beide zusammen passen in den Clip (10 s): Ausblenden höchstens 7 s.
+    next = must(setClipFade(next, audio.id, 'out', { duration: 9 * S }))
+    expect(first(next).fadeOut).toEqual({ duration: 7 * S, curve: 'tri' })
+    expect(validateDoc(next)).toEqual([])
+    // Dauer 0 oder null hebt auf.
+    next = must(setClipFade(next, audio.id, 'in', { duration: 0 }))
+    next = must(setClipFade(next, audio.id, 'out', null))
+    expect('fadeIn' in first(next) || 'fadeOut' in first(next)).toBe(false)
+    expect(error(setClipFade(doc, video.id, 'in', { duration: S }))).toBe('kind-mismatch')
+    expect(error(setClipFade(doc, audio.id, 'in', { duration: Number.NaN }))).toBe(
+      'invalid-settings',
+    )
+    expect(error(setClipFade(doc, audio.id, 'in', { duration: S, curve: 'nope' as never }))).toBe(
+      'invalid-settings',
+    )
+  })
+
+  it('beim Teilen bleibt die Einblendung links, die Ausblendung rechts', () => {
+    let doc = twoClips()
+    const [audio] = lane(doc, 'audio')
+    doc = must(setClipFade(doc, audio.id, 'in', { duration: S }))
+    doc = must(setClipFade(doc, audio.id, 'out', { duration: 2 * S, curve: 'qsin' }))
+    doc = must(splitClip(doc, audio.id, 4 * S))
+    const [left, right] = lane(doc, 'audio') as (Clip & Faded)[]
+    expect([left.fadeIn, left.fadeOut]).toEqual([{ duration: S, curve: 'tri' }, undefined])
+    expect([right.fadeIn, right.fadeOut]).toEqual([undefined, { duration: 2 * S, curve: 'qsin' }])
+    expect(validateDoc(doc)).toEqual([])
   })
 })
 

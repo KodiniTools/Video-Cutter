@@ -2,13 +2,16 @@
  * Befehle auf dem Timeline-Dokument. Alle Funktionen sind rein: Sie verändern
  * ihre Eingabe nie, sondern liefern ein neues Dokument oder einen Ablehnungsgrund.
  */
-import { isTime, MAX_SPEED, MIN_CLIP_DURATION, MIN_SPEED } from './time'
+import { isTime, MAX_SPEED, MICROS_PER_SECOND, MIN_CLIP_DURATION, MIN_SPEED } from './time'
 import {
+  FADE_CURVES,
   TIMELINE_DOC_VERSION,
   type AssetRef,
   type Clip,
   type ClipCrop,
+  type ClipFade,
   type ClipKind,
+  type FadeCurve,
   type OpError,
   type OpResult,
   type OverlayClip,
@@ -179,7 +182,18 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
   } else if (clip.asset !== undefined && !doc.assets[clip.asset]) {
     return 'asset-not-found'
   }
+  if (clip.kind === 'audio') {
+    for (const fade of [clip.fadeIn, clip.fadeOut]) {
+      if (fade === undefined) continue
+      if (!isTime(fade.duration) || fade.duration <= 0 || !isFadeCurve(fade.curve))
+        return 'invalid-settings'
+    }
+  }
   return null
+}
+
+function isFadeCurve(v: unknown): v is FadeCurve {
+  return typeof v === 'string' && (FADE_CURVES as readonly string[]).includes(v)
 }
 
 function byStart(a: Clip, b: Clip): number {
@@ -618,6 +632,45 @@ export function setClipCrop(doc: TimelineDoc, clipId: string, crop: ClipCrop | n
   return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
+/** Längste Ton-Blende, die sich einstellen lässt. */
+export const MAX_CLIP_FADE: Time = 10 * MICROS_PER_SECOND
+
+/**
+ * Ton eines Clips am Anfang (`in`) oder Ende (`out`) ein- bzw. ausblenden.
+ * Dauer 0 oder `null` hebt die Blende auf. Beide Blenden zusammen sind
+ * höchstens so lang wie der Clip; ohne `curve` bleibt die bisherige Kurve
+ * (sonst linear).
+ */
+export function setClipFade(
+  doc: TimelineDoc,
+  clipId: string,
+  side: 'in' | 'out',
+  fade: { duration: Time; curve?: FadeCurve } | null,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'audio') return fail('kind-mismatch')
+  const key = side === 'in' ? 'fadeIn' : 'fadeOut'
+  const before = clip[key]
+  const other = (side === 'in' ? clip.fadeOut : clip.fadeIn)?.duration ?? 0
+  let next: ClipFade | undefined
+  if (fade) {
+    if (!Number.isFinite(fade.duration)) return fail('invalid-settings')
+    if (fade.curve !== undefined && !isFadeCurve(fade.curve)) return fail('invalid-settings')
+    const room = Math.max(0, Math.min(MAX_CLIP_FADE, clip.duration - other))
+    const duration = Math.round(Math.min(room, Math.max(0, fade.duration)))
+    if (duration > 0) next = { duration, curve: fade.curve ?? before?.curve ?? 'tri' }
+  }
+  if (next?.duration === before?.duration && next?.curve === before?.curve) return ok(doc)
+  const changed: Clip = { ...clip }
+  if (next) changed[key] = next
+  else delete changed[key]
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
 /** Lautstärke eines Ton-Clips (0 = stumm, 1 = unverändert, höchstens `MAX_CLIP_GAIN`). */
 export function setClipGain(doc: TimelineDoc, clipId: string, gain: number): OpResult {
   const loc = findClip(doc, clipId)
@@ -696,6 +749,9 @@ export function splitClip(
     let right = { ...m.clip, id: ids(), start: at, duration: clipEnd(m.clip) - at } as Clip
     if (right.kind === 'video' || right.kind === 'audio')
       right = { ...right, sourceIn: right.sourceIn + sourceSpan(left.duration, right.speed) }
+    // Die Einblendung bleibt am Anfang, die Ausblendung am Ende.
+    if (left.kind === 'audio') delete left.fadeOut
+    if (right.kind === 'audio') delete right.fadeIn
     if (rightGroup) right.linkGroup = rightGroup
     else delete right.linkGroup
     if (hasId(next, right.id)) return fail('duplicate-id')

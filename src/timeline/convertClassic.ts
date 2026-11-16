@@ -14,6 +14,7 @@ import {
   normalizeCrop,
   putAsset,
   secondsToTime,
+  setClipFade,
   snapToFrame,
   type OpResult,
   type OverlayClip,
@@ -34,6 +35,8 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  *  - Texte und Grafiken eines Videos werden zu Clips auf Ebenen-Spuren; ihre
  *    Zeiten (im Originalvideo) werden auf die Timeline umgerechnet.
  *  - Der Zuschnitt des markierten Videos wird zum Zuschnitt seines Clips.
+ *  - Die Ton-Blende wird zur Einblendung des ersten und Ausblendung des
+ *    letzten Ton-Clips.
  *  - Was der neue Editor noch nicht kann, wird ausgelassen und in `skipped`
  *    genannt.
  */
@@ -139,9 +142,6 @@ export function convertClassicProject(
     if (perSeam || classic.anim.animation !== 'none') skipped.add('transitions')
   }
   if (classic.music) skipped.add('music')
-  if (classic.audioFade.fadeIn.enabled || classic.audioFade.fadeOut.enabled) {
-    skipped.add('audioFade')
-  }
   // Der Zuschnitt gehört zum markierten Video der Liste.
   const crop = normalizeCrop(classic.editor?.crop)
   const cropItem = classic.selected === null ? undefined : classic.items[classic.selected]
@@ -227,6 +227,26 @@ export function convertClassicProject(
   }
 
   if (crop !== null && !cropUsed) skipped.add('crop')
+
+  // Die Blende galt für das ganze Ergebnis: Einblenden am ersten, Ausblenden
+  // am letzten Ton-Clip.
+  const { fadeIn, fadeOut } = classic.audioFade
+  if (fadeIn.enabled || fadeOut.enabled) {
+    const sound = doc.tracks
+      .flatMap((t) => (t.kind === 'audio' ? t.clips : []))
+      .sort((a, b) => a.start - b.start)
+    if (sound.length === 0) skipped.add('audioFade')
+    else {
+      if (fadeIn.enabled) {
+        const fade = { duration: secondsToTime(fadeIn.duration), curve: fadeIn.curve }
+        doc = must(setClipFade(doc, sound[0].id, 'in', fade))
+      }
+      if (fadeOut.enabled) {
+        const fade = { duration: secondsToTime(fadeOut.duration), curve: fadeOut.curve }
+        doc = must(setClipFade(doc, sound[sound.length - 1].id, 'out', fade))
+      }
+    }
+  }
 
   return {
     state: buildTimelineProject(doc, { ...classic.images }),

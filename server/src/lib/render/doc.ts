@@ -6,6 +6,7 @@
  * läuft zuerst durch `parseTimelineDoc`; der Compiler vertraut dem Ergebnis.
  */
 
+import { AUDIO_FADE_CURVES, type AudioFadeCurve } from '../args'
 import {
   GRAPHIC_ANIMATIONS,
   GRAPHIC_LOOPS,
@@ -76,6 +77,15 @@ export interface DocAudioClip extends DocClipBase {
   sourceIn: Time
   speed: number
   gain: number
+  /** Ton am Clip-Anfang ein- bzw. am Clip-Ende ausblenden (`null` = aus). */
+  fadeIn: DocFade | null
+  fadeOut: DocFade | null
+}
+
+/** Blende eines Ton-Clips: Dauer auf der Timeline und Kurvenform (`afade`). */
+export interface DocFade {
+  duration: Time
+  curve: AudioFadeCurve
 }
 
 /** Darstellung eines Textes (ohne Zeiten – die kommen vom Clip). */
@@ -419,6 +429,24 @@ export function parseTimelineDoc(
         if (ck === 'audio') {
           if (!inRange(rc.gain, 0, MAX_GAIN))
             return fail(`${cp}.gain`, `Lautstärke muss zwischen 0 und ${MAX_GAIN} liegen.`)
+          const fades: (DocFade | null)[] = []
+          for (const key of ['fadeIn', 'fadeOut'] as const) {
+            const f = rc[key]
+            if (f === undefined || f === null) {
+              fades.push(null)
+              continue
+            }
+            if (
+              !isObject(f) ||
+              !isTime(f.duration) ||
+              typeof f.curve !== 'string' ||
+              !(AUDIO_FADE_CURVES as readonly string[]).includes(f.curve)
+            )
+              return fail(`${cp}.${key}`, 'Ungültige Ton-Blende.')
+            fades.push(
+              f.duration > 0 ? { duration: f.duration, curve: f.curve as AudioFadeCurve } : null,
+            )
+          }
           clips.push({
             ...base,
             kind: 'audio',
@@ -426,6 +454,8 @@ export function parseTimelineDoc(
             sourceIn: rc.sourceIn,
             speed: rc.speed,
             gain: rc.gain,
+            fadeIn: fades[0],
+            fadeOut: fades[1],
           })
           return
         }

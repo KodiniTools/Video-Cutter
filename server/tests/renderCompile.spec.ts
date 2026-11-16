@@ -7,6 +7,7 @@ import { config } from '../src/config'
 import {
   ASS_PLACEHOLDER,
   buildRenderArgs,
+  clipFadeFilters,
   CompileError,
   compileTimeline,
   fpsRational,
@@ -615,5 +616,110 @@ describe('compileTimeline mit echtem FFmpeg', () => {
     expect(probe(part, 'stream=nb_read_frames', 'v:0')).toEqual(['25'])
     expect(near(pixel(part, 0.2, 316, 176), [255, 0, 0])).toBe(false)
     expect(near(pixel(part, 0.8, 316, 176), [255, 0, 0])).toBe(true)
+  }, 120_000)
+})
+
+describe('Ton-Blende je Clip', () => {
+  const withFades = (fadeIn: unknown, fadeOut: unknown): Loose => {
+    const raw = rawDoc()
+    Object.assign((raw.tracks as Loose[])[1].clips[0], { fadeIn, fadeOut })
+    return raw
+  }
+  const audioClip = (raw: unknown) => {
+    const track = parsed(raw).tracks[1]
+    if (track.kind !== 'audio') throw new Error('keine Ton-Spur')
+    return track.clips[0]
+  }
+
+  it('prüft die Blenden; ohne Angabe oder mit Dauer 0 gibt es keine', () => {
+    expect(audioClip(rawDoc())).toMatchObject({ fadeIn: null, fadeOut: null })
+    expect(
+      audioClip(withFades({ duration: s(1), curve: 'exp' }, { duration: 0, curve: 'tri' })),
+    ).toMatchObject({ fadeIn: { duration: s(1), curve: 'exp' }, fadeOut: null })
+    for (const bad of [{ duration: s(1), curve: 'nope' }, { duration: -1, curve: 'tri' }, 'x']) {
+      const r = parseTimelineDoc(withFades(bad, null))
+      expect(r.ok ? [] : r.errors.map((e) => e.path)).toEqual(['tracks[1].clips[0].fadeIn'])
+    }
+  })
+
+  it('setzt afade mit Zeiten im Clip, auch für ein Stück aus der Mitte', () => {
+    const clip = audioClip(
+      withFades({ duration: s(1), curve: 'tri' }, { duration: s(0.5), curve: 'qsin' }),
+    )
+    expect(clipFadeFilters(clip, 0, s(2))).toEqual([
+      'asetpts=PTS+0.000000/TB',
+      'afade=t=in:st=0:d=1.000000:curve=tri',
+      'afade=t=out:st=1.500000:d=0.500000:curve=qsin',
+      'asetpts=PTS-STARTPTS',
+    ])
+    // Stück von 0,4 s bis 1,2 s: nur noch der Rest der Einblendung.
+    expect(clipFadeFilters(clip, s(0.4), s(0.8))).toEqual([
+      'asetpts=PTS+0.400000/TB',
+      'afade=t=in:st=0:d=1.000000:curve=tri',
+      'asetpts=PTS-STARTPTS',
+    ])
+    // Stück ganz zwischen den Blenden: nichts zu tun.
+    expect(clipFadeFilters(clip, s(1), s(0.4))).toEqual([])
+    // Zu lange Blenden werden anteilig gekürzt und überschneiden sich nie.
+    const long = audioClip(
+      withFades({ duration: s(3), curve: 'tri' }, { duration: s(1), curve: 'tri' }),
+    )
+    expect(clipFadeFilters(long, 0, s(2)).slice(1, 3)).toEqual([
+      'afade=t=in:st=0:d=1.333333:curve=tri',
+      'afade=t=out:st=1.333334:d=0.666666:curve=tri',
+    ])
+    const c = compileTimeline(parsed(withFades({ duration: s(1), curve: 'tri' }, null)), {
+      sources,
+    })
+    expect(c.filter).toContain('volume=0.5,asetpts=PTS+0.000000/TB,afade=t=in:st=0:d=1.000000')
+  })
+
+  it('klingt im Abschnitt wie im Ganzen (echtes FFmpeg)', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'vc-fade-'))
+    try {
+      const a = path.join(dir, 'a.mp4')
+      execFileSync('ffmpeg', [
+        ...['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=320x180:r=25:d=4'],
+        ...['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=4'],
+        ...['-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', a],
+      ])
+      const real = { a: { path: a, hasAudio: true }, b: { path: a, hasAudio: false } }
+      const doc = parsed(
+        withFades({ duration: s(1), curve: 'tri' }, { duration: s(0.5), curve: 'tri' }),
+      )
+      const volume = (file: string, from: number, len: number) => {
+        const r = spawnSync(
+          'ffmpeg',
+          [
+            ...['-hide_banner', '-ss', String(from), '-t', String(len), '-i', file],
+            ...['-af', 'volumedetect', '-vn', '-f', 'null', '-'],
+          ],
+          { encoding: 'utf8' },
+        )
+        return Number(/mean_volume: (-?[\d.]+) dB/.exec(r.stderr)?.[1] ?? Number.NaN)
+      }
+      const render = (name: string, range?: { start: number; end: number }) => {
+        const out = path.join(dir, name)
+        const c = compileTimeline(doc, { sources: real, ...(range ? { range } : {}) })
+        execFileSync('ffmpeg', buildRenderArgs(c, { output: out, preset: 'ultrafast', crf: 30 }), {
+          stdio: 'ignore',
+        })
+        return out
+      }
+      const full = render('full.mp4')
+      const loud = volume(full, 1.1, 0.3)
+      // Einblenden: bei 0,1 s leise, bei 0,5 s etwa halbe Amplitude (−6 dB), ab 1 s voll.
+      expect(volume(full, 0.05, 0.1)).toBeLessThan(loud - 12)
+      expect(volume(full, 0.45, 0.1) - loud).toBeGreaterThan(-9)
+      expect(volume(full, 0.45, 0.1) - loud).toBeLessThan(-4)
+      // Ausblenden: kurz vor dem Ende leise.
+      expect(volume(full, 1.85, 0.1)).toBeLessThan(loud - 8)
+      // Abschnitt 0,4–1,2 s: beginnt mitten in der Einblendung, nicht wieder bei null.
+      const part = render('part.mp4', { start: s(0.4), end: s(1.2) })
+      expect(Math.abs(volume(part, 0.05, 0.1) - volume(full, 0.45, 0.1))).toBeLessThan(2)
+      expect(Math.abs(volume(part, 0.7, 0.1) - loud)).toBeLessThan(2)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   }, 120_000)
 })

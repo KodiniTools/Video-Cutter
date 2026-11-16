@@ -5,16 +5,21 @@ import { formatSpeedFactor, SPEED_STEPS, speedFactor } from '@/lib/clipSpeed'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import {
+  FADE_CURVES,
+  MAX_CLIP_FADE,
   MAX_CLIP_GAIN,
   MIN_CROP_SIZE,
+  secondsToTime,
   timeToSeconds,
   type AudioClip,
+  type FadeCurve,
   type VideoClip,
 } from '@/timeline/model'
 
 /**
  * Einstellungen des markierten Video- bzw. Ton-Clips: Tempo (gilt für Bild
- * und verknüpften Ton gemeinsam) und Lautstärke des Ton-Clips. Jede Änderung
+ * und verknüpften Ton gemeinsam), Lautstärke und Blende des Ton-Clips,
+ * Zuschnitt des Video-Clips. Jede Änderung
  * geht ins Dokument; die Vorschau rendert den betroffenen Abschnitt neu.
  */
 const { t, locale } = useI18n()
@@ -82,6 +87,46 @@ function commit(): void {
   if (!editing) return
   editing = false
   store.endGesture()
+}
+
+// --- Ton-Blende --------------------------------------------------------------
+
+const FADE_SIDES = ['in', 'out'] as const
+type FadeSide = (typeof FADE_SIDES)[number]
+const fadeOf = (side: FadeSide) => (side === 'in' ? audio.value?.fadeIn : audio.value?.fadeOut)
+const fadeSeconds = (side: FadeSide) => timeToSeconds(fadeOf(side)?.duration ?? 0)
+/** Beide Blenden zusammen passen in den Clip (höchstens 10 s je Seite). */
+const maxFadeSeconds = (side: FadeSide) => {
+  const clip = audio.value
+  if (!clip) return 0
+  const other = fadeOf(side === 'in' ? 'out' : 'in')?.duration ?? 0
+  const room = Math.max(0, Math.min(MAX_CLIP_FADE, clip.duration - other))
+  return Math.floor(timeToSeconds(room) * 10) / 10
+}
+const fadeLabel = (side: FadeSide) =>
+  fadeSeconds(side).toLocaleString(locale.value, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })
+
+function onFade(side: FadeSide, e: Event): void {
+  const clip = audio.value
+  if (!clip) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const seconds = Number((e.target as HTMLInputElement).value)
+  store.setClipFade(clip.id, side, { duration: secondsToTime(seconds) })
+}
+
+function onFadeCurve(side: FadeSide, e: Event): void {
+  commit()
+  const clip = audio.value
+  const fade = fadeOf(side)
+  if (!clip || !fade) return
+  const curve = (e.target as HTMLSelectElement).value as FadeCurve
+  store.setClipFade(clip.id, side, { duration: fade.duration, curve })
 }
 
 // --- Zuschnitt (Ränder in Anteilen der Quelle) ------------------------------
@@ -182,6 +227,38 @@ onBeforeUnmount(commit)
         @change="commit"
       />
     </label>
+    <fieldset v-if="audio" class="crop" data-testid="clip-fade">
+      <legend>{{ t('timeline.clipInspector.fade') }}</legend>
+      <template v-for="side in FADE_SIDES" :key="side">
+        <label class="side">
+          <span>{{ t(`timeline.clipInspector.fadeSides.${side}`) }}</span>
+          <input
+            type="range"
+            min="0"
+            :max="maxFadeSeconds(side)"
+            step="0.1"
+            :value="fadeSeconds(side)"
+            :data-testid="`clip-fade-${side}`"
+            @input="onFade(side, $event)"
+            @change="commit"
+          />
+          <span class="value">{{ fadeLabel(side) }} s</span>
+        </label>
+        <label v-if="fadeOf(side)" class="side curve">
+          <span>{{ t('audioFade.curve') }}</span>
+          <select
+            :value="fadeOf(side)?.curve"
+            :data-testid="`clip-fade-${side}-curve`"
+            @change="onFadeCurve(side, $event)"
+          >
+            <option v-for="c in FADE_CURVES" :key="c" :value="c">
+              {{ t(`audioFade.curves.${c}`) }}
+            </option>
+          </select>
+        </label>
+      </template>
+      <p class="hint">{{ t('timeline.clipInspector.fadeHint') }}</p>
+    </fieldset>
     <fieldset v-if="video" class="crop" data-testid="clip-crop">
       <legend>{{ t('timeline.clipInspector.crop') }}</legend>
       <label v-for="side in CROP_SIDES" :key="side" class="side">
@@ -265,9 +342,12 @@ h3 {
 }
 .side {
   display: grid;
-  grid-template-columns: 4.5em minmax(0, 1fr) 3.5em;
+  grid-template-columns: 6em minmax(0, 1fr) 3.5em;
   align-items: center;
   gap: var(--ds-space-2);
+}
+.side.curve {
+  grid-template-columns: 6em minmax(0, 1fr);
 }
 .value {
   text-align: right;
