@@ -7,6 +7,8 @@ import {
   findClip,
   frameIndex,
   insertClip,
+  moveTrack,
+  nextTrackName,
   moveClip,
   putAsset,
   removeAsset,
@@ -501,5 +503,37 @@ describe('validateDoc', () => {
         { error: 'kind-mismatch', id: 'z' },
       ]),
     )
+  })
+})
+
+describe('Spuren verwalten', () => {
+  it('verschiebt Spuren in der Reihenfolge und begrenzt das Ziel', () => {
+    let doc = unwrap(addTrack(baseDoc(), { id: 'V2', kind: 'video', name: 'V2' }))
+    const order = (d: TimelineDoc) => d.tracks.map((tr) => tr.id)
+    const before = order(doc)
+    expect(before[0]).toBe('V2')
+    doc = unwrap(moveTrack(doc, 'V2', 99))
+    expect(order(doc)).toEqual([...before.slice(1), 'V2'])
+    doc = unwrap(moveTrack(doc, 'V2', -3))
+    expect(order(doc)).toEqual(before)
+    // Gleiche Stelle: derselbe Stand, kein neuer Schritt.
+    expect(unwrap(moveTrack(doc, 'V2', 0))).toBe(doc)
+    expect(errorOf(moveTrack(doc, 'gibt-es-nicht', 0))).toBe('track-not-found')
+    expect(errorOf(moveTrack(doc, 'V2', Number.NaN))).toBe('invalid-time')
+  })
+
+  it('liefert bei unveränderten Eigenschaften denselben Stand', () => {
+    const doc = baseDoc()
+    expect(unwrap(updateTrack(doc, 'V1', { locked: false }))).toBe(doc)
+    expect(unwrap(updateTrack(doc, 'V1', { muted: true }))).toBe(doc)
+    const locked = unwrap(updateTrack(doc, 'V1', { locked: true, name: 'Bild' }))
+    expect(locked.tracks.find((tr) => tr.id === 'V1')).toMatchObject({ locked: true, name: 'Bild' })
+  })
+
+  it('findet den nächsten freien Spurnamen', () => {
+    let doc = unwrap(addTrack(createDoc(), { kind: 'video', name: 'V1' }))
+    doc = unwrap(addTrack(doc, { kind: 'video', name: 'V3' }))
+    expect(nextTrackName(doc, 'V')).toBe('V2')
+    expect(nextTrackName(doc, 'A')).toBe('A1')
   })
 })

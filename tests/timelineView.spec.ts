@@ -85,7 +85,7 @@ describe('Timeline-Ansicht', () => {
     // 251 px bei 100 px/s = 2,51 s -> nächstes Bild bei 25 fps = 2,52 s.
     expect(store.playhead).toBe(s(2.52))
     await nextTick()
-    expect(wrapper.get('[data-testid=timeline-playhead]').attributes('style')).toBe('left: 348px;')
+    expect(wrapper.get('[data-testid=timeline-playhead]').attributes('style')).toBe('left: 402px;')
 
     ruler.dispatchEvent(pointer('pointermove', { clientX: 400, buttons: 1 }))
     expect(store.playhead).toBe(s(4))
@@ -251,6 +251,73 @@ describe('Timeline-Ansicht', () => {
     wrapper.unmount()
   })
 
+  it('verwaltet Spuren: anlegen, umbenennen, verschieben, sperren, stumm, entfernen', async () => {
+    const store = fill()
+    const wrapper = mountView()
+    await nextTick()
+    const names = () => wrapper.findAll('.track .track-name').map((n) => n.text())
+    await wrapper.get('[data-testid=timeline-add-video]').trigger('click')
+    await wrapper.get('[data-testid=timeline-add-audio]').trigger('click')
+    expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
+
+    // Umbenennen per Doppelklick; Esc verwirft, Enter übernimmt.
+    const first = () => wrapper.findAll('.track')[0]
+    await first().get('.track-name').trigger('dblclick')
+    await first().get('.name-input').setValue('Verworfen')
+    await first().get('.name-input').trigger('keydown', { key: 'Escape' })
+    expect(names()[0]).toBe('V2')
+    await first().get('.track-name').trigger('dblclick')
+    await first().get('.name-input').setValue('  Titel  ')
+    // Tippen im Namensfeld löst keine Timeline-Kürzel aus (S = Teilen).
+    store.seek(s(4))
+    await first().get('.name-input').trigger('keydown', { key: 's' })
+    expect(store.doc.tracks[1].clips).toHaveLength(2)
+    await first().get('.name-input').trigger('keydown', { key: 'Enter' })
+    expect(names()[0]).toBe('Titel')
+
+    // Verschieben: oberste Spur kann nicht weiter nach oben.
+    expect(first().get('[aria-label="Titel nach oben"]').attributes('disabled')).toBeDefined()
+    await first().get('[aria-label="Titel nach unten"]').trigger('click')
+    expect(names()).toEqual(['V1', 'Titel', 'A1', 'A2'])
+
+    // Sperren: keine Griffe mehr, Ziehen wirkungslos, Entfernen gesperrt.
+    const v1 = () => wrapper.findAll('.track')[0]
+    await v1().get('[data-action=lock]').trigger('click')
+    expect(v1().attributes('data-locked')).toBe('true')
+    expect(v1().find('.handle').exists()).toBe(false)
+    expect(v1().get('[data-action=remove]').attributes('disabled')).toBeDefined()
+    v1()
+      .findAll('.clip')[1]
+      .element.dispatchEvent(pointer('pointerdown', { clientX: 1100 }))
+    window.dispatchEvent(pointer('pointermove', { clientX: 1500 }))
+    window.dispatchEvent(pointer('pointerup'))
+    expect(store.doc.tracks[0].clips[1].start).toBe(s(10))
+    await v1().get('[data-action=lock]').trigger('click')
+
+    // Stumm/Ausblenden je nach Spur-Art.
+    const a1 = () => wrapper.findAll('.track')[2]
+    expect(a1().find('[data-action=hide]').exists()).toBe(false)
+    await a1().get('[data-action=mute]').trigger('click')
+    expect(a1().attributes('data-off')).toBe('true')
+    expect(store.doc.tracks[2]).toMatchObject({ muted: true })
+    await v1().get('[data-action=hide]').trigger('click')
+    expect(store.doc.tracks[0]).toMatchObject({ hidden: true })
+
+    // Entfernen samt Clips, rückgängig machbar.
+    await a1().get('[data-action=remove]').trigger('click')
+    expect(names()).toEqual(['V1', 'Titel', 'A2'])
+    // Der Knopf ist mit der Spur verschwunden: Die Tastatur bleibt bei der Timeline.
+    await nextTick()
+    expect(document.activeElement).toBe(wrapper.element)
+    wrapper.element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }),
+    )
+    await nextTick()
+    expect(names()).toEqual(['V1', 'Titel', 'A1', 'A2'])
+    expect(store.doc.tracks[2].clips).toHaveLength(2)
+    wrapper.unmount()
+  })
+
   it('zoomt per Knopf und Strg+Mausrad, „Alles zeigen“ passt die Dauer ein', async () => {
     const store = fill()
     const wrapper = mountView()
@@ -275,9 +342,9 @@ describe('Timeline-Ansicht', () => {
     expect(store.zoom).toBe(150)
     expect(ctrl.defaultPrevented).toBe(true)
 
-    // jsdom misst keine Breite -> Standard 800 px, davon 96 px Spurnamen.
+    // jsdom misst keine Breite -> Standard 800 px, davon 150 px Spurnamen.
     await wrapper.get('[data-testid=timeline-fit]').trigger('click')
-    expect(store.zoom).toBeCloseTo(((800 - 96) * 0.95) / 20, 5)
+    expect(store.zoom).toBeCloseTo(((800 - 150) * 0.95) / 20, 5)
     wrapper.unmount()
   })
 

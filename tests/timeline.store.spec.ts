@@ -369,4 +369,40 @@ describe('Timeline-Store', () => {
     store.selectAll()
     expect(store.selection).toHaveLength(4)
   })
+
+  it('legt Spuren an (Bild oben, Ton unten), verschiebt und entfernt sie rückgängig machbar', () => {
+    const store = useTimelineStore()
+    const names = () => store.doc.tracks.map((tr) => tr.name)
+    store.newTrack('video')
+    store.newTrack('audio')
+    store.newTrack('video')
+    store.newTrack('audio')
+    expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
+    const v2 = store.doc.tracks[0].id
+    expect(store.moveTrack(v2, 1)).toBe(true)
+    expect(names()).toEqual(['V1', 'V2', 'A1', 'A2'])
+
+    store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10) })
+    store.insertClip(v2, video('v', 0, 2))
+    store.select(['v'])
+    expect(store.removeTrack(v2)).toBe(true)
+    expect(store.selection).toEqual([])
+    store.undo()
+    expect(names()).toEqual(['V1', 'V2', 'A1', 'A2'])
+    expect(store.doc.tracks[1].clips).toHaveLength(1)
+
+    // Unveränderte Eigenschaft: kein leerer Rückgängig-Schritt.
+    const steps = () => {
+      let n = 0
+      while (store.undo()) n++
+      for (let i = 0; i < n; i++) store.redo()
+      return n
+    }
+    const before = steps()
+    store.updateTrack(v2, { locked: false })
+    expect(steps()).toBe(before)
+    store.updateTrack(v2, { locked: true })
+    expect(store.removeTrack(v2)).toBe(false)
+    expect(store.lastError).toBe('track-locked')
+  })
 })

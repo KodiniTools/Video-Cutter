@@ -234,6 +234,9 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `S` teilen, `Entf` löschen, `Umschalt+Entf` löschen und Lücke schließen,
   `Strg+Z` / `Strg+Umschalt+Z` rückgängig/wiederholen, `Strg+A` alles markieren,
   `←`/`→` ein Bild (mit Umschalt 1 s), `Pos1`/`Ende`, `Esc` bricht das Ziehen ab.
+- **Spuren**: „+ Video-Spur“ (oben, im Bild vorn) und „+ Ton-Spur“ (unten). Im
+  Spurkopf: Doppelklick benennt um, dazu nach oben/unten, sperren,
+  stummschalten bzw. ausblenden, entfernen (rückgängig machbar).
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
