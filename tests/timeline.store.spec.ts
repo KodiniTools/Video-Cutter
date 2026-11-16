@@ -208,6 +208,29 @@ describe('Timeline-Store', () => {
     expect(store.removeSelection()).toBe(false)
   })
 
+  it('legt ein Video in einem Schritt auf die Timeline und markiert die neuen Clips', () => {
+    const store = useTimelineStore()
+    store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10), hasAudio: true })
+    expect(store.appendMedia('vid')).toBe(true)
+    expect(store.doc.tracks.map((t) => t.name)).toEqual(['V1', 'A1'])
+    expect(store.selection).toHaveLength(2)
+    expect(store.appendMedia('vid')).toBe(true)
+    expect(store.duration).toBe(s(20))
+    expect(store.selection).toEqual([
+      store.doc.tracks[0].clips[1].id,
+      store.doc.tracks[1].clips[1].id,
+    ])
+
+    store.undo()
+    expect(store.duration).toBe(s(10))
+    store.undo()
+    // Spuren und Clips verschwinden gemeinsam.
+    expect(store.doc.tracks).toEqual([])
+    expect(store.canUndo).toBe(false)
+    expect(store.appendMedia('nope')).toBe(false)
+    expect(store.lastError).toBe('asset-not-found')
+  })
+
   it('entfernt gelöschte Clips aus der Auswahl, auch nach Rückgängig', () => {
     const store = setup()
     store.insertClip('V1', video('a', 0, 2))

@@ -76,6 +76,11 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     running.delete(key)
   }
 
+  /** Eintrag zu einem Medium des Timeline-Dokuments (Filmstreifen, Wellenform). */
+  function byAsset(assetId: string): PoolItem | undefined {
+    return items.value.find((i) => i.media?.id === assetId)
+  }
+
   /** Videos hochladen. Dateien, die keine Videos sind, werden abgelehnt (siehe `rejected`). */
   function add(files: readonly File[]): void {
     rejected.value = files.filter((f) => !f.type.startsWith('video/')).map((f) => f.name)
@@ -227,5 +232,5 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     for (const key of [...running.keys()]) stop(key)
   }
 
-  return { items, rejected, add, prepare, remove, dispose }
+  return { items, rejected, byAsset, add, prepare, remove, dispose }
 })

@@ -222,9 +222,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
 
 - **Routen** (`src/router/`): `/` bisheriger Editor, `/editor` neuer Editor (Beta).
   Unbekannte Adressen führen zu `/`.
-- **Freischalten** von `/editor`: Build-Variable `VITE_TIMELINE_EDITOR=1` oder im
-  Browser `localStorage.setItem('videoCutter.timelineEditor', '1')`. Ohne
-  Freischaltung leitet `/editor` auf `/` um.
+- **Freischalten** von `/editor`: Knopf „Neuer Editor (Beta)“ in der Kopfzeile
+  (merkt sich die Freischaltung im Browser unter `videoCutter.timelineEditor`)
+  oder Build-Variable `VITE_TIMELINE_EDITOR=1`. Ohne Freischaltung leitet
+  `/editor` auf `/` um.
+- **Timeline-Ansicht** (`src/components/timeline/TimelineView.vue`): „+ Timeline“
+  in der Medienliste hängt ein Video hinten an (Bild auf V1, Ton verknüpft auf
+  A1). Lineal-Klick setzt den Abspielkopf, Zoom per Knopf oder Strg+Mausrad.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,

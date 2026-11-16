@@ -402,6 +402,92 @@ export function removeClip(
   return ok(next)
 }
 
+// --- Zusammengesetzte Befehle ----------------------------------------------
+
+function trackEnd(track: Track): Time {
+  let end = 0
+  for (const c of track.clips) end = Math.max(end, clipEnd(c))
+  return end
+}
+
+/** Nächster freier Name wie „V2“ für eine neue Spur. */
+function nextTrackName(doc: TimelineDoc, prefix: string): string {
+  const names = new Set(doc.tracks.map((t) => t.name))
+  let n = 1
+  while (names.has(`${prefix}${n}`)) n++
+  return `${prefix}${n}`
+}
+
+/**
+ * Video aus der Medienliste ans Ende der Timeline legen: Bild auf die oberste
+ * freie Video-Spur, Ton (falls vorhanden) verknüpft auf die oberste freie
+ * Ton-Spur. Fehlende oder gesperrte Spuren werden neu angelegt. Ist die
+ * Timeline noch leer, übernimmt das Projekt Größe und Bildrate des Videos.
+ */
+export function appendMedia(
+  doc: TimelineDoc,
+  assetId: string,
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const asset = doc.assets[assetId]
+  if (!asset) return fail('asset-not-found')
+  // Bilder und reine Tondateien folgen mit den Bild-Clips bzw. der Musik-Spur.
+  if (asset.kind !== 'video' || asset.duration === null) return fail('kind-mismatch')
+  if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
+  const ids = opts.ids ?? createId
+  let next = doc
+
+  if (!doc.tracks.some((t) => t.clips.length > 0) && asset.width && asset.height) {
+    next = {
+      ...next,
+      settings: {
+        ...next.settings,
+        width: asset.width,
+        height: asset.height,
+        fps: asset.fps && asset.fps > 0 ? asset.fps : next.settings.fps,
+      },
+    }
+  }
+
+  /** Oberste freie Spur dieser Art; sonst eine neue. `null` = Anlegen abgelehnt. */
+  const useTrack = (kind: 'video' | 'audio', prefix: string): string | null => {
+    const free = next.tracks.find((t) => t.kind === kind && !t.locked)
+    if (free) return free.id
+    const id = ids()
+    // Bild-Spuren oben, Ton-Spuren unten einsortieren.
+    const index = kind === 'video' ? 0 : next.tracks.length
+    const added = addTrack(next, { id, kind, name: nextTrackName(next, prefix) }, index)
+    if (!added.ok) return null
+    next = added.doc
+    return id
+  }
+
+  const videoTrackId = useTrack('video', 'V')
+  const audioTrackId = asset.hasAudio ? useTrack('audio', 'A') : null
+  if (videoTrackId === null || (asset.hasAudio && audioTrackId === null))
+    return fail('duplicate-id')
+
+  // Bild und Ton beginnen gemeinsam hinter dem letzten Clip beider Spuren.
+  const used = next.tracks.filter((t) => t.id === videoTrackId || t.id === audioTrackId)
+  const start = Math.max(0, ...used.map(trackEnd))
+  const linkGroup = audioTrackId ? ids() : undefined
+  const base = { asset: assetId, start, duration: asset.duration, sourceIn: 0, speed: 1 }
+  const video = insertClip(next, videoTrackId, {
+    ...base,
+    id: ids(),
+    kind: 'video',
+    ...(linkGroup ? { linkGroup } : {}),
+  })
+  if (!video.ok || !audioTrackId) return video
+  return insertClip(video.doc, audioTrackId, {
+    ...base,
+    id: ids(),
+    kind: 'audio',
+    gain: 1,
+    linkGroup,
+  })
+}
+
 // --- Einrasten --------------------------------------------------------------
 
 /** Mögliche Einrastpunkte: 0, Clip-Ränder, Marker und (optional) der Abspielkopf. */
