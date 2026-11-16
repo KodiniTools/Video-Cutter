@@ -144,6 +144,7 @@ export const useProjectStore = defineStore('projects', () => {
         include: it.include,
         at: it.at,
         speed: it.speed,
+        muted: it.muted,
         texts: texts.listFor(it.id).map((o) => ({ ...o })),
         graphics: graphics.listFor(it.id).map((o) => ({ ...o })),
       })),
@@ -293,6 +294,7 @@ export const useProjectStore = defineStore('projects', () => {
           include: it.include,
           at: it.at ?? null,
           speed: it.speed ?? 0,
+          muted: it.muted === true,
         })
         kept.push(i)
       }

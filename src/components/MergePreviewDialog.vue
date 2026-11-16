@@ -11,6 +11,8 @@ export interface MergePreviewClip {
   hold?: number
   /** Geschwindigkeit als Text (z. B. „2×“); fehlt = normal. */
   speed?: string
+  /** Ton des Clips stumm? */
+  muted?: boolean
 }
 </script>
 
@@ -107,6 +109,7 @@ function onBackdrop(e: MouseEvent): void {
               <em v-if="c.speed" class="clip-tag">
                 {{ t('mergePreview.speed', { factor: c.speed }) }}
               </em>
+              <em v-if="c.muted" class="clip-tag">🔇 {{ t('mergePreview.muted') }}</em>
               <em v-if="(c.hold ?? 0) > 0.001" class="clip-tag">
                 {{ t('mergePreview.hold', { sec: formatTimeMs(c.hold ?? 0) }) }}
               </em>

@@ -54,6 +54,12 @@ export interface LibraryItem {
    * (0 = normal, siehe lib/clipSpeed). Ändert die Länge im Gesamtvideo.
    */
   speed: number
+  /**
+   * Ton dieses Videos stumm: Editor-/Zeilen-Player spielen ohne Ton, und
+   * Zusammenfügen, Vorschau, Schneiden und Herunterladen liefern es ohne
+   * seinen Originalton (beim Zusammenfügen Stille, damit Übergänge/Musik bleiben).
+   */
+  muted: boolean
   /** Beim Zusammenfügen verwenden? */
   include: boolean
   status: LibraryStatus
@@ -133,7 +139,14 @@ export interface MergeState {
   order: number[]
   ranges: Record<
     number,
-    { start: number; end: number | null; include: boolean; at?: number | null; speed?: number }
+    {
+      start: number
+      end: number | null
+      include: boolean
+      at?: number | null
+      speed?: number
+      muted?: boolean
+    }
   >
   seams: Record<string, SeamPreset>
   normalizeAudio: boolean
@@ -258,6 +271,7 @@ export const useLibraryStore = defineStore('library', () => {
       end: null,
       at: null,
       speed: 0,
+      muted: false,
       include: true,
       status: 'uploading',
       progress: 0,
@@ -382,6 +396,7 @@ export const useLibraryStore = defineStore('library', () => {
         include: it.include,
         at: it.at,
         speed: it.speed,
+        muted: it.muted,
       }
     }
     return {
@@ -408,6 +423,7 @@ export const useLibraryStore = defineStore('library', () => {
             include: r.include,
             at: r.at ?? null,
             speed: normalizeSpeedStep(r.speed ?? 0),
+            muted: r.muted === true,
           })
         : it
     })
@@ -478,6 +494,7 @@ export const useLibraryStore = defineStore('library', () => {
       include: boolean
       at?: number | null
       speed?: number
+      muted?: boolean
     }[],
     opts: {
       selected: number | null
@@ -496,6 +513,7 @@ export const useLibraryStore = defineStore('library', () => {
           include: e.include,
           at: e.at ?? null,
           speed: normalizeSpeedStep(e.speed ?? 0),
+          muted: e.muted === true,
         }),
         e.media,
       ),
@@ -545,6 +563,11 @@ export const useLibraryStore = defineStore('library', () => {
   /** Wiedergabegeschwindigkeit (Stufe −2,5 … +2,5, 0 = normal) setzen. */
   function setSpeed(id: number, step: number): void {
     update(id, (it) => ({ ...it, speed: normalizeSpeedStep(step) }))
+  }
+
+  /** Ton des Videos stumm schalten (überall: Player, Zusammenfügen, Schneiden, Download). */
+  function setMuted(id: number, on: boolean): void {
+    update(id, (it) => ({ ...it, muted: on }))
   }
 
   /** Kürzung und Position aufheben (ganzes Video, direkt nach dem vorigen). */
@@ -621,6 +644,7 @@ export const useLibraryStore = defineStore('library', () => {
     setEnd,
     setAt,
     setSpeed,
+    setMuted,
     resetRange,
     setInclude,
     move,

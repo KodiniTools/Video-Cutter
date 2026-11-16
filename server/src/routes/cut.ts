@@ -18,6 +18,7 @@ import {
   previewTargetSize,
   outputTargetSize,
   audioFadeForcesReencode,
+  stripAudioArgs,
   type AppendClip,
   type MusicTrack,
 } from '../lib/args'
@@ -28,6 +29,7 @@ import {
   parseAudioFade,
   parseCutParams,
   parseNormalizeAudio,
+  parseMute,
   parseOutputFormat,
   parseMusicParams,
   parseSeamTransitions,
@@ -106,6 +108,7 @@ export const SERVER_FEATURES = [
   'aiVideo',
   'aiModels',
   'animSpeed',
+  'clipMute',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -225,6 +228,8 @@ cutRouter.post(
       // Tempo eines einzelnen Videos (eigenständig): nur ohne Zusammenfügen,
       // Musik, Format, Zuschnitt und Übergänge, genau ein Bereich.
       const videoSpeed = parseVideoSpeed(req.body ?? {})
+      // Originalton des Hauptvideos stumm (Clip „Stumm" in der Liste).
+      const mute = parseMute(req.body ?? {})
       if (preview && !useMerge) {
         throw new ValidationError('Die Vorschau gibt es nur beim Zusammenfügen.')
       }
@@ -276,8 +281,9 @@ cutRouter.post(
           start: r.start,
           duration: r.duration,
           speed: videoSpeed,
-          hasAudio: info.hasAudio,
+          hasAudio: info.hasAudio && !mute,
         })
+        if (mute) args = stripAudioArgs(args)
         outputDuration = spedDuration(r.duration, videoSpeed)
       } else if (useMerge) {
         // Zusammenfügen: Auflösung/Tonspur/Dauer aller Dateien ermitteln, damit
@@ -310,7 +316,8 @@ cutRouter.post(
             path: appendSrcs[i].path,
             start: range.start,
             duration: range.duration,
-            hasAudio: info.hasAudio,
+            // Stumm: wie ohne Tonspur -> Stille in Clip-Länge (Übergänge/Musik bleiben).
+            hasAudio: info.hasAudio && !appendMeta[i].mute,
             position: appendMeta[i].position,
             slot: appendMeta[i].slot,
             ...(appendMeta[i].hold ? { hold: appendMeta[i].hold } : {}),
@@ -339,7 +346,7 @@ cutRouter.post(
           inputPath: mainSrc.path,
           outputPath,
           keep,
-          mainHasAudio: mainInfo.hasAudio,
+          mainHasAudio: mainInfo.hasAudio && !mute,
           appends,
           width: size.width,
           height: size.height,
@@ -371,9 +378,9 @@ cutRouter.post(
         )
       } else {
         // Ton-Blende nur mit Tonspur (ein -af ohne Tonspur bricht FFmpeg ab).
-        const mainHasAudio = audioFade
-          ? (mainSrc.info ?? (await probeMedia(mainSrc.path))).hasAudio
-          : false
+        // Stumm: Blende entfällt (es gibt keinen Ton mehr).
+        const mainHasAudio =
+          audioFade && !mute ? (mainSrc.info ?? (await probeMedia(mainSrc.path))).hasAudio : false
         const fade = mainHasAudio ? audioFade : undefined
         // Verlustfreies Kopieren ist nur bei genau einem behaltenen Bereich +
         // 'keep' + copy + OHNE Zuschnitt möglich – dann bleibt der Original-
@@ -399,6 +406,8 @@ cutRouter.post(
           crop: params.crop,
           audioFade: fade,
         })
+        // Stumm: Ergebnis ohne Tonspur (verlustfreies Kopieren bleibt möglich).
+        if (mute) args = stripAudioArgs(args)
         // Erwartete Ausgabedauer für die Fortschrittsanzeige = Summe der
         // behaltenen Bereiche (abzüglich Übergangs-Überlappungen).
         outputDuration = outputDurationFor(keep, params.transition)
@@ -443,6 +452,7 @@ cutRouter.post(
         mergeHold: appendSrcs.length > 0,
         videoSpeed: videoSpeed !== 1,
         clipSpeed: appendSrcs.length > 0,
+        mute: mute || appendMeta.some((m) => m.mute === true),
       })
     } catch (err) {
       await removeFiles(allPaths)

@@ -72,6 +72,12 @@ Zusammenfügen laden nichts erneut hoch.
   langsamer machen, ohne Schneiden/Zusammenfügen. Gleiche Skala; der Player
   zeigt das Tempo sofort, „Tempo anwenden“ ersetzt das Video (rückgängig
   machbar), danach „Herunterladen“. Server-Feld `speed` an `/api/cut`.
+- **🔇 Stumm** je Video in der Liste: Editor- und Zeilen-Player spielen ohne
+  Ton; beim Zusammenfügen/in der Vorschau wird der Ton des Clips durch Stille
+  ersetzt (Übergänge, Musik, Lautstärke-Angleichung bleiben). „Schneiden“ und
+  „Herunterladen“ liefern das Video ohne Tonspur (mit Musik: nur die Musik).
+  Projekte und Rückgängig speichern die Einstellung. Server-Felder `mute`
+  bzw. `appendMeta[].mute`, Feature `clipMute`.
 - **🗑** löscht ein Video sofort vom Server (ein laufender Upload wird abgebrochen).
 - **Auto-Aufräumen:** Videos, die `MEDIA_TTL_SEC` (Standard 2 h) nicht benutzt
   wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`

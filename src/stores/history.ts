@@ -434,7 +434,9 @@ export const useHistoryStore = defineStore('history', () => {
       // Verzögerung ständig neu startet).
       () =>
         library.items
-          .map((it) => `${it.id}:${it.start}:${it.end}:${it.at}:${it.include}:${it.speed}`)
+          .map(
+            (it) => `${it.id}:${it.start}:${it.end}:${it.at}:${it.include}:${it.speed}:${it.muted}`,
+          )
           .join(),
       () => (itemId.value === null ? null : (library.versionOf(itemId.value)?.file ?? null)),
       () => library.seamTransitions,

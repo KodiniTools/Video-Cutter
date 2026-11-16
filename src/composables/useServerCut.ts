@@ -37,6 +37,8 @@ export const AUDIO_FADE_UNSUPPORTED = 'AUDIO_FADE_UNSUPPORTED'
 
 /** Fehler-Kennung: Tempo eines einzelnen Videos verlangt, aber vom Backend nicht bestätigt. */
 export const SPEED_UNSUPPORTED = 'SPEED_UNSUPPORTED'
+/** Stumm schalten verlangt, vom (veralteten) Backend aber nicht bestätigt. */
+export const MUTE_UNSUPPORTED = 'MUTE_UNSUPPORTED'
 
 /** Fehler-Kennung: Vorschau des Zusammenfügens verlangt, aber vom Backend nicht bestätigt. */
 export const PREVIEW_UNSUPPORTED = 'PREVIEW_UNSUPPORTED'
@@ -80,6 +82,8 @@ export interface JobStartResponse {
   clipSpeed?: boolean
   /** Hat der Server das Tempo eines einzelnen Videos (`speed`) übernommen? */
   videoSpeed?: boolean
+  /** Hat der Server „stumm" (`mute` bzw. `appendMeta[].mute`) übernommen? */
+  mute?: boolean
 }
 
 /**
@@ -103,6 +107,7 @@ export function parseJobStart(text: string): JobStartResponse {
     mergeHold?: unknown
     clipSpeed?: unknown
     videoSpeed?: unknown
+    mute?: unknown
   }
   let data: Raw
   try {
@@ -130,6 +135,7 @@ export function parseJobStart(text: string): JobStartResponse {
     mergeHold: data.mergeHold === true,
     clipSpeed: data.clipSpeed === true,
     videoSpeed: data.videoSpeed === true,
+    mute: data.mute === true,
   }
 }
 
@@ -317,6 +323,8 @@ export interface AppendInput {
   hold?: number
   /** Wiedergabegeschwindigkeit (Faktor, 1 = normal); `duration` ist Quellmaterial. */
   speed?: number
+  /** Ton dieses Clips stumm (Server setzt Stille ein). */
+  mute?: boolean
 }
 
 /** Gewünschtes Ausgabeformat. */
@@ -366,6 +374,8 @@ interface JobRequest {
   mainSpeed?: number
   /** Tempo eines einzelnen Videos ändern (Faktor, 1 = normal; ohne Anhänge). */
   speed?: number
+  /** Originalton des Hauptvideos stumm (ohne Anhänge: Ergebnis ohne Tonspur). */
+  mute?: boolean
 }
 
 /** Bricht einen gestarteten Job ab (DELETE) und wirft die gegebene Fehler-Kennung. */
@@ -400,6 +410,8 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   }
   const wantsVideoSpeed = appends.length === 0 && hasSpeed(req.speed)
   if (wantsVideoSpeed) form.append('speed', String(Number((req.speed as number).toFixed(6))))
+  const wantsMute = req.mute === true || appends.some((a) => a.mute === true)
+  if (req.mute) form.append('mute', '1')
   form.append('segments', JSON.stringify(segments))
   form.append('mode', mode)
   form.append('operation', operation)
@@ -445,6 +457,7 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
           ...(a.slot !== undefined && a.position !== 'before' ? { slot: a.slot } : {}),
           ...(a.hold && a.hold > 0 ? { hold: Number(a.hold.toFixed(3)) } : {}),
           ...(hasSpeed(a.speed) ? { speed: Number((a.speed as number).toFixed(6)) } : {}),
+          ...(a.mute ? { mute: true } : {}),
         })),
       ),
     )
@@ -516,6 +529,10 @@ async function startAndWait(req: JobRequest): Promise<{ jobId: string; mediaId?:
   // Tempo eines einzelnen Videos verlangt, aber nicht bestätigt -> veralteter
   // Server (würde sonst eine unveränderte Kopie liefern).
   if (wantsVideoSpeed && !started.videoSpeed) await abortJob(jobId, SPEED_UNSUPPORTED)
+
+  // Stumm verlangt, aber nicht bestätigt -> veralteter Server (würde den Ton
+  // stillschweigend behalten).
+  if (wantsMute && !started.mute) await abortJob(jobId, MUTE_UNSUPPORTED)
 
   // Anderes Seitenverhältnis verlangt, aber nicht bestätigt -> veralteter Server.
   if (wantsFormat && !started.outputFormat) await abortJob(jobId, FORMAT_UNSUPPORTED)
@@ -633,6 +650,8 @@ export interface MediaCutRequest {
   mainSpeed?: number
   /** Tempo des Videos selbst ändern (eigenständig, ohne Anhänge; Faktor). */
   speed?: number
+  /** Originalton des Hauptvideos stumm. */
+  mute?: boolean
 }
 
 /** Ergebnis: neues Bibliotheks-Video + Datei (für Vorschau und Download). */
@@ -665,6 +684,7 @@ async function cutMedia(req: MediaCutRequest): Promise<MediaCutResult> {
       mainHold: req.mainHold,
       mainSpeed: req.mainSpeed,
       speed: req.speed,
+      mute: req.mute,
     })
     currentJobId = null
     if (!mediaId) throw new Error(MEDIA_UNSUPPORTED)
@@ -698,6 +718,31 @@ async function previewMerge(req: MediaCutRequest): Promise<Blob> {
       preview: true,
       mainHold: req.mainHold,
       mainSpeed: req.mainSpeed,
+      mute: req.mute,
+    })
+    const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
+    if (!download.ok) throw new Error(await readError(download))
+    currentJobId = null
+    return await download.blob()
+  })
+}
+
+/**
+ * Stumme Fassung eines Bibliotheks-Videos zum Herunterladen: ganzes Video
+ * verlustfrei kopiert, ohne Tonspur. Nichts landet in der Bibliothek; der
+ * Server räumt den Job nach dem Abholen auf.
+ */
+async function mutedCopy(mediaId: string, duration: number): Promise<Blob> {
+  return withProcessing(async () => {
+    const { jobId } = await startAndWait({
+      source: { mediaId },
+      segments: [{ start: 0, duration }],
+      mode: 'copy',
+      operation: 'keep',
+      total: 0,
+      appends: [],
+      normalizeAudio: false,
+      mute: true,
     })
     const download = await fetch(`${API_BASE}/api/cut/${jobId}/download`)
     if (!download.ok) throw new Error(await readError(download))
@@ -850,6 +895,7 @@ export function useServerCut() {
     cut,
     cutMedia,
     previewMerge,
+    mutedCopy,
     burnText,
     cancel,
   }

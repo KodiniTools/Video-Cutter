@@ -276,6 +276,23 @@ describe('library store – Zusammenfügen', () => {
     expect(lib.items[0].speed).toBe(0)
   })
 
+  it('Stumm: je Video, in Zusammenfügen-Einstellungen (Rückgängig) enthalten', async () => {
+    const lib = await readyLib(2)
+    const [a, b] = lib.items
+    expect(a.muted).toBe(false)
+    lib.setMuted(b.id, true)
+    expect(lib.items[1].muted).toBe(true)
+    expect(lib.items[0].muted).toBe(false)
+    const st = lib.mergeState()
+    expect(st.ranges[b.id].muted).toBe(true)
+    lib.setMuted(b.id, false)
+    lib.applyMergeState(st)
+    expect(lib.items[1].muted).toBe(true)
+    // Alte Stände ohne Feld -> Ton an
+    lib.applyMergeState({ ...st, ranges: { [b.id]: { start: 0, end: null, include: true } } })
+    expect(lib.items[1].muted).toBe(false)
+  })
+
   it('Reihenfolge: move/moveBy (Drag & Drop, ↑↓)', async () => {
     const lib = await readyLib(3)
     const [a, b, c] = lib.items.map((i) => i.id)

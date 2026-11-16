@@ -373,6 +373,13 @@ describe('parseProjectState', () => {
     expect(s.items.map((it) => it.speed)).toEqual([1.5, 0, 0, -2.5])
   })
 
+  it('Stumm: nur true übernommen (alte Projekte ohne Feld -> Ton an)', () => {
+    const s = parseProjectState({
+      items: [{ media: 'a', muted: true }, { media: 'b', muted: 'ja' }, { media: 'c' }],
+    })
+    expect(s.items.map((it) => it.muted)).toEqual([true, false, false])
+  })
+
   it('Von im Gesamtvideo: Zahl ≥ 0 übernommen, sonst direkt nach dem vorigen', () => {
     const s = parseProjectState({
       items: [
