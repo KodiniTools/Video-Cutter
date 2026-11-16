@@ -41,6 +41,8 @@ export interface ProjectItemState {
   at?: number | null
   /** Geschwindigkeit als Stufe −2,5 … +2,5; fehlt = 0 (normal). */
   speed?: number
+  /** Ton stumm; fehlt = Ton an. */
+  muted?: boolean
   texts: TextOverlay[]
   /** Bild-Grafiken verweisen per `image` auf einen Schlüssel in `images`. */
   graphics: GraphicOverlay[]
@@ -172,6 +174,7 @@ export function parseProjectState(raw: unknown): ProjectState {
     include: it.include !== false,
     at: typeof it.at === 'number' && Number.isFinite(it.at) && it.at >= 0 ? it.at : null,
     speed: normalizeSpeedStep(it.speed ?? 0),
+    muted: it.muted === true,
     texts: Array.isArray(it.texts)
       ? it.texts.map(parseText).filter((t): t is TextOverlay => t !== null)
       : [],

@@ -22,6 +22,7 @@ const clip = (over: Partial<LibraryItem> = {}): LibraryItem => ({
   end: 6,
   at: null,
   speed: 0,
+  muted: false,
   include: true,
   status: 'ready',
   progress: 1,
@@ -243,6 +244,31 @@ describe('LibraryRow – Aktionen und Status', () => {
       await w.find('.thumb-btn').trigger('click')
       await w.vm.$nextTick()
       expect((w.find('video.player').element as HTMLVideoElement).playbackRate).toBe(0.5)
+    })
+
+    it('Stumm: Häkchen meldet an/aus, Mini-Player ist stumm, Hinweis 🔇 in der Zeile', async () => {
+      const w = mountWith(video({ muted: true }))
+      const box = w.find('.mute input')
+      expect((box.element as HTMLInputElement).checked).toBe(true)
+      expect(w.find('.info small').text()).toContain('🔇')
+      await w.find('.thumb-btn').trigger('click')
+      await w.vm.$nextTick()
+      expect((w.find('video.player').element as HTMLVideoElement).muted).toBe(true)
+      await box.setValue(false)
+      expect(w.emitted('muted')).toEqual([[false]])
+    })
+
+    it('Stumm: ohne Tonspur kein Häkchen (außer es ist schon stumm)', () => {
+      expect(
+        mountWith(video({ hasAudio: false }))
+          .find('.mute')
+          .exists(),
+      ).toBe(false)
+      expect(
+        mountWith(video({ hasAudio: false, muted: true }))
+          .find('.mute')
+          .exists(),
+      ).toBe(true)
     })
 
     it('Bis 00:19:729 passt genau (5 s + 14,729 s), kein Hinweis', async () => {

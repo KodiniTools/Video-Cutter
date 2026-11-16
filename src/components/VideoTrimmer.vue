@@ -27,6 +27,7 @@ import {
   ANIM_SPEED_UNSUPPORTED,
   PREVIEW_UNSUPPORTED,
   SPEED_UNSUPPORTED,
+  MUTE_UNSUPPORTED,
   type MediaCutRequest,
 } from '@/composables/useServerCut'
 import { useTextOverlayStore } from '@/stores/textOverlays'
@@ -111,7 +112,9 @@ const { canUndo, canRedo } = storeToRefs(history)
 // Ton ein-/ausblenden: wirkt nur bei Videos mit Ton.
 const audioFade = useAudioFadeStore()
 /** Blende für „Schneiden" (nur wenn das markierte Video Ton hat). */
-const fadeForCut = computed(() => (selected.value?.hasAudio ? audioFade.input : undefined))
+const fadeForCut = computed(() =>
+  selected.value?.hasAudio && !selected.value.muted ? audioFade.input : undefined,
+)
 
 const {
   isProcessing,
@@ -122,6 +125,7 @@ const {
   bytesPerSec,
   cutMedia,
   previewMerge,
+  mutedCopy,
   burnText,
   cancel: serverCancel,
 } = useServerCut()
@@ -482,6 +486,19 @@ watch(
   },
   { immediate: true },
 )
+// --- Stumm aus der Liste: Editor-Player spielt das Video ohne Ton -----------
+const selectedMuted = computed(() => selected.value?.muted === true)
+watch(
+  [videoEl, selectedMuted],
+  ([el, m], old) => {
+    if (!el) return
+    // Stumm erzwingen; beim Ausschalten wieder Ton (eigenes Stummschalten im
+    // Player bleibt sonst unberührt).
+    if (m) el.muted = true
+    else if (old?.[1] === true) el.muted = false
+  },
+  { immediate: true },
+)
 /** Dasselbe für die Zeitleiste (Ende auf die Dauer begrenzt). */
 const listRangeBand = computed(() => {
   const r = listRange.value
@@ -610,7 +627,7 @@ function msLabel(sec: number): string {
 const remainingTime = computed(() => Math.max(0, duration.value - currentTime.value))
 
 /** Laufender Vorgang (für die Fortschrittsanzeige am passenden Button). */
-const activeJob = ref<'cut' | 'merge' | 'preview' | 'text' | 'speed' | null>(null)
+const activeJob = ref<'cut' | 'merge' | 'preview' | 'text' | 'speed' | 'download' | null>(null)
 /** Zuletzt erzeugtes Ergebnis (für den Hinweis „Fertig"). */
 const lastResultId = ref<number | null>(null)
 
@@ -638,6 +655,7 @@ function showJobError(e: unknown): void {
     [ANIM_SPEED_UNSUPPORTED]: 'errors.animSpeedUnsupported',
     [PREVIEW_UNSUPPORTED]: 'errors.previewUnsupported',
     [SPEED_UNSUPPORTED]: 'errors.speedUnsupported',
+    [MUTE_UNSUPPORTED]: 'errors.muteUnsupported',
   }
   store.setError(known[msg] ? t(known[msg]) : msg)
 }
@@ -653,6 +671,9 @@ async function onExport(): Promise<void> {
   if (!item?.mediaId || !canCut.value || busy.value) return
   store.setError('')
   activeJob.value = 'cut'
+  // Stumm: Originalton fällt weg (Musik bleibt, falls gewählt).
+  const mute = item.muted && item.hasAudio
+  const withMusic = music.value !== null
   try {
     const { media, blob } = await cutMedia({
       mediaId: item.mediaId,
@@ -668,10 +689,14 @@ async function onExport(): Promise<void> {
       output: { aspect: outputAspect.value, fill: outputFill.value },
       music: music.value ?? undefined,
       audioFade: fadeForCut.value,
+      mute: mute || undefined,
     })
     // Name vom Server: „…_cut.<ext>" (Container passend zum Modus).
     // Alte Fassung behalten: Schneiden lässt sich rückgängig machen.
     library.replaceWithResult(item.id, media, resultFile(blob, media.name), { keepOld: true })
+    // Stumm + Musik: Der Ton des Ergebnisses ist jetzt nur noch die Musik –
+    // sie soll hörbar bleiben (ohne Musik hat das Ergebnis gar keine Tonspur).
+    if (mute && withMusic) library.setMuted(item.id, false)
     store.clearMusic() // ist jetzt Teil des Ergebnisses
     lastResultId.value = item.id
   } catch (e) {
@@ -746,6 +771,7 @@ function buildMergeRequest(): MediaCutRequest | null {
     ],
     mainHold: holdOf(e0.hold),
     mainSpeed: first.speed !== 0 ? speedFactor(first.speed) : undefined,
+    mute: first.muted && first.hasAudio ? true : undefined,
     mode: 'reencode',
     operation: 'keep',
     transition: { preset: animation.value, duration: animDuration.value },
@@ -762,6 +788,7 @@ function buildMergeRequest(): MediaCutRequest | null {
         hold: holdOf(e.hold),
         position: 'after' as const,
         speed: f !== 1 ? f : undefined,
+        mute: it.muted && it.hasAudio ? true : undefined,
       }
     }),
     normalizeAudio: normalizeAudio.value,
@@ -769,7 +796,8 @@ function buildMergeRequest(): MediaCutRequest | null {
     music: music.value ?? undefined,
     seams: library.seamPresets,
     // Blende nur, wenn überhaupt Ton entsteht (Clip mit Ton oder Musik).
-    audioFade: list.some((it) => it.hasAudio) || music.value ? audioFade.input : undefined,
+    audioFade:
+      list.some((it) => it.hasAudio && !it.muted) || music.value ? audioFade.input : undefined,
   }
 }
 
@@ -822,6 +850,7 @@ async function onMergePreview(): Promise<void> {
     trimmed: isItemTrimmed(it) || itemSpan(it) - (entries[i]?.used ?? 0) > 1e-3,
     hold: entries[i]?.hold ?? 0,
     speed: it.speed !== 0 ? formatSpeedFactor(it.speed, locale.value) : undefined,
+    muted: it.muted,
   }))
   closeMergePreview()
   store.setError('')
@@ -1017,15 +1046,60 @@ const showResult = computed(
   () => lastResultId.value !== null && selected.value?.id === lastResultId.value,
 )
 
-/** Lädt das markierte Video herunter (z. B. das Schnitt-Ergebnis). */
+/**
+ * Zuletzt erzeugte stumme Fassung (Quelle = Datei des Videos). Ein zweiter
+ * Klick lädt sie ohne erneuten Server-Lauf herunter (iOS braucht dafür eine
+ * frische Nutzergeste).
+ */
+let mutedDownload: { source: File; blob: Blob } | null = null
+/** Hinweis „Stumme Fassung bereit" (nur iOS, Video-ID). */
+const mutedReadyId = ref<number | null>(null)
+watch(
+  () => selected.value?.file ?? null,
+  () => (mutedReadyId.value = null),
+)
+
+/** Stumm geschaltetes Video mit Ton: Herunterladen braucht den Server. */
+const downloadNeedsServer = computed(
+  () => !!selected.value && selected.value.muted && selected.value.hasAudio,
+)
+const canDownload = computed(
+  () =>
+    !!selected.value &&
+    (!downloadNeedsServer.value || (selected.value.status === 'ready' && !!selected.value.mediaId)),
+)
+
+/** Lädt das markierte Video herunter (z. B. das Schnitt-Ergebnis); stumm = ohne Ton. */
 async function downloadResult(): Promise<void> {
   const item = selected.value
-  if (!item) return
-  // Einheitlicher, robuster Pfad (iOS-Teilen / Anker / neuer Tab).
+  if (!item || busy.value) return
+  store.setError('')
   try {
-    await saveFile({ blob: item.file, name: item.name })
+    let blob: Blob = item.file
+    if (item.muted && item.hasAudio) {
+      if (mutedDownload?.source === item.file) {
+        blob = mutedDownload.blob
+      } else {
+        if (!item.mediaId) return
+        activeJob.value = 'download'
+        try {
+          blob = await mutedCopy(item.mediaId, item.duration || duration.value)
+        } finally {
+          activeJob.value = null
+        }
+        mutedDownload = { source: item.file, blob }
+        // iOS: Teilen-Dialog nur direkt aus einem Tippen -> erneut tippen lassen.
+        if (appleMobile) {
+          mutedReadyId.value = item.id
+          return
+        }
+      }
+    }
+    mutedReadyId.value = null
+    // Einheitlicher, robuster Pfad (iOS-Teilen / Anker / neuer Tab).
+    await saveFile({ blob, name: item.name })
   } catch (err) {
-    store.setError(err instanceof Error ? err.message : String(err))
+    showJobError(err)
   }
 }
 </script>
@@ -1289,10 +1363,14 @@ async function downloadResult(): Promise<void> {
               <button
                 class="btn primary"
                 type="button"
-                :disabled="!selected || busy"
+                :disabled="!canDownload || busy"
+                :title="downloadNeedsServer ? t('actions.downloadMutedHint') : undefined"
                 @click="downloadResult"
               >
-                {{ t('actions.download') }}
+                <template v-if="activeJob === 'download'"
+                  >{{ statusLabel }} {{ progress }}%</template
+                >
+                <template v-else>{{ t('actions.download') }}</template>
               </button>
             </div>
           </div>
@@ -1316,6 +1394,9 @@ async function downloadResult(): Promise<void> {
           <button v-if="busy" class="btn ghost cancel" type="button" @click="onCancel">
             {{ t('actions.cancel') }}
           </button>
+          <p v-if="mutedReadyId !== null && mutedReadyId === selected?.id" class="reencode-note">
+            {{ t('actions.downloadMutedReady') }}
+          </p>
           <p v-if="error" class="error" role="alert">{{ error }}</p>
 
           <div class="video-wrap">

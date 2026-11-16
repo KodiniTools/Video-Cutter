@@ -45,6 +45,8 @@ const emit = defineEmits<{
   (e: 'at', sec: number | null): void
   /** Geschwindigkeit als Stufe −2,5 … +2,5 (0 = normal). */
   (e: 'speed', step: number): void
+  /** Ton stumm schalten (an/aus). */
+  (e: 'muted', on: boolean): void
   (e: 'reset'): void
   (e: 'move', delta: number): void
   (e: 'remove'): void
@@ -338,6 +340,7 @@ function resetRange(): void {
           {{ formatTimeMs(usedLength) }}
           <template v-if="trimmed"> / {{ formatTimeMs(item.duration) }}</template>
           <template v-if="item.include && item.speed !== 0"> · {{ speedFactorText }}</template>
+          <template v-if="item.muted"> · 🔇</template>
           <template v-if="selected"> · {{ t('library.inEditor') }}</template>
         </small>
       </button>
@@ -376,6 +379,7 @@ function resetRange(): void {
         ref="player"
         class="player"
         :src="fileUrl"
+        :muted="item.muted"
         controls
         playsinline
         preload="metadata"
@@ -444,6 +448,15 @@ function resetRange(): void {
         ↓
       </button>
     </div>
+    <label v-if="item.hasAudio || item.muted" class="mute" :title="t('library.muteHint')">
+      <input
+        type="checkbox"
+        :checked="item.muted"
+        :disabled="disabled"
+        @change="emit('muted', ($event.target as HTMLInputElement).checked)"
+      />
+      <span>🔇 {{ t('library.mute') }}</span>
+    </label>
 
     <div v-if="item.include" class="range">
       <label class="range-field">
@@ -716,6 +729,14 @@ function resetRange(): void {
 .include {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+  cursor: pointer;
+}
+.mute {
   display: flex;
   align-items: center;
   gap: 6px;

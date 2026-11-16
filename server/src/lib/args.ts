@@ -574,6 +574,30 @@ export function buildServerArgs({
 }
 
 /**
+ * Entfernt die Tonspur aus einer fertigen Argumentliste (Video stumm, ohne
+ * Tonspur). Mit Filtergraph wird `[outa]` in einen `anullsink` geleitet statt
+ * gemappt (ein unbenutzter Ausgang würde FFmpeg abbrechen); ein `-af` fällt
+ * weg. `-an` vor der Ausgabedatei verhindert jede Tonspur – auch beim Kopieren.
+ */
+export function stripAudioArgs(args: string[]): string[] {
+  const out = [...args]
+  const fc = out.indexOf('-filter_complex')
+  if (fc >= 0) {
+    for (let i = 0; i < out.length - 1; i++) {
+      if (out[i] === '-map' && out[i + 1] === '[outa]') {
+        out.splice(i, 2)
+        out[fc + 1] = `${out[fc + 1]};[outa]anullsink`
+        break
+      }
+    }
+  }
+  const af = out.indexOf('-af')
+  if (af >= 0) out.splice(af, 2)
+  out.splice(out.length - 1, 0, '-an')
+  return out
+}
+
+/**
  * Wird mit dieser Ton-Blende verlustfrei kopiert? (Für die Dateiendung im
  * Router: Blende erzwingt Re-Encode.)
  */

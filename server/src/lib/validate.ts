@@ -200,6 +200,8 @@ export interface AppendMeta {
   hold?: number
   /** Wiedergabegeschwindigkeit (Faktor); fehlt = 1 (normal). */
   speed?: number
+  /** Ton dieses Clips stumm (durch Stille ersetzt); fehlt = Ton bleibt. */
+  mute?: boolean
 }
 
 /** Höchster sinnvoller Slot-Wert (größere Werte bedeuten ohnehin „am Ende"). */
@@ -299,6 +301,12 @@ export function parseNormalizeAudio(body: Record<string, unknown>): boolean {
   return v === true || v === '1' || v === 'true'
 }
 
+/** `mute`: Originalton des (Haupt-)Videos stumm schalten. */
+export function parseMute(body: Record<string, unknown>): boolean {
+  const v = body.mute
+  return v === true || v === '1' || v === 'true'
+}
+
 const DEFAULT_APPEND_META: AppendMeta = { start: 0, position: 'after' }
 
 /**
@@ -351,6 +359,7 @@ export function parseAppendMeta(body: Record<string, unknown>, count: number): A
     if (hold > 0) meta.hold = hold
     const speed = parseSpeed(m.speed, 'eines angehängten Videos')
     if (speed !== 1) meta.speed = speed
+    if (m.mute === true || m.mute === 1 || m.mute === '1' || m.mute === 'true') meta.mute = true
     return meta
   })
 }

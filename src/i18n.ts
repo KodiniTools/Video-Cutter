@@ -24,6 +24,9 @@ const messages = {
       deleteFailed:
         'Das Video konnte nicht vom Server gelöscht werden. Es wird automatisch entfernt, wenn es eine Weile nicht benutzt wurde.',
       include: 'Beim Zusammenfügen verwenden',
+      mute: 'Stumm',
+      muteHint:
+        'Ton dieses Videos ausschalten: Der Player spielt es ohne Ton, und Zusammenfügen, Vorschau, Schneiden und Herunterladen liefern es ohne seinen Ton. Lässt sich jederzeit wieder einschalten.',
       mergeLimit: 'Es lassen sich höchstens {max} Videos zusammenfügen. Bitte Häkchen entfernen.',
       hint: 'Video anklicken, um es im Editor zu schneiden. „Zusammenfügen“ verbindet alle angehakten Videos in Listenreihenfolge (am Griff ⠿ ziehen oder ↑↓) – Von/Bis sind die Zeiten im fertigen Gesamtvideo (leer = direkt nach dem vorigen Clip bzw. bis zum Clip-Ende). Liegt Von später als das Ende des vorigen Clips, bleibt dessen letztes Bild in der Lücke stehen. „Clip ab“ kürzt den Anfang eines Clips. Zwischen zwei Videos lässt sich ein eigener Übergang wählen. 🗑 löscht das Video sofort vom Server; unbenutzte Videos werden nach einiger Zeit automatisch gelöscht.',
     },
@@ -278,6 +281,10 @@ const messages = {
       mergePreviewHint:
         'Zeigt vor dem Zusammenfügen eine schnelle, kleinere Vorschau des Ergebnisses (mit Übergängen, Musik und Format). Es wird nichts gespeichert.',
       download: 'Herunterladen',
+      downloadMutedHint:
+        'Das Video ist stumm geschaltet: Der Server erstellt eine Fassung ohne Ton.',
+      downloadMutedReady:
+        'Die stumme Fassung ist fertig. Bitte noch einmal auf „Herunterladen“ tippen.',
       discard: 'Verwerfen',
       cancel: 'Abbrechen',
       undo: 'Rückgängig',
@@ -293,6 +300,7 @@ const messages = {
       trimmed: 'gekürzt',
       hold: '+ {sec} Standbild',
       speed: 'Tempo {factor}',
+      muted: 'stumm',
     },
     text: {
       title: 'Text',
@@ -614,6 +622,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keine Videos speichern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       speedUnsupported:
         'Das Server-Backend ist veraltet und kann das Tempo eines Videos noch nicht ändern. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      muteUnsupported:
+        'Das Server-Backend ist veraltet und kann Videos noch nicht stumm schalten. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder „Stumm“ abschalten.',
       previewUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Vorschau des Zusammenfügens erstellen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder direkt zusammenfügen.',
       textUnsupported:
@@ -651,6 +661,9 @@ const messages = {
       deleteFailed:
         'The video could not be deleted from the server. It will be removed automatically after a period of inactivity.',
       include: 'Use when joining',
+      mute: 'Mute',
+      muteHint:
+        'Turn off the sound of this video: the player plays it silently, and joining, preview, cutting and download deliver it without its sound. Can be turned back on at any time.',
       mergeLimit: 'At most {max} videos can be joined. Please untick some.',
       hint: 'Click a video to cut it in the editor. “Join” combines all ticked videos in list order (drag the handle ⠿ or use ↑↓), – From/To are the times in the finished joined video (empty = right after the previous clip or until the clip’s end). If From is later than the end of the previous clip, its last frame is held in the gap. “Clip from” trims the start of a clip. A custom transition can be chosen between two videos. 🗑 deletes the video from the server immediately; unused videos are deleted automatically after a while.',
     },
@@ -898,6 +911,8 @@ const messages = {
       mergePreviewHint:
         'Shows a quick, smaller preview of the result before joining (with transitions, music and format). Nothing is saved.',
       download: 'Download',
+      downloadMutedHint: 'The video is muted: the server creates a version without sound.',
+      downloadMutedReady: 'The muted version is ready. Please tap “Download” once more.',
       discard: 'Discard',
       cancel: 'Cancel',
       undo: 'Undo',
@@ -913,6 +928,7 @@ const messages = {
       trimmed: 'trimmed',
       hold: '+ {sec} still frame',
       speed: 'speed {factor}',
+      muted: 'muted',
     },
     text: {
       title: 'Text',
@@ -1228,6 +1244,8 @@ const messages = {
         'The server backend is outdated and cannot store videos yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       speedUnsupported:
         'The server backend is outdated and cannot change the speed of a video yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      muteUnsupported:
+        'The server backend is outdated and cannot mute videos yet. Please update the backend (deploy/deploy.sh without SKIP_API) or turn off “Mute”.',
       previewUnsupported:
         'The server backend is outdated and cannot create a join preview yet. Please update the backend (deploy/deploy.sh without SKIP_API) or join directly.',
       textUnsupported:
