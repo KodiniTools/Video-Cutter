@@ -6,6 +6,7 @@ import { isTime, MAX_SPEED, MICROS_PER_SECOND, MIN_CLIP_DURATION, MIN_SPEED } fr
 import {
   CLIP_TRANSITIONS,
   FADE_CURVES,
+  type ClipColor,
   type ClipLayout,
   type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
@@ -199,6 +200,13 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
       return 'invalid-settings'
     }
     if (l.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+  }
+  if ((clip.kind === 'video' || clip.kind === 'still') && clip.color !== undefined) {
+    const c = clip.color
+    const part = (v: unknown) => typeof v === 'number' && v >= -1 && v <= 1
+    if (!c || !part(c.brightness) || !part(c.contrast) || !part(c.saturation)) {
+      return 'invalid-settings'
+    }
   }
   if ((clip.kind === 'video' || clip.kind === 'still') && clip.transitionIn !== undefined) {
     const t = clip.transitionIn
@@ -661,6 +669,50 @@ export function normalizeCrop(crop: ClipCrop | null | undefined): ClipCrop | nul
   const cy = round(Math.min(1 - h, Math.max(0, y)))
   if (cx === 0 && cy === 0 && w === 1 && h === 1) return null
   return { x: cx, y: cy, width: w, height: h }
+}
+
+/** Farbkorrektur in gültige Grenzen bringen; alles auf 0 (oder Ungültiges) ergibt `null`. */
+export function normalizeColor(color: ClipColor | null | undefined): ClipColor | null {
+  if (!color) return null
+  const { brightness, contrast, saturation } = color
+  if (![brightness, contrast, saturation].every((v) => Number.isFinite(v))) return null
+  const part = (v: number) => Math.round(Math.min(1, Math.max(-1, v)) * 100) / 100 || 0
+  const next = {
+    brightness: part(brightness),
+    contrast: part(contrast),
+    saturation: part(saturation),
+  }
+  if (next.brightness === 0 && next.contrast === 0 && next.saturation === 0) return null
+  return next
+}
+
+/**
+ * Farbkorrektur eines Video-Clips: Helligkeit, Kontrast und Sättigung, je
+ * −1 … 1. `null` oder alles auf 0 hebt sie auf.
+ */
+export function setClipColor(doc: TimelineDoc, clipId: string, color: ClipColor | null): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const next = normalizeColor(color)
+  const before = normalizeColor(clip.color)
+  if (
+    (next === null && before === null) ||
+    (next !== null &&
+      before !== null &&
+      next.brightness === before.brightness &&
+      next.contrast === before.contrast &&
+      next.saturation === before.saturation)
+  ) {
+    return ok(doc)
+  }
+  const changed: Clip = { ...clip }
+  if (next) changed.color = next
+  else delete changed.color
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
 /** Kleinste Größe eines Clips im Bild (Anteil des Projektformats). */

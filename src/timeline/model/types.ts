@@ -98,11 +98,22 @@ export interface ClipLayout {
   opacity: number
 }
 
+/**
+ * Farbkorrektur eines Video-Clips. Jeder Wert liegt in [−1, 1], 0 lässt das
+ * Bild unverändert. Fehlt sie, ist nichts korrigiert.
+ */
+export interface ClipColor {
+  brightness: number
+  contrast: number
+  saturation: number
+}
+
 export interface VideoClip extends MediaClipBase {
   /** `still` = Standbild (Bild-Asset) mit frei wählbarer Dauer. */
   kind: 'video' | 'still'
   crop?: ClipCrop | null
   layout?: ClipLayout
+  color?: ClipColor
   /** Übergang vom vorigen Clip derselben Spur (oder aus dem Hintergrund). */
   transitionIn?: ClipTransition
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt (Standbild in der Lücke). */

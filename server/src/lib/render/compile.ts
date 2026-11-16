@@ -7,6 +7,7 @@ import {
   docDuration,
   type DocAudioClip,
   type DocAudioTrack,
+  type DocColor,
   type DocOverlayTrack,
   type DocVideoClip,
   type DocVideoTrack,
@@ -120,6 +121,18 @@ function sec(value: number): string {
 
 function num(value: number): string {
   return Number(value.toFixed(6)).toString()
+}
+
+/**
+ * Farbkorrektur als `eq`-Filter. Die Werte −1 … 1 des Editors werden auf
+ * brauchbare Bereiche gelegt: Helligkeit ±0,4, Kontrast 0,4–1,6, Sättigung 0–2.
+ */
+export function colorFilter(c: DocColor): string {
+  return (
+    `eq=brightness=${num(c.brightness * 0.4)}` +
+    `:contrast=${num(1 + c.contrast * 0.6)}` +
+    `:saturation=${num(1 + c.saturation)}`
+  )
 }
 
 /** Ein Stück einer Spur im Abschnitt: Clip oder Lücke, Länge in Bildern. */
@@ -297,6 +310,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           : `setpts=(PTS-STARTPTS)/${num(clip.speed)}`,
         `fps=${fps}`,
         ...(clip.crop ? [buildCropFilter(clip.crop)] : []),
+        ...(clip.color ? [colorFilter(clip.color)] : []),
       ]
       const l = clip.layout
       if (!l) {

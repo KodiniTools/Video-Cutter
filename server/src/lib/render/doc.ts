@@ -79,6 +79,12 @@ export interface DocTransition {
   duration: Time
 }
 
+export interface DocColor {
+  brightness: number
+  contrast: number
+  saturation: number
+}
+
 export interface DocLayout {
   x: number
   y: number
@@ -97,6 +103,8 @@ export interface DocVideoClip extends DocClipBase {
   crop: DocCrop | null
   /** Lage im Bild (Bild-in-Bild): Mitte, Größe (Anteil des Projektformats), Deckkraft. */
   layout?: DocLayout
+  /** Farbkorrektur: Helligkeit, Kontrast, Sättigung, je −1 … 1 (0 = unverändert). */
+  color?: DocColor
   transitionIn?: DocTransition | null
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt. */
   hold?: boolean
@@ -505,6 +513,20 @@ export function parseTimelineDoc(
           const r = c as unknown as DocCrop
           crop = { x: r.x, y: r.y, width: r.width, height: r.height }
         }
+        let color: DocColor | null = null
+        if (rc.color !== undefined && rc.color !== null) {
+          const c = rc.color
+          if (
+            !isObject(c) ||
+            !inRange(c.brightness, -1, 1) ||
+            !inRange(c.contrast, -1, 1) ||
+            !inRange(c.saturation, -1, 1)
+          )
+            return fail(`${cp}.color`, 'Ungültige Farbkorrektur.')
+          // Alles auf 0 ist dasselbe wie keine Korrektur.
+          if (c.brightness !== 0 || c.contrast !== 0 || c.saturation !== 0)
+            color = { brightness: c.brightness, contrast: c.contrast, saturation: c.saturation }
+        }
         let layout: DocLayout | null = null
         if (rc.layout !== undefined && rc.layout !== null) {
           const l = rc.layout
@@ -543,6 +565,7 @@ export function parseTimelineDoc(
           speed: rc.speed,
           crop,
           ...(layout ? { layout } : {}),
+          ...(color ? { color } : {}),
           ...(transitionIn ? { transitionIn } : {}),
           ...(rc.hold === true ? { hold: true } : {}),
         })
