@@ -11,9 +11,11 @@ import {
   type TranslateTarget,
 } from '@/lib/aiApi'
 import { formatTimeMs } from '@/lib/timeFormat'
+import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineAiStore } from '@/stores/timelineAi'
 import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
+import { SILENCE_LEVELS, type SilenceLevel } from '@/timeline/silence'
 
 /**
  * KI-Assistent des Timeline-Editors: Untertitel für den markierten Clip
@@ -22,6 +24,7 @@ import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
  */
 const { t } = useI18n()
 const store = useTimelineStore()
+const pool = useMediaPoolStore()
 const ai = useTimelineAiStore()
 const { status, statusChecked, task, progress, running, textClips, suggestions } = storeToRefs(ai)
 
@@ -125,6 +128,27 @@ async function onSuggest(): Promise<void> {
   }
 }
 
+// --- Stille finden (ohne KI, aus der Wellenform) ------------------------------
+
+const silenceLevel = ref<SilenceLevel>('normal')
+/** Wellenform des Mediums; fehlt sie noch, lässt sich keine Stille finden. */
+const wave = computed(() => {
+  const item = clip.value ? pool.byAsset(clip.value.asset) : undefined
+  const rate = item?.derived?.peaks.rate ?? 0
+  return item?.peaks && rate > 0 ? { peaks: item.peaks, rate } : null
+})
+
+function onSilence(): void {
+  const c = clip.value
+  if (!c || !wave.value || running.value) return
+  error.value = ''
+  const n = ai.suggestSilence(c.id, wave.value.peaks, wave.value.rate, {
+    minLength: minPause.value,
+    level: silenceLevel.value,
+  })
+  notice.value = n === 0 ? t('timeline.ai.noSilence') : ''
+}
+
 function onApplyCuts(): void {
   if (running.value || cutChecked.value.length === 0) return
   error.value = ''
@@ -226,6 +250,31 @@ async function onTranslate(): Promise<void> {
         >
           {{ cutList.length ? t('ai.resuggest') : t('ai.suggest') }}
         </button>
+        <div class="silence">
+          <button
+            type="button"
+            class="action"
+            :disabled="running || !wave"
+            data-testid="timeline-ai-silence"
+            @click="onSilence"
+          >
+            {{ t('timeline.ai.findSilence') }}
+          </button>
+          <select
+            v-model="silenceLevel"
+            :disabled="running"
+            :aria-label="t('timeline.ai.silenceLevel')"
+            :title="t('timeline.ai.silenceLevel')"
+            data-testid="timeline-ai-silence-level"
+          >
+            <option v-for="(_, level) in SILENCE_LEVELS" :key="level" :value="level">
+              {{ t(`timeline.ai.silenceLevels.${level}`) }}
+            </option>
+          </select>
+        </div>
+        <p class="hint">
+          {{ wave ? t('timeline.ai.silenceHint') : t('timeline.ai.silenceWait') }}
+        </p>
         <template v-if="cutList.length">
           <div class="list-head">
             <button
@@ -418,6 +467,21 @@ select {
 }
 .pause input {
   width: 5em;
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: inherit;
+  font: inherit;
+}
+.silence {
+  display: flex;
+  gap: var(--ds-space-2);
+}
+.silence .action {
+  flex: 1;
+}
+.silence select {
   padding: var(--ds-space-1) var(--ds-space-2);
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-md);

@@ -18,6 +18,7 @@ import {
 import { sourceRangeOnTimeline } from '@/timeline/cutSuggestions'
 import { findClip, type OverlayClip, type Time } from '@/timeline/model'
 import { cuesToClips, subtitleStyle } from '@/timeline/subtitles'
+import { findSilences, type SilenceOptions } from '@/timeline/silence'
 import { useTimelineStore } from './timeline'
 
 export type TimelineAiTask = 'transcribe' | 'subtitles' | 'translate' | 'cuts'
@@ -215,6 +216,29 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     })
   }
 
+  /**
+   * Stille im Clip als Schnittvorschläge („Pause“) eintragen – ohne Server,
+   * aus der Wellenform des Mediums. Liefert ihre Anzahl.
+   */
+  function suggestSilence(
+    clipId: string,
+    peaks: Uint8Array | null | undefined,
+    rate: number,
+    options: SilenceOptions,
+  ): number {
+    if (running.value) return 0
+    const clip = findClip(timeline.doc, clipId)?.clip
+    if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) return 0
+    const mediaId = clip.asset
+    suggestions.value = { clipId, mediaId, items: [] }
+    const items = findSilences(peaks, rate, options)
+      .map((r): CutSuggestion => ({ ...r, kind: 'pause', text: '', reason: '' }))
+      .filter((s) => suggestionRange(s) !== null)
+      .map((s) => ({ ...s, id: nextSuggestionId++, checked: true }))
+    suggestions.value = items.length > 0 ? { clipId, mediaId, items } : null
+    return items.length
+  }
+
   function setSuggestionChecked(id: number, checked: boolean): void {
     const current = suggestions.value
     if (!current) return
@@ -302,6 +326,7 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     loadStatus,
     makeSubtitles,
     suggestCuts,
+    suggestSilence,
     suggestionRange,
     setSuggestionChecked,
     setAllSuggestionsChecked,

@@ -776,6 +776,13 @@ const messages = {
           'Ersetzt alle Texte auf nicht gesperrten Spuren durch die Übersetzung. Zeit, Position und Design bleiben. Mit Rückgängig zurückholbar.',
         cutsHint:
           'Sucht im markierten Clip Füllwörter, Versprecher, Wiederholungen und Pausen. Ein Klick auf einen Vorschlag setzt den Abspielkopf dorthin.',
+        findSilence: 'Stille finden',
+        silenceLevel: 'Was als Stille gilt',
+        silenceLevels: { low: 'nur ganz leise', normal: 'normal', high: 'auch Rauschen' },
+        silenceHint:
+          '„Stille finden“ arbeitet ohne KI aus der Wellenform: Pausen ab der oben gewählten Länge werden vorgeschlagen, ein kurzer Rest bleibt vor und nach dem Gesprochenen stehen.',
+        silenceWait: '„Stille finden“ braucht die Wellenform; sie wird noch vorbereitet.',
+        noSilence: 'Keine Stille in dieser Länge gefunden.',
         applyCuts: 'Herausschneiden und Lücken schließen ({n})',
         applyCutsHint:
           'Teilt den Clip an den Rändern der gewählten Bereiche, löscht sie samt verknüpftem Ton und rückt alles Spätere nach. Mit Rückgängig zurückholbar. Tipp: erst schneiden, dann Untertitel erzeugen.',
@@ -1681,6 +1688,13 @@ const messages = {
           'Replaces all texts on unlocked tracks with the translation. Timing, position and design stay. Undo brings them back.',
         cutsHint:
           'Looks for filler words, slips, repetitions and pauses in the selected clip. Click a suggestion to move the playhead there.',
+        findSilence: 'Find silence',
+        silenceLevel: 'What counts as silence',
+        silenceLevels: { low: 'only very quiet', normal: 'normal', high: 'noise too' },
+        silenceHint:
+          '“Find silence” works without AI from the waveform: pauses of at least the length chosen above are suggested, and a short rest stays before and after the speech.',
+        silenceWait: '“Find silence” needs the waveform; it is still being prepared.',
+        noSilence: 'No silence of this length found.',
         applyCuts: 'Cut out and close gaps ({n})',
         applyCutsHint:
           'Splits the clip at the edges of the chosen ranges, deletes them together with the linked sound and moves everything later up. Undo brings them back. Tip: cut first, then create subtitles.',
