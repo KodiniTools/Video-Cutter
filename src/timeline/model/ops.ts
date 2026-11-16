@@ -421,6 +421,40 @@ export function insertOverlayClip(
   return added.ok ? insertClip(added.doc, trackId, clip) : added
 }
 
+/**
+ * Mehrere Clips gemeinsam auf EINE Ebenen-Spur legen (z. B. Untertitel): auf
+ * die oberste entsperrte, die für alle frei ist – sonst entsteht ganz oben
+ * eine neue. Die Clips dürfen sich untereinander nicht überschneiden.
+ */
+export function insertOverlayClips(
+  doc: TimelineDoc,
+  clips: readonly OverlayClip[],
+  trackName: string,
+  trackId: string = createId(),
+): OpResult {
+  if (clips.length === 0) return ok(doc)
+  const free = doc.tracks.find(
+    (t) =>
+      t.kind === 'overlay' &&
+      !t.locked &&
+      clips.every((c) => !overlaps(t.clips, c.start, clipEnd(c))),
+  )
+  let next = doc
+  let target = free?.id
+  if (target === undefined) {
+    const added = addTrack(doc, { kind: 'overlay', name: trackName, id: trackId }, 0)
+    if (!added.ok) return added
+    next = added.doc
+    target = trackId
+  }
+  for (const clip of clips) {
+    const r = insertClip(next, target, clip)
+    if (!r.ok) return r
+    next = r.doc
+  }
+  return ok(next)
+}
+
 export interface MoveTarget {
   start: Time
   /** Zielspur; fehlt = Spur bleibt. Gilt nur für den bewegten Clip, nicht für verknüpfte. */

@@ -299,6 +299,16 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `afade` mit Zeiten im Clip (`clipFadeFilters`), damit eine Blende über
   Abschnittsgrenzen der Vorschau hinweg wie im Export klingt. Beim Teilen
   bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.
+- **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
+  `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
+  „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die
+  bestehenden Aufträge `/api/ai/transcribe` und `/api/ai/subtitles` für das
+  Medium des Clips; die Zeiten der Quelle werden über Beginn, Quell-Beginn
+  und Tempo des Clips auf die Timeline umgerechnet (`cuesToClips`), Texte
+  außerhalb des Clips entfallen. Alle Untertitel landen gemeinsam auf einer
+  Spur (`insertOverlayClips`) und sind ein Rückgängig-Schritt. „Texte
+  übersetzen“ ersetzt alle Texte auf nicht gesperrten Spuren
+  (`/api/ai/translate`). Nur Frontend.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte

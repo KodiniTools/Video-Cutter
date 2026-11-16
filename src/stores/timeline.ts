@@ -10,6 +10,7 @@ import {
   createId,
   insertClip as insertClipOp,
   insertOverlayClip,
+  insertOverlayClips,
   isTime,
   linkClips as linkClipsOp,
   linkGroupIds,
@@ -44,6 +45,7 @@ import {
   type NewTrack,
   type OpError,
   type OpResult,
+  type OverlayClip,
   type SettingsPatch,
   type Time,
   type TimelineDoc,
@@ -300,6 +302,28 @@ export const useTimelineStore = defineStore('timeline', () => {
     select([id])
     return id
   }
+
+  /**
+   * Mehrere Clips (z. B. Untertitel) gemeinsam auf eine Ebenen-Spur legen:
+   * ein Verlaufsschritt.
+   */
+  const addOverlayClips = (clips: readonly OverlayClip[], prefix = 'T') =>
+    apply((d) => insertOverlayClips(d, clips, nextTrackName(d, prefix)))
+
+  /**
+   * Darstellungsdaten mehrerer Clips in einem Verlaufsschritt ändern (z. B.
+   * übersetzte Texte). Clips, die es nicht mehr gibt, werden übergangen.
+   */
+  const updateClipsData = (patches: readonly { id: string; patch: Record<string, unknown> }[]) =>
+    apply((d) => {
+      let next = d
+      for (const { id, patch } of patches) {
+        const r = updateClipDataOp(next, id, patch)
+        if (r.ok) next = r.doc
+        else if (r.error !== 'clip-not-found') return r
+      }
+      return { ok: true, doc: next }
+    })
 
   /** Darstellungsdaten eines Clips auf einer Ebenen-Spur ändern (z. B. Text). */
   const updateClipData = (clipId: string, patch: Record<string, unknown>) =>
@@ -605,6 +629,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     unlinkSelection,
     linkSelection,
     updateClipData,
+    updateClipsData,
+    addOverlayClips,
     setClipSpeed,
     setClipGain,
     setClipFade,
