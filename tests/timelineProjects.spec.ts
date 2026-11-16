@@ -303,9 +303,11 @@ describe('timelineProjects-Store', () => {
     const store = useTimelineProjectStore()
     const timeline = useTimelineStore()
 
-    // Stand der bisherigen App bzw. kaputtes Dokument: nichts ändert sich.
-    fetchProject.mockResolvedValueOnce({ project: summary(), state: { version: 1, items: [] } })
-    await expect(store.open('p1')).rejects.toThrow(TIMELINE_PROJECT_INVALID)
+    // Kein Projektstand bzw. kaputtes Dokument: nichts ändert sich.
+    for (const state of [{ nope: true }, { ...saved, doc: { ...saved.doc, tracks: 'x' } }]) {
+      fetchProject.mockResolvedValueOnce({ project: summary(), state })
+      await expect(store.open('p1')).rejects.toThrow(TIMELINE_PROJECT_INVALID)
+    }
     expect(timeline.doc).toBe(before)
     expect(store.busy).toBeNull()
 
@@ -319,7 +321,7 @@ describe('timelineProjects-Store', () => {
     expect(store.dirty).toBe(true)
   })
 
-  it('listet nur Timeline-Projekte und löscht', async () => {
+  it('listet auch Projekte der bisherigen App und löscht', async () => {
     const store = useTimelineProjectStore()
     listProjects.mockResolvedValue([
       summary({ id: 'a' }),
@@ -327,9 +329,66 @@ describe('timelineProjects-Store', () => {
       summary({ id: 'c' }),
     ])
     await store.refresh()
-    expect(store.projects.map((p) => p.id)).toEqual(['a', 'c'])
+    expect(store.projects.map((p) => [p.id, p.kind])).toEqual([
+      ['a', 'timeline'],
+      ['b', 'classic'],
+      ['c', 'timeline'],
+    ])
     await store.remove('a')
     expect(deleteProject).toHaveBeenCalledWith('a')
-    expect(store.projects.map((p) => p.id)).toEqual(['c'])
+    expect(store.projects.map((p) => p.id)).toEqual(['b', 'c'])
+  })
+
+  it('öffnet ein Projekt der bisherigen App umgewandelt, als neues Projekt', async () => {
+    const store = useTimelineProjectStore()
+    const timeline = useTimelineStore()
+    const pool = useMediaPoolStore()
+    const hash = hashOfName('foto.png')
+    fetchProject.mockResolvedValue({
+      project: summary({ id: 'alt', kind: 'classic', name: 'Urlaub' }),
+      state: {
+        version: 1,
+        items: [
+          {
+            media: 'm1',
+            name: 'a.mp4',
+            start: 1,
+            end: 3,
+            include: true,
+            texts: [{ text: 'Hallo', start: 1, end: 2 }],
+            graphics: [{ kind: 'image', image: 'img1', start: 1, end: 3 }],
+          },
+          { media: 'weg', name: 'b.mp4', start: 0, end: null, include: true },
+        ],
+        music: { asset: 'c'.repeat(64), name: 'musik.mp3', type: 'audio/mpeg' },
+        anim: { animation: 'none' },
+        images: { img1: { asset: hash, name: 'foto.png', type: 'image/png' } },
+      },
+    })
+    openProjectMedia.mockResolvedValue({ m1: media('live', 'a.mp4') })
+
+    const r = await store.open('alt')
+    expect(r).toEqual({ missing: 1, converted: true, skipped: ['music'], name: 'Urlaub' })
+    expect(Object.keys(timeline.doc.assets)).toEqual(['live'])
+    expect(timeline.doc.tracks.map((t) => t.kind).sort()).toEqual([
+      'audio',
+      'overlay',
+      'overlay',
+      'video',
+    ])
+    expect(pool.items.map((i) => i.media?.id)).toEqual(['live'])
+    expect(imageFiles.get(usedImageIds(timeline.doc)[0])?.name).toBe('foto.png')
+    // Kein geöffnetes Projekt: Speichern legt ein neues an, das alte bleibt.
+    expect(store.current).toBeNull()
+    expect(store.suggestedName).toBe('Urlaub')
+    expect(store.dirty).toBe(true)
+    saveProject.mockResolvedValue({ project: summary({ id: 'neu' }), missingAssets: [] })
+    await store.save('Urlaub')
+    const req = saveProject.mock.calls[0][0] as SaveRequest
+    expect(req.id).toBeUndefined()
+    expect(req.media).toEqual(['live'])
+    expect(req.assets.map((a) => a.hash)).toEqual([hash])
+    expect(store.current?.id).toBe('neu')
+    expect(store.suggestedName).toBe('')
   })
 })
