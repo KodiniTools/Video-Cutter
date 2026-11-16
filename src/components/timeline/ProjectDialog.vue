@@ -38,6 +38,7 @@ const canSave = computed(() => hasContent.value && !locked.value && name.value.t
 /** Vorschlag: Name des geöffneten Projekts, sonst der des ersten Videos ohne Endung. */
 function suggestName(): string {
   if (current.value) return current.value.name
+  if (store.suggestedName) return store.suggestedName
   const first = Object.values(timeline.doc.assets)[0]?.name ?? ''
   return first.replace(/\.[^.]+$/, '')
 }
@@ -108,9 +109,21 @@ async function doOpen(id: string): Promise<void> {
   clearMessages()
   try {
     const r = await store.open(id)
-    notice.value = r.missing
-      ? t('projects.openedMissing', { n: r.missing })
-      : t('projects.opened', { name: current.value?.name ?? '' })
+    const parts = [
+      r.missing
+        ? t('projects.openedMissing', { n: r.missing })
+        : t('projects.opened', { name: r.name }),
+    ]
+    if (r.converted) {
+      // Umgewandelt aus der bisherigen App: gilt als neues Projekt.
+      name.value = r.name
+      parts.push(t('timelineProjects.converted'))
+      if (r.skipped.length) {
+        const list = r.skipped.map((k) => t(`timelineProjects.skipped.${k}`)).join(', ')
+        parts.push(t('timelineProjects.notConverted', { list }))
+      }
+    }
+    notice.value = parts.join(' ')
   } catch (e) {
     error.value = messageOf(e)
   }
@@ -251,7 +264,16 @@ function formatSize(bytes: number): string {
           data-testid="project-row"
         >
           <div class="row-main">
-            <span class="row-name" :title="p.name">{{ p.name }}</span>
+            <span class="row-name" :title="p.name">
+              {{ p.name }}
+              <span
+                v-if="p.kind === 'classic'"
+                class="badge"
+                data-testid="project-classic"
+                :title="t('timelineProjects.classicTitle')"
+                >{{ t('timelineProjects.classic') }}</span
+              >
+            </span>
             <small class="row-meta">
               {{ formatDate(p.updatedAt) }} ·
               {{ t('projects.videos', { n: p.videoCount }, p.videoCount) }} ·
@@ -289,6 +311,7 @@ function formatSize(bytes: number): string {
               {{ t('projects.open') }}
             </button>
             <button
+              v-if="p.kind === 'timeline'"
               class="btn tiny ghost danger"
               type="button"
               :disabled="locked"
@@ -457,6 +480,15 @@ function formatSize(bytes: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.badge {
+  margin-left: var(--ds-space-2);
+  padding: 1px 6px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-regular, 400);
 }
 .row-meta {
   font-size: var(--ds-text-xs);

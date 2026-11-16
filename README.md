@@ -292,6 +292,14 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `kind` (`classic` | `timeline`); jeder Editor zeigt nur seine eigenen. Beim
   Öffnen meldet der Server die Videos neu an (neue IDs), der Editor schreibt
   das Dokument darauf um; was fehlt, wird ausgelassen und gemeldet.
+  Projekte der bisherigen App stehen mit in der Liste („bisheriger Editor“) und
+  werden beim Öffnen umgewandelt (`src/timeline/convertClassic.ts`): verwendete
+  Videos in Listenreihenfolge auf V1 (Von/Bis, Tempo, „Von im Gesamtvideo“ wie
+  beim Zusammenfügen), Ton verknüpft auf A1 (stumme ohne Ton-Clip), Texte und
+  Grafiken je Video als Clips auf Ebenen-Spuren mit umgerechneten Zeiten. Das
+  gespeicherte Projekt bleibt unverändert; das Ergebnis ist ein neues,
+  ungespeichertes Projekt. Noch nicht übernommen und im Dialog genannt:
+  Übergänge, Hintergrundmusik, Ton-Blende, Standbilder in Lücken, Zuschnitt.
 - **Positionsrahmen** (`PositionFrame.vue`, `src/timeline/positionFrame.ts`):
   Der markierte Text, die Form oder das Bild hat im Vorschaubild einen Rahmen
   zum Ziehen (mit Umschalttaste fein) bzw. Verschieben mit den Pfeiltasten

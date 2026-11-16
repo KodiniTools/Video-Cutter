@@ -15,12 +15,17 @@ import {
   type AssetRef,
   type ProjectSummary,
 } from '@/lib/projectApi'
+import type { MediaView } from '@/lib/mediaApi'
+import { parseProjectState } from '@/lib/projectState'
+import { convertClassicProject, type ClassicSkip } from '@/timeline/convertClassic'
 import {
   buildTimelineProject,
+  isTimelineProject,
   parseTimelineProject,
   rebindProject,
   usedImageIds,
   type ProjectImageRef,
+  type TimelineProjectState,
 } from '@/timeline/projectFile'
 import type { TimelineDoc } from '@/timeline/model'
 import { useMediaPoolStore } from './mediaPool'
@@ -38,6 +43,16 @@ export const TIMELINE_PROJECT_BUSY = 'TIMELINE_PROJECT_BUSY'
 /** Grenzen des Servers je Projekt. */
 export const MAX_PROJECT_MEDIA = 50
 export const MAX_PROJECT_IMAGES = 200
+
+export interface TimelineOpenResult {
+  /** So viele Videos oder Bilder ließen sich nicht wiederherstellen. */
+  missing: number
+  /** Projekt der bisherigen App: wurde umgewandelt und ist noch nicht gespeichert. */
+  converted: boolean
+  /** Was die Umwandlung auslassen musste. */
+  skipped: ClassicSkip[]
+  name: string
+}
 
 export interface TimelineProjectProgress {
   key: string
@@ -60,6 +75,8 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
   const loaded = ref(false)
   /** Aktuell geöffnetes bzw. zuletzt gespeichertes Projekt. */
   const current = ref<{ id: string; name: string; savedAt: number } | null>(null)
+  /** Namensvorschlag für ein umgewandeltes, noch nicht gespeichertes Projekt. */
+  const suggestedName = ref('')
   const busy = ref<'save' | 'open' | 'delete' | null>(null)
   const progress = ref<TimelineProjectProgress | null>(null)
   /** Das Dokument, wie es zuletzt gespeichert oder geöffnet wurde. */
@@ -74,7 +91,8 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
   const dirty = computed(() => hasContent.value && timeline.doc !== savedDoc.value)
 
   async function refresh(): Promise<void> {
-    projects.value = (await listProjects()).filter((p) => p.kind === 'timeline')
+    // Auch Projekte der bisherigen App: Sie lassen sich hier umgewandelt öffnen.
+    projects.value = await listProjects()
     loaded.value = true
   }
 
@@ -151,6 +169,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
       }
       current.value = { id: result.project.id, name: result.project.name, savedAt: Date.now() }
       savedDoc.value = doc
+      suggestedName.value = ''
       await refresh().catch(() => {})
       return result.project
     } finally {
@@ -160,25 +179,44 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
   }
 
   /**
-   * Öffnet ein Projekt und ersetzt die aktuelle Bearbeitung. Liefert, wie viele
-   * Videos oder Bilder nicht wiederhergestellt werden konnten.
+   * Öffnet ein Projekt und ersetzt die aktuelle Bearbeitung. Ein Projekt der
+   * bisherigen App wird dabei umgewandelt (das gespeicherte bleibt, wie es ist)
+   * und gilt als neues, noch nicht gespeichertes Projekt.
    */
-  async function open(id: string): Promise<{ missing: number }> {
+  async function open(id: string): Promise<TimelineOpenResult> {
     if (busy.value) throw new Error(TIMELINE_PROJECT_BUSY)
     busy.value = 'open'
     progress.value = { key: 'timelineProjects.progress.opening' }
     try {
       const { project, state: raw } = await fetchProject(id)
-      let state
+      const converted = !isTimelineProject(raw)
+      let state: TimelineProjectState
+      let media: Record<string, MediaView>
+      let skipped: ClassicSkip[] = []
+      let missing = 0
       try {
-        state = parseTimelineProject(raw)
-      } catch {
+        if (converted) {
+          const classic = parseProjectState(raw)
+          const conversion = convertClassicProject(classic, await openProjectMedia(id))
+          state = conversion.state
+          skipped = conversion.skipped
+          missing = conversion.missingMedia
+          // Das umgewandelte Dokument nennt die Videos schon bei ihren neuen IDs.
+          media = conversion.media
+        } else {
+          state = parseTimelineProject(raw)
+          media = await openProjectMedia(id)
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message === PROJECTS_UNSUPPORTED) throw e
         throw new Error(TIMELINE_PROJECT_INVALID)
       }
-      const media = await openProjectMedia(id)
 
       const images = new Map<string, string>()
-      const refs = Object.entries(state.images)
+      const refs = usedImageIds(state.doc).flatMap((imageId) => {
+        const ref = state.images[imageId]
+        return ref ? [[imageId, ref] as const] : []
+      })
       for (let i = 0; i < refs.length; i++) {
         const [imageId, ref] = refs[i]
         progress.value = {
@@ -197,13 +235,21 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
 
       // --- Ab hier synchron übernehmen ---
       const rebound = rebindProject(state.doc, media, images)
+      missing += rebound.missing
       timeline.playing = false
       if (timeline.load(rebound.doc).length > 0) throw new Error(TIMELINE_PROJECT_INVALID)
       pool.replaceAll(rebound.media)
-      current.value = { id: project.id, name: project.name, savedAt: project.updatedAt }
-      // Fehlte etwas, weicht das Dokument vom gespeicherten Stand ab.
-      savedDoc.value = rebound.missing > 0 ? null : timeline.doc
-      return { missing: rebound.missing }
+      if (converted) {
+        current.value = null
+        savedDoc.value = null
+        suggestedName.value = project.name
+      } else {
+        suggestedName.value = ''
+        current.value = { id: project.id, name: project.name, savedAt: project.updatedAt }
+        // Fehlte etwas, weicht das Dokument vom gespeicherten Stand ab.
+        savedDoc.value = missing > 0 ? null : timeline.doc
+      }
+      return { missing, converted, skipped, name: project.name }
     } finally {
       busy.value = null
       progress.value = null
@@ -217,6 +263,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     pool.replaceAll([])
     current.value = null
     savedDoc.value = null
+    suggestedName.value = ''
   }
 
   async function remove(id: string): Promise<void> {
@@ -238,6 +285,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     projects,
     loaded,
     current,
+    suggestedName,
     busy,
     progress,
     hasContent,

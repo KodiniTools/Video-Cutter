@@ -788,6 +788,19 @@ const messages = {
         'Mindestens ein Video liegt nicht mehr auf dem Server (nach längerer Pause aufgeräumt). Bitte das Video erneut hochladen, die Clips neu anlegen und dann speichern.',
       tooMany: 'Zu viele Dateien: Ein Projekt fasst höchstens 50 Videos und 200 Bilder.',
       invalid: 'Dieses Projekt lässt sich im neuen Editor nicht öffnen.',
+      classic: 'bisheriger Editor',
+      classicTitle:
+        'Projekt der bisherigen App. Es wird beim Öffnen umgewandelt; das gespeicherte Projekt bleibt unverändert.',
+      converted:
+        'Es stammt aus dem bisherigen Editor und wurde umgewandelt. Speichere es hier als neues Projekt; das ursprüngliche bleibt unverändert.',
+      notConverted: 'Noch nicht übernommen: {list}.',
+      skipped: {
+        transitions: 'Übergänge zwischen den Videos',
+        music: 'Hintergrundmusik',
+        audioFade: 'Ton ein-/ausblenden',
+        holds: 'Standbilder in Lücken (die Lücken bleiben leer)',
+        crop: 'Zuschnitt',
+      },
       busy: 'Bitte warten …',
       outdated:
         'Das Server-Backend ist veraltet und kennt Projekte des neuen Editors noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
@@ -1574,6 +1587,19 @@ const messages = {
         'At least one video is no longer on the server (cleaned up after a longer break). Please upload it again, recreate its clips and then save.',
       tooMany: 'Too many files: a project holds at most 50 videos and 200 images.',
       invalid: 'This project cannot be opened in the new editor.',
+      classic: 'previous editor',
+      classicTitle:
+        'Project of the previous app. It is converted when opened; the saved project stays unchanged.',
+      converted:
+        'It comes from the previous editor and was converted. Save it here as a new project; the original stays unchanged.',
+      notConverted: 'Not carried over yet: {list}.',
+      skipped: {
+        transitions: 'transitions between videos',
+        music: 'background music',
+        audioFade: 'audio fade in/out',
+        holds: 'still frames in gaps (the gaps stay empty)',
+        crop: 'crop',
+      },
       busy: 'Please wait …',
       outdated:
         'The server backend is outdated and does not support projects of the new editor yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
