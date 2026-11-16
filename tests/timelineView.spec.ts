@@ -95,22 +95,159 @@ describe('Timeline-Ansicht', () => {
     wrapper.unmount()
   })
 
-  it('markiert Clips: Klick ersetzt, Strg-Klick ergänzt, Klick auf die leere Spur hebt auf', async () => {
+  it('markiert Clips samt verknüpftem Ton: Klick ersetzt, Strg-Klick ergänzt, leere Spur hebt auf', async () => {
     const store = fill()
     const wrapper = mountView()
     await nextTick()
     const [first, second] = wrapper.findAll('.track')[0].findAll('.clip')
+    const firstAudio = wrapper.findAll('.track')[1].findAll('.clip')[0]
     first.element.dispatchEvent(pointer('pointerdown'))
-    expect(store.selection).toEqual([first.attributes('data-clip')])
+    window.dispatchEvent(pointer('pointerup'))
+    expect(store.selection).toEqual([
+      first.attributes('data-clip'),
+      firstAudio.attributes('data-clip'),
+    ])
+    second.element.dispatchEvent(pointer('pointerdown', { ctrlKey: true }))
+    expect(store.selection).toHaveLength(4)
+    await nextTick()
+    expect(wrapper.findAll('.clip.selected')).toHaveLength(4)
     second.element.dispatchEvent(pointer('pointerdown', { ctrlKey: true }))
     expect(store.selection).toHaveLength(2)
-    await nextTick()
-    expect(wrapper.findAll('.clip.selected')).toHaveLength(2)
-    second.element.dispatchEvent(pointer('pointerdown', { ctrlKey: true }))
-    expect(store.selection).toEqual([first.attributes('data-clip')])
 
     wrapper.find('.lane').element.dispatchEvent(pointer('pointerdown'))
     expect(store.selection).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('zieht einen Clip samt Ton, rastet ein und zählt als ein Schritt', async () => {
+    const store = fill()
+    const wrapper = mountView()
+    await nextTick()
+    const starts = () => store.doc.tracks.map((tr) => tr.clips.map((c) => c.start))
+    const second = wrapper.findAll('.track')[0].findAll('.clip')[1]
+    second.element.dispatchEvent(pointer('pointerdown', { clientX: 1100 }))
+    // Unter der Schwelle: nur markiert, nichts bewegt.
+    window.dispatchEvent(pointer('pointermove', { clientX: 1102 }))
+    expect(starts()).toEqual([
+      [0, s(10)],
+      [0, s(10)],
+    ])
+    window.dispatchEvent(pointer('pointermove', { clientX: 1400 }))
+    window.dispatchEvent(pointer('pointermove', { clientX: 1612 }))
+    // +512 px = 5,12 s bei 100 px/s, auf dem 25-fps-Raster.
+    expect(starts()).toEqual([
+      [0, s(15.12)],
+      [0, s(15.12)],
+    ])
+    // Zurück in die Nähe des ersten Clips: rastet an dessen Ende ein; belegte Stelle wird abgelehnt.
+    window.dispatchEvent(pointer('pointermove', { clientX: 1105 }))
+    expect(starts()[0]).toEqual([0, s(10)])
+    window.dispatchEvent(pointer('pointermove', { clientX: 800 }))
+    expect(starts()[0]).toEqual([0, s(10)])
+    window.dispatchEvent(pointer('pointermove', { clientX: 1300 }))
+    window.dispatchEvent(pointer('pointerup'))
+    expect(starts()[0]).toEqual([0, s(12)])
+    store.undo()
+    expect(starts()).toEqual([
+      [0, s(10)],
+      [0, s(10)],
+    ])
+    wrapper.unmount()
+  })
+
+  it('trimmt an den Griffen bis zu den Grenzen von Quelle und Nachbarn', async () => {
+    const store = fill()
+    const wrapper = mountView()
+    await nextTick()
+    const video = () => store.doc.tracks[0].clips.map((c) => [c.start, c.duration])
+    const first = wrapper.findAll('.track')[0].findAll('.clip')[0]
+    first.get('.handle.end').element.dispatchEvent(pointer('pointerdown', { clientX: 1000 }))
+    window.dispatchEvent(pointer('pointermove', { clientX: 700 }))
+    expect(video()[0]).toEqual([0, s(7)])
+    // Über die Quelle hinaus (10 s) bzw. in den Nachbarn hinein geht es nicht.
+    window.dispatchEvent(pointer('pointermove', { clientX: 1500 }))
+    expect(video()[0]).toEqual([0, s(10)])
+    window.dispatchEvent(pointer('pointermove', { clientX: 600 }))
+    window.dispatchEvent(pointer('pointerup'))
+    expect(video()[0]).toEqual([0, s(6)])
+    // Der verknüpfte Ton bleibt unberührt (versetzte Schnitte möglich).
+    expect(store.doc.tracks[1].clips[0].duration).toBe(s(10))
+
+    first.get('.handle.start').element.dispatchEvent(pointer('pointerdown', { clientX: 0 }))
+    window.dispatchEvent(pointer('pointermove', { clientX: 200 }))
+    window.dispatchEvent(pointer('pointerup'))
+    expect(video()[0]).toEqual([s(2), s(4)])
+    expect((store.doc.tracks[0].clips[0] as { sourceIn: number }).sourceIn).toBe(s(2))
+    store.undo()
+    store.undo()
+    expect(video()[0]).toEqual([0, s(10)])
+    wrapper.unmount()
+  })
+
+  it('teilt und löscht per Knopf und Tastatur, Esc bricht das Ziehen ab', async () => {
+    const store = fill()
+    const wrapper = mountView()
+    await nextTick()
+    const count = () => store.doc.tracks.map((tr) => tr.clips.length)
+    const key = (k: string, init: KeyboardEventInit = {}) =>
+      wrapper.element.dispatchEvent(
+        new KeyboardEvent('keydown', { key: k, bubbles: true, ...init }),
+      )
+
+    // Ohne Auswahl teilt „Teilen“ alles unter dem Abspielkopf.
+    expect(wrapper.get('[data-testid=timeline-split]').attributes('disabled')).toBeDefined()
+    store.seek(s(4))
+    await nextTick()
+    await wrapper.get('[data-testid=timeline-split]').trigger('click')
+    expect(count()).toEqual([3, 3])
+    key('z', { ctrlKey: true })
+    expect(count()).toEqual([2, 2])
+    key('s')
+    expect(count()).toEqual([3, 3])
+
+    // Erstes Stück markieren und mit Lücke löschen, dann mit Nachrücken.
+    const first = wrapper.findAll('.track')[0].findAll('.clip')[0]
+    first.element.dispatchEvent(pointer('pointerdown'))
+    window.dispatchEvent(pointer('pointerup'))
+    key('Delete')
+    expect(store.doc.tracks[0].clips.map((c) => c.start)).toEqual([s(4), s(10)])
+    key('z', { ctrlKey: true })
+    store.selectClip(store.doc.tracks[0].clips[0].id)
+    await nextTick()
+    await wrapper.get('[data-testid=timeline-ripple-delete]').trigger('click')
+    expect(store.doc.tracks.map((tr) => tr.clips.map((c) => c.start))).toEqual([
+      [0, s(6)],
+      [0, s(6)],
+    ])
+
+    // Abspielkopf bildweise, Anfang/Ende.
+    key('End')
+    expect(store.playhead).toBe(s(16))
+    key('ArrowLeft')
+    expect(store.playhead).toBe(s(15.96))
+    key('ArrowRight', { shiftKey: true })
+    expect(store.playhead).toBe(s(16.96))
+    key('Home')
+    expect(store.playhead).toBe(0)
+
+    // Esc während des Ziehens stellt den Stand vom Beginn wieder her.
+    const last = wrapper.findAll('.track')[0].findAll('.clip')[1]
+    last.element.dispatchEvent(pointer('pointerdown', { clientX: 700 }))
+    window.dispatchEvent(pointer('pointermove', { clientX: 1200 }))
+    expect(store.doc.tracks[0].clips[1].start).toBe(s(11))
+    const undoable = store.canUndo
+    key('Escape')
+    expect(store.doc.tracks[0].clips[1].start).toBe(s(6))
+    window.dispatchEvent(pointer('pointermove', { clientX: 1300 }))
+    expect(store.doc.tracks[0].clips[1].start).toBe(s(6))
+    expect(store.canUndo).toBe(undoable)
+
+    // Ohne Clip unter dem Abspielkopf: Hinweis statt Wirkung.
+    store.select([])
+    store.seek(s(30))
+    key('s')
+    await nextTick()
+    expect(wrapper.text()).toContain('Unter dem Abspielkopf liegt kein Clip')
     wrapper.unmount()
   })
 
@@ -139,7 +276,7 @@ describe('Timeline-Ansicht', () => {
     expect(ctrl.defaultPrevented).toBe(true)
 
     // jsdom misst keine Breite -> Standard 800 px, davon 96 px Spurnamen.
-    await wrapper.get('button.wide').trigger('click')
+    await wrapper.get('[data-testid=timeline-fit]').trigger('click')
     expect(store.zoom).toBeCloseTo(((800 - 96) * 0.95) / 20, 5)
     wrapper.unmount()
   })

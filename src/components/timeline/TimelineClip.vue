@@ -14,11 +14,16 @@ const props = defineProps<{
   /** Höhe der Spur in px. */
   height: number
   selected: boolean
+  /** Spur gesperrt: keine Griffe zum Trimmen. */
+  locked?: boolean
 }>()
 
+/** Was mit dem Zeiger gegriffen wurde: der Clip selbst oder einer seiner Ränder. */
+export type ClipGrab = 'move' | 'start' | 'end'
+
 const emit = defineEmits<{
-  /** `toggle`: zur Auswahl hinzufügen/entfernen (Strg/Shift/Cmd gedrückt). */
-  (e: 'select', id: string, toggle: boolean): void
+  /** Zeiger auf dem Clip gedrückt; Auswahl und Ziehen übernimmt die Timeline. */
+  (e: 'grab', id: string, mode: ClipGrab, event: PointerEvent): void
 }>()
 
 const pool = useMediaPoolStore()
@@ -61,8 +66,9 @@ const peaks = computed(() => {
   return clipPeaks(item.value?.peaks, rate, clip.sourceIn, clip.duration, clip.speed)
 })
 
-function onPointerDown(event: PointerEvent): void {
-  emit('select', props.clip.id, event.ctrlKey || event.metaKey || event.shiftKey)
+function grab(mode: ClipGrab, event: PointerEvent): void {
+  if (event.button !== 0) return
+  emit('grab', props.clip.id, mode, event)
 }
 </script>
 
@@ -74,13 +80,17 @@ function onPointerDown(event: PointerEvent): void {
     :data-clip="clip.id"
     :style="{ left: `${left}px`, width: `${width}px` }"
     :title="name"
-    @pointerdown.stop="onPointerDown"
+    @pointerdown.stop="grab('move', $event)"
   >
     <div v-if="thumbs.length" class="thumbs" aria-hidden="true">
       <span v-for="t in thumbs" :key="t.key" class="thumb" :style="t.style"></span>
     </div>
     <div v-if="peaks && peaks.length" class="wave"><WaveformCanvas :peaks="peaks" /></div>
     <span v-if="name" class="label">{{ name }}</span>
+    <template v-if="!locked">
+      <span class="handle start" @pointerdown.stop="grab('start', $event)"></span>
+      <span class="handle end" @pointerdown.stop="grab('end', $event)"></span>
+    </template>
   </div>
 </template>
 
@@ -93,8 +103,28 @@ function onPointerDown(event: PointerEvent): void {
   border: 1px solid var(--ds-border-strong);
   border-radius: var(--ds-radius-sm);
   background: var(--ds-surface-3);
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
+  touch-action: none;
+}
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 7px;
+  cursor: ew-resize;
+}
+.handle.start {
+  left: 0;
+}
+.handle.end {
+  right: 0;
+}
+.clip.selected .handle,
+.handle:hover {
+  background: var(--ds-accent);
+  opacity: 0.85;
 }
 .clip[data-kind='audio'] {
   background: var(--ds-accent-soft);

@@ -335,7 +335,7 @@ describe('removeClip', () => {
     ])
   })
 
-  it('löscht verknüpfte Clips mit; Ripple wirkt je Spur', () => {
+  it('löscht verknüpfte Clips mit; Ripple verschiebt alle Spuren gleich', () => {
     let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 0, 2, { linkGroup: 'g' })))
     doc = unwrap(insertClip(doc, 'A1', audio('a', 0, 2, { linkGroup: 'g' })))
     doc = unwrap(insertClip(doc, 'V1', video('v2', 2, 2)))
@@ -345,6 +345,36 @@ describe('removeClip', () => {
     expect(starts(out, 'A1')).toEqual([['a2', s(1), s(2)]])
     const single = unwrap(removeClip(doc, 'v', { linked: false }))
     expect(starts(single, 'A1')).toHaveLength(2)
+  })
+
+  it('hält beim Ripple spätere Bild-/Ton-Paare zusammen (versetzter Schnitt)', () => {
+    // Bild vorn gekürzt (1–4 s), Ton ungekürzt (0–4 s); dahinter ein Paar ab 4 s.
+    let doc = unwrap(insertClip(baseDoc(), 'V1', video('v', 1, 3, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a', 0, 4, { linkGroup: 'g' })))
+    doc = unwrap(insertClip(doc, 'V1', video('v2', 4, 2, { linkGroup: 'h' })))
+    doc = unwrap(insertClip(doc, 'A1', audio('a2', 4, 2, { linkGroup: 'h' })))
+    const out = unwrap(removeClip(doc, 'v', { ripple: true }))
+    expect(starts(out, 'V1')).toEqual([['v2', 0, s(2)]])
+    expect(starts(out, 'A1')).toEqual([['a2', 0, s(2)]])
+
+    // Liegt auf einer Spur davor noch ein Clip, rückt alles nur so weit wie dort Platz ist.
+    const blocked = unwrap(insertClip(doc, 'V1', video('vor', 0, 0.5)))
+    const out2 = unwrap(removeClip(blocked, 'v', { ripple: true }))
+    expect(starts(out2, 'V1')).toEqual([
+      ['vor', 0, s(0.5)],
+      ['v2', s(0.5), s(2)],
+    ])
+    expect(starts(out2, 'A1')).toEqual([['a2', s(0.5), s(2)]])
+    expect(validateDoc(out2)).toEqual([])
+
+    // Gesperrte Spuren bleiben stehen.
+    let lockedDoc = unwrap(insertClip(baseDoc(), 'V1', video('x', 8, 1)))
+    lockedDoc = unwrap(insertClip(lockedDoc, 'A1', audio('a', 0, 4)))
+    lockedDoc = unwrap(insertClip(lockedDoc, 'A1', audio('a2', 4, 2)))
+    lockedDoc = unwrap(updateTrack(lockedDoc, 'V1', { locked: true }))
+    const out3 = unwrap(removeClip(lockedDoc, 'a', { ripple: true }))
+    expect(starts(out3, 'V1')).toEqual([['x', s(8), s(1)]])
+    expect(starts(out3, 'A1')).toEqual([['a2', 0, s(2)]])
   })
 
   it('lehnt gesperrte Spuren und unbekannte Clips ab', () => {

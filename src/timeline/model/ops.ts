@@ -94,6 +94,12 @@ function linkedClips(doc: TimelineDoc, loc: ClipLocation, linked: boolean): Clip
   return out
 }
 
+/** IDs des Clips und aller mit ihm verknüpften Clips (leer, wenn es ihn nicht gibt). */
+export function linkGroupIds(doc: TimelineDoc, clipId: string): string[] {
+  const loc = findClip(doc, clipId)
+  return loc ? linkedClips(doc, loc, true).map((m) => m.clip.id) : []
+}
+
 function hasId(doc: TimelineDoc, id: string): boolean {
   return (
     doc.tracks.some((t) => t.id === id || t.clips.some((c) => c.id === id)) ||
@@ -330,6 +336,38 @@ export function trimClip(
 }
 
 /**
+ * Erlaubter Bereich für einen Rand beim Trimmen: begrenzt durch die Nachbarn
+ * auf der Spur, die Mindestlänge und (bei Video/Ton) die Länge der Quelle.
+ * `null`, wenn es den Clip nicht gibt.
+ */
+export function trimRange(
+  doc: TimelineDoc,
+  clipId: string,
+  edge: 'start' | 'end',
+): { min: Time; max: Time } | null {
+  const loc = findClip(doc, clipId)
+  if (!loc) return null
+  const clip = loc.clip
+  const end = clipEnd(clip)
+  const others = loc.track.clips.filter((c) => c.id !== clipId)
+  const media = clip.kind === 'video' || clip.kind === 'audio' ? clip : null
+  if (edge === 'start') {
+    let min = 0
+    for (const c of others) if (clipEnd(c) <= clip.start) min = Math.max(min, clipEnd(c))
+    // Weiter nach links als bis zum Anfang der Quelle geht es nicht.
+    if (media) min = Math.max(min, clip.start - Math.floor(media.sourceIn / media.speed))
+    return { min, max: Math.max(min, end - MIN_CLIP_DURATION) }
+  }
+  let max = Number.MAX_SAFE_INTEGER
+  for (const c of others) if (c.start >= end) max = Math.min(max, c.start)
+  const limit = sourceLimit(doc, clip)
+  if (media && limit !== null)
+    max = Math.min(max, clip.start + Math.floor((limit - media.sourceIn) / media.speed))
+  const min = clip.start + MIN_CLIP_DURATION
+  return { min, max: Math.max(min, max) }
+}
+
+/**
  * Clip an der Zeit `at` teilen. Verknüpfte Clips, die `at` ebenfalls
  * überdecken, werden mitgeteilt; ihre rechten Hälften bilden eine neue Gruppe.
  */
@@ -371,8 +409,10 @@ export function splitClip(
 }
 
 /**
- * Clip löschen (samt verknüpften Clips, abschaltbar). Mit `ripple` rücken die
- * späteren Clips derselben Spur um die gelöschte Länge nach vorn.
+ * Clip löschen (samt verknüpften Clips, abschaltbar). Mit `ripple` rücken alle
+ * späteren Clips nach vorn – auf allen nicht gesperrten Spuren um denselben
+ * Betrag, damit Bild und Ton zusammenbleiben. Der Betrag ist die Länge des
+ * gelöschten Bereichs, höchstens aber so viel, wie auf jeder Spur frei ist.
  */
 export function removeClip(
   doc: TimelineDoc,
@@ -383,22 +423,39 @@ export function removeClip(
   if (!loc) return fail('clip-not-found')
   const members = linkedClips(doc, loc, opts.linked ?? true)
   if (members.some((m) => m.track.locked)) return fail('track-locked')
-  let next = doc
-  const touched = new Set(members.map((m) => m.trackIndex))
-  for (const trackIndex of touched) {
-    const removed = members.filter((m) => m.trackIndex === trackIndex).map((m) => m.clip)
-    const removedIds = new Set(removed.map((c) => c.id))
-    const kept = doc.tracks[trackIndex].clips.filter((c) => !removedIds.has(c.id)) as Clip[]
-    const clips = opts.ripple
-      ? kept.map((c) => {
-          const shift = removed
-            .filter((r) => clipEnd(r) <= c.start)
-            .reduce((sum, r) => sum + r.duration, 0)
-          return shift > 0 ? { ...c, start: c.start - shift } : c
-        })
-      : kept
-    next = withClips(next, trackIndex, clips)
+  const removedIds = new Set(members.map((m) => m.clip.id))
+  const lanes = doc.tracks.map((t) => t.clips.filter((c) => !removedIds.has(c.id)) as Clip[])
+
+  let shift = 0
+  let rangeEnd = 0
+  if (opts.ripple) {
+    const rangeStart = Math.min(...members.map((m) => m.clip.start))
+    rangeEnd = Math.max(...members.map((m) => clipEnd(m.clip)))
+    shift = rangeEnd - rangeStart
+    doc.tracks.forEach((track, i) => {
+      if (track.locked) return
+      let firstLater: Time | null = null
+      let earlierEnd = 0
+      for (const c of lanes[i]) {
+        if (c.start >= rangeEnd)
+          firstLater = firstLater === null ? c.start : Math.min(firstLater, c.start)
+        else earlierEnd = Math.max(earlierEnd, clipEnd(c))
+      }
+      if (firstLater !== null) shift = Math.min(shift, firstLater - earlierEnd)
+    })
+    shift = Math.max(0, shift)
   }
+
+  let next = doc
+  doc.tracks.forEach((track, i) => {
+    const touched = lanes[i].length !== track.clips.length
+    const ripple = shift > 0 && !track.locked && lanes[i].some((c) => c.start >= rangeEnd)
+    if (!touched && !ripple) return
+    const clips = ripple
+      ? lanes[i].map((c) => (c.start >= rangeEnd ? { ...c, start: c.start - shift } : c))
+      : lanes[i]
+    next = withClips(next, i, clips)
+  })
   return ok(next)
 }
 
