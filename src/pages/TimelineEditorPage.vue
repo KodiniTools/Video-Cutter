@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import MediaPool from '@/components/timeline/MediaPool.vue'
+import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 
-// Vorschau und Export folgen in den nächsten Phasen.
+// Der Export folgt in der nächsten Phase.
 const { t } = useI18n()
 </script>
 
@@ -15,9 +16,7 @@ const { t } = useI18n()
     </header>
     <div class="layout">
       <MediaPool class="side" />
-      <section class="stage">
-        <p>{{ t('timelineEditor.placeholder') }}</p>
-      </section>
+      <PreviewPlayer />
     </div>
     <TimelineView />
   </div>
@@ -48,15 +47,5 @@ const { t } = useI18n()
   grid-template-columns: minmax(280px, 360px) 1fr;
   gap: var(--ds-gap);
   align-items: start;
-}
-.stage {
-  min-height: 240px;
-  padding: var(--ds-space-6);
-  border: 1px dashed var(--ds-border);
-  border-radius: var(--ds-radius-lg);
-  color: var(--ds-text-2);
-}
-.stage p {
-  margin: 0;
 }
 </style>

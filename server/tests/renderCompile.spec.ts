@@ -350,6 +350,15 @@ describe('compileTimeline', () => {
     expect(args.join(' ')).toContain('-g 25 -keyint_min 25 -sc_threshold 0')
     expect(args.join(' ')).toContain('-threads 2 -t 4.000000 -movflags +faststart -f mp4 /o.mp4')
   })
+
+  it('legt für nahtlose Abschnitte das erste Bild auf Zeit 0 (keine B-Bilder, kein Verschieben)', () => {
+    const c = compileTimeline(parsed(rawDoc()), { sources })
+    const enc = { output: '/o.mp4', preset: 'veryfast', crf: 28, gop: 25, threads: 2 }
+    expect(buildRenderArgs(c, enc).join(' ')).not.toContain('-bf 0')
+    expect(buildRenderArgs(c, { ...enc, seamless: true }).join(' ')).toContain(
+      '-pix_fmt yuv420p -bf 0 -avoid_negative_ts disabled',
+    )
+  })
 })
 
 describe('compileTimeline mit echtem FFmpeg', () => {

@@ -65,6 +65,8 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Zoom in Pixel je Sekunde. */
   const zoom = ref(DEFAULT_ZOOM)
   const snapping = ref(true)
+  /** Läuft die Vorschau? Der Vorschau-Player folgt diesem Wert. */
+  const playing = ref(false)
   /** Grund, warum der letzte Befehl abgelehnt wurde (`null` = angenommen). */
   const lastError = ref<OpError | null>(null)
 
@@ -181,6 +183,7 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   /** Leeres Dokument, Verlauf und Auswahl zurückgesetzt. */
   function reset(): void {
+    playing.value = false
     load(createDoc())
   }
 
@@ -429,6 +432,11 @@ export const useTimelineStore = defineStore('timeline', () => {
     playhead.value = snapToFrame(t, doc.value.settings.fps)
   }
 
+  /** Vorschau starten bzw. anhalten (ohne Clips gibt es nichts abzuspielen). */
+  function togglePlay(): void {
+    playing.value = !playing.value && duration.value > 0
+  }
+
   function setZoom(pxPerSecond: number): void {
     if (!Number.isFinite(pxPerSecond)) return
     zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pxPerSecond))
@@ -454,6 +462,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     selection,
     zoom,
     snapping,
+    playing,
     lastError,
     duration,
     canUndo,
@@ -490,6 +499,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     selectClip,
     selectAll,
     seek,
+    togglePlay,
     setZoom,
     snap,
   }
