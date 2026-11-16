@@ -217,7 +217,7 @@ describe('Timeline-Store', () => {
     expect(store.canLink).toBe(false)
 
     expect(store.unlinkSelection()).toBe(true)
-    expect(store.doc.tracks.flatMap((t) => t.clips).every((c) => !c.linkGroup)).toBe(true)
+    expect(store.doc.tracks.every((t) => t.clips.every((c) => !c.linkGroup))).toBe(true)
     // Auswahl ist aufgehoben: „Löschen“ träfe sonst weiter beide.
     expect(store.selection).toEqual([])
     expect(store.canUnlink).toBe(false)
