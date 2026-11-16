@@ -361,7 +361,10 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   sehen, was auf den Video-Spuren weiter unten liegt, auf der untersten Spur
   der Hintergrund. Der Compiler passt den Clip in den verkleinerten Rahmen
   ein und füllt den Rest durchsichtig (`fitSteps` in `compile.ts`); Übergänge
-  und Standbild gelten weiter. Verlustfrei ist damit ausgeschlossen.
+  und Standbild gelten weiter. Verlustfrei ist damit ausgeschlossen. Ein
+  verkleinerter Clip lässt sich in der Vorschau ziehen (`PositionFrame.vue`,
+  `layoutBox` in `src/timeline/positionFrame.ts` rechnet den Rahmen wie der
+  Server); der Griff unten rechts ändert die Größe.
 - **KI-Assistent** (`AiInspector.vue`, `src/stores/timelineAi.ts`,
   `src/timeline/subtitles.ts`): Für den markierten Clip mit Ton erzeugt
   „Untertitel erzeugen“ Text-Clips auf einer Ebenen-Spur. Dazu laufen die

@@ -5,11 +5,13 @@ import { renderGraphic } from '@/lib/graphicOverlay'
 import { DEFAULT_TEXT_STYLE, fontPreview, type TextFont } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic, isDrawable } from '@/timeline/graphics'
-import { clipEnd } from '@/timeline/model'
+import { clipEnd, MIN_LAYOUT_SCALE, type VideoClip } from '@/timeline/model'
 import {
   containRect,
   dragPosition,
+  layoutBox,
   nudgePoint,
+  resizeScale,
   tidyPoint,
   type Point,
   type Rect,
@@ -21,6 +23,8 @@ import {
  * oder Pfeiltasten). Das Bild selbst kommt vom Server; während des Ziehens
  * zeigt der Rahmen, wohin das Element kommt (Formen und Bilder als blasse
  * Kopie), nach dem Loslassen rendert der Server den Abschnitt neu.
+ * Dasselbe gilt für einen verkleinerten Video-Clip (Bild-in-Bild): Der Rahmen
+ * liegt um sein Bild, der Griff unten rechts ändert die Größe.
  */
 
 const { t } = useI18n()
@@ -30,12 +34,25 @@ const root = ref<HTMLElement | null>(null)
 const ghost = ref<HTMLCanvasElement | null>(null)
 const box = ref({ width: 0, height: 0 })
 
-/** Der Clip auf einer Ebenen-Spur, wenn genau einer markiert ist. */
+/** Der verkleinerte Video-Clip (Bild-in-Bild), wenn nur er (samt verknüpftem Ton) markiert ist. */
+const video = computed<VideoClip | null>(() => {
+  const all = store.selectedClips
+  const videos = all.filter((c): c is VideoClip => c.kind === 'video' || c.kind === 'still')
+  if (videos.length !== 1 || all.length > 2) return null
+  const [v] = videos
+  const other = all.find((c) => c !== v)
+  if (other && (other.kind !== 'audio' || !v.linkGroup || other.linkGroup !== v.linkGroup)) {
+    return null
+  }
+  return v.layout && v.layout.scale < 1 ? v : null
+})
+
+/** Der Clip auf einer Ebenen-Spur, wenn genau einer markiert ist; sonst der verkleinerte Video-Clip. */
 const clip = computed(() => {
   const [only, ...rest] = store.selectedClips
   return only && rest.length === 0 && (only.kind === 'text' || only.kind === 'graphic')
     ? only
-    : null
+    : video.value
 })
 
 /** Lage des Bildes im Player (eingepasst, mit schwarzen Rändern drumherum). */
@@ -55,10 +72,29 @@ const graphic = computed(() =>
   clip.value?.kind === 'graphic' ? clipGraphic(clip.value.data) : null,
 )
 
+/** Größe beim Ziehen am Griff (sonst die des Dokuments). */
+const resize = ref<{ from: number; scale: number } | null>(null)
+
+/** Bild des verkleinerten Clips im Projektformat (Mitte und Größe als Anteile). */
+const videoBox = computed(() => {
+  const v = video.value
+  if (!v?.layout) return null
+  const asset = store.doc.assets[v.asset]
+  const { width, height } = store.doc.settings
+  const srcW = (asset?.width ?? 0) * (v.crop?.width ?? 1)
+  const srcH = (asset?.height ?? 0) * (v.crop?.height ?? 1)
+  const layout = { ...v.layout, scale: resize.value?.scale ?? v.layout.scale }
+  // Ohne bekannte Größe der Quelle: wie das Projektformat.
+  return layoutBox(layout, srcW || width, srcH || height, width, height)
+})
+
 /** Position im Dokument. */
 const saved = computed<Point>(() => {
   const c = clip.value
   if (!c) return { x: 0.5, y: 0.5 }
+  // Bild-in-Bild: die Mitte, an der das Bild wirklich liegt (ganz im Format).
+  if (videoBox.value) return { x: videoBox.value.x, y: videoBox.value.y }
+  if (c.kind !== 'text' && c.kind !== 'graphic') return { x: 0.5, y: 0.5 }
   if (graphic.value) return { x: graphic.value.x, y: graphic.value.y }
   return { x: num(c.data.x, DEFAULT_TEXT_STYLE.x), y: num(c.data.y, DEFAULT_TEXT_STYLE.y) }
 })
@@ -103,7 +139,26 @@ const text = computed(() => {
   }
 })
 
+/** Mitte so begrenzen, dass das Bild des Video-Clips ganz im Format bleibt. */
+function inside(p: Point): Point {
+  const b = videoBox.value
+  if (!b) return p
+  return {
+    x: Math.min(1 - b.width / 2, Math.max(b.width / 2, p.x)),
+    y: Math.min(1 - b.height / 2, Math.max(b.height / 2, p.y)),
+  }
+}
+
 const frameStyle = computed(() => {
+  if (videoBox.value) {
+    const at = inside(position.value)
+    return {
+      left: `${at.x * 100}%`,
+      top: `${at.y * 100}%`,
+      width: `${videoBox.value.width * 100}%`,
+      height: `${videoBox.value.height * 100}%`,
+    }
+  }
   const size = drawn.value
     ? { width: `${drawn.value.width}px`, height: `${drawn.value.height}px` }
     : graphic.value
@@ -129,8 +184,57 @@ watch([drawn, ghost, () => !!drag.value], () => {
 function commit(to: Point): void {
   const c = clip.value
   if (!c) return
+  if (video.value?.layout) {
+    const at = tidyPoint(inside(to))
+    if (at.x === video.value.layout.x && at.y === video.value.layout.y) return
+    store.setClipLayout(video.value.id, { ...video.value.layout, ...at })
+    return
+  }
   if (to.x === saved.value.x && to.y === saved.value.y) return
   store.updateClipData(c.id, { x: to.x, y: to.y })
+}
+
+// --- Größe am Griff (nur Bild-in-Bild) -----------------------------------------
+
+/** Abstand des Zeigers von der Mitte des Rahmens in Pixeln. */
+function distance(event: PointerEvent): number {
+  const b = videoBox.value
+  const el = root.value
+  if (!b || !el) return 0
+  const r = el.getBoundingClientRect()
+  const cx = r.left + picture.value.left + b.x * picture.value.width
+  const cy = r.top + picture.value.top + b.y * picture.value.height
+  return Math.hypot(event.clientX - cx, event.clientY - cy)
+}
+
+function onResizeDown(event: PointerEvent): void {
+  const v = video.value
+  if (event.button !== 0 || !v?.layout) return
+  event.preventDefault()
+  event.stopPropagation()
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  store.playing = false
+  const from = distance(event)
+  if (from > 0) resize.value = { from: from / v.layout.scale, scale: v.layout.scale }
+}
+
+function onResizeMove(event: PointerEvent): void {
+  const r = resize.value
+  if (!r) return
+  event.stopPropagation()
+  // `from` ist der Abstand je Größe 1: Der Griff folgt dem Zeiger.
+  resize.value = { ...r, scale: resizeScale(1, r.from, distance(event), MIN_LAYOUT_SCALE) }
+}
+
+function onResizeUp(event: PointerEvent): void {
+  const r = resize.value
+  const v = video.value
+  if (!r) return
+  event.stopPropagation()
+  resize.value = null
+  if (v?.layout && r.scale !== v.layout.scale) {
+    store.setClipLayout(v.id, { ...v.layout, scale: r.scale })
+  }
 }
 
 function onPointerDown(event: PointerEvent): void {
@@ -169,8 +273,9 @@ function onPointerUp(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && drag.value) {
+  if (event.key === 'Escape' && (drag.value || resize.value)) {
     drag.value = null
+    resize.value = null
     event.preventDefault()
     event.stopPropagation()
     return
@@ -225,6 +330,16 @@ onBeforeUnmount(() => observer?.disconnect())
         @keydown="onKeydown"
       >
         <canvas v-if="drawn" v-show="drag" ref="ghost" class="ghost" aria-hidden="true"></canvas>
+        <span
+          v-if="videoBox"
+          class="handle"
+          :title="t('timeline.positionFrameResize')"
+          data-testid="position-frame-resize"
+          @pointerdown="onResizeDown"
+          @pointermove="onResizeMove"
+          @pointerup="onResizeUp"
+          @pointercancel="resize = null"
+        ></span>
         <span v-if="text" class="text" :style="text.style" aria-hidden="true">{{
           text.content
         }}</span>
@@ -264,6 +379,18 @@ onBeforeUnmount(() => observer?.disconnect())
 .frame:focus-visible {
   border-color: var(--ds-accent);
   box-shadow: var(--ds-focus-ring);
+}
+.handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(0 0 0 / 70%);
+  border-radius: 2px;
+  background: #fff;
+  cursor: nwse-resize;
+  touch-action: none;
 }
 .ghost {
   display: block;

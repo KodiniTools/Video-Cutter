@@ -71,3 +71,51 @@ export function nudgePoint(from: Point, key: string, big = false): Point | null 
       return null
   }
 }
+
+/** Lage eines Video-Clips im Bild (Bild-in-Bild), wie im Dokument. */
+export interface LayoutLike {
+  x: number
+  y: number
+  scale: number
+}
+
+/** Mitte und Größe eines Kastens als Anteile des Projektformats. */
+export interface FrameBox extends Point {
+  width: number
+  height: number
+}
+
+/**
+ * Wo das Bild eines verkleinerten Clips wirklich liegt (wie der Server es
+ * rendert): Die Quelle `srcW:srcH` wird in den Rahmen `scale` × Projektformat
+ * eingepasst und um die Mitte gelegt, bleibt aber ganz im Bild.
+ */
+export function layoutBox(
+  layout: LayoutLike,
+  srcW: number,
+  srcH: number,
+  projW: number,
+  projH: number,
+): FrameBox {
+  const ok = srcW > 0 && srcH > 0 && projW > 0 && projH > 0
+  const k = ok ? Math.min((projW * layout.scale) / srcW, (projH * layout.scale) / srcH) : 0
+  const width = ok ? Math.min(1, (srcW * k) / projW) : layout.scale
+  const height = ok ? Math.min(1, (srcH * k) / projH) : layout.scale
+  return {
+    x: Math.min(1 - width / 2, Math.max(width / 2, layout.x)),
+    y: Math.min(1 - height / 2, Math.max(height / 2, layout.y)),
+    width,
+    height,
+  }
+}
+
+/**
+ * Neue Größe beim Ziehen am Griff: Sie wächst im Verhältnis des Abstands des
+ * Zeigers von der Mitte (`from` → `to`, in Pixeln), in den Grenzen `min`–1 und
+ * auf ganze Prozent gerundet.
+ */
+export function resizeScale(scale: number, from: number, to: number, min: number): number {
+  if (!(from > 0) || !Number.isFinite(to)) return scale
+  const next = Math.min(1, Math.max(min, (scale * to) / from))
+  return Math.round(next * 100) / 100
+}
