@@ -17,6 +17,7 @@ import {
   secondsToTime,
   timeToSeconds,
   type AudioClip,
+  type ClipColor,
   type ClipLayout,
   type ClipTransitionPreset,
   type FadeCurve,
@@ -195,6 +196,31 @@ function onCrop(side: CropSide, e: Event): void {
 function resetCrop(): void {
   commit()
   if (video.value) store.setClipCrop(video.value.id, null)
+}
+
+// --- Farbkorrektur -------------------------------------------------------------
+
+const COLOR_FIELDS = ['brightness', 'contrast', 'saturation'] as const
+type ColorField = (typeof COLOR_FIELDS)[number]
+const NO_COLOR: ClipColor = { brightness: 0, contrast: 0, saturation: 0 }
+const color = computed<ClipColor>(() => video.value?.color ?? NO_COLOR)
+const hasColor = computed(() => video.value?.color !== undefined)
+const signed = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}`
+
+function onColor(field: ColorField, e: Event): void {
+  const clip = video.value
+  if (!clip) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const value = Number((e.target as HTMLInputElement).value) / 100
+  store.setClipColor(clip.id, { ...color.value, [field]: value })
+}
+
+function resetColor(): void {
+  commit()
+  if (video.value) store.setClipColor(video.value.id, null)
 }
 
 // --- Bild-in-Bild (Größe, Lage, Deckkraft) -----------------------------------
@@ -452,6 +478,33 @@ onBeforeUnmount(commit)
         {{ t('timeline.clipInspector.cropReset') }}
       </button>
       <p class="hint">{{ t('timeline.clipInspector.cropHint') }}</p>
+    </fieldset>
+    <fieldset v-if="video" class="crop" data-testid="clip-color">
+      <legend>{{ t('timeline.clipInspector.color') }}</legend>
+      <label v-for="field in COLOR_FIELDS" :key="field" class="side">
+        <span>{{ t(`timeline.clipInspector.colorFields.${field}`) }}</span>
+        <input
+          type="range"
+          min="-100"
+          max="100"
+          step="1"
+          :value="Math.round(color[field] * 100)"
+          :data-testid="`clip-color-${field}`"
+          @input="onColor(field, $event)"
+          @change="commit"
+        />
+        <span class="value">{{ signed(color[field]) }}</span>
+      </label>
+      <button
+        v-if="hasColor"
+        type="button"
+        class="plain"
+        data-testid="clip-color-reset"
+        @click="resetColor"
+      >
+        {{ t('timeline.clipInspector.colorReset') }}
+      </button>
+      <p class="hint">{{ t('timeline.clipInspector.colorHint') }}</p>
     </fieldset>
     <fieldset v-if="video" class="crop" data-testid="clip-layout">
       <legend>{{ t('timeline.clipInspector.layout') }}</legend>

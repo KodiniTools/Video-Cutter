@@ -353,6 +353,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Farbkorrektur** (Feature `timelineColor`): Ein Video-Clip kann Helligkeit,
+  Kontrast und Sättigung tragen (`color: { brightness, contrast, saturation }`,
+  je −1 … 1, 0 = unverändert; `setClipColor`, Feld „Clip“). Der Compiler setzt
+  dafür `eq` vor das Einpassen (`colorFilter` in `compile.ts`: Helligkeit ±0,4,
+  Kontrast 0,4–1,6, Sättigung 0–2). Verlustfrei ist damit ausgeschlossen.
 - **Bild-in-Bild** (Feature `timelineLayout`): Ein Video-Clip kann eine Lage
   im Bild tragen (`layout: { x, y, scale, opacity }`, `setClipLayout`,
   Feld „Clip“): `scale` ist der Anteil des Projektformats, in den das Bild

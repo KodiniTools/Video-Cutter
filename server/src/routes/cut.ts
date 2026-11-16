@@ -123,6 +123,7 @@ export const SERVER_FEATURES = [
   'timelineTransitions',
   'timelineHold',
   'timelineLayout',
+  'timelineColor',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
