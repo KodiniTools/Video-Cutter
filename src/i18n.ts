@@ -708,9 +708,20 @@ const messages = {
       },
       kind: { video: 'Video', audio: 'Ton', overlay: 'Ebene' },
     },
+    timelinePreview: {
+      empty: 'Lege einen Clip auf die Timeline, dann erscheint hier die Vorschau.',
+      rendering: 'Vorschau wird auf dem Server gerendert …',
+      unsupported:
+        'Das Backend kennt die Vorschau des neuen Editors noch nicht (veraltet). Bitte das Backend neu deployen.',
+      browser: 'Dieser Browser kann die Vorschau nicht abspielen (H.264/AAC über MSE fehlt).',
+      play: 'Abspielen',
+      pause: 'Pause',
+      playTitle: 'Abspielen (Leertaste)',
+      pauseTitle: 'Pause (Leertaste)',
+      speed: 'Server: {sec} s je Abschnitt ({speed}× Echtzeit)',
+    },
     timelineEditor: {
       title: 'Neuer Editor (Beta)',
-      placeholder: 'Hier erscheint die Vorschau. Sie wird vollständig auf dem Server gerendert.',
       back: 'Zurück zum bisherigen Editor',
       open: 'Neuer Editor (Beta)',
     },
@@ -1405,9 +1416,20 @@ const messages = {
       },
       kind: { video: 'Video', audio: 'Audio', overlay: 'Layer' },
     },
+    timelinePreview: {
+      empty: 'Put a clip on the timeline and the preview appears here.',
+      rendering: 'Rendering the preview on the server …',
+      unsupported:
+        'The backend does not know the new editor’s preview yet (outdated). Please redeploy the backend.',
+      browser: 'This browser cannot play the preview (H.264/AAC via MSE missing).',
+      play: 'Play',
+      pause: 'Pause',
+      playTitle: 'Play (space bar)',
+      pauseTitle: 'Pause (space bar)',
+      speed: 'Server: {sec} s per segment ({speed}× real time)',
+    },
     timelineEditor: {
       title: 'New editor (beta)',
-      placeholder: 'The preview will appear here. It is rendered entirely on the server.',
       back: 'Back to the classic editor',
       open: 'New editor (beta)',
     },

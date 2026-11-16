@@ -266,6 +266,7 @@ function onKeydown(event: KeyboardEvent): void {
   else if (mod || event.altKey) handled = false
   else if (key === 'Delete' || key === 'Backspace') remove(event.shiftKey)
   else if (key === 's') split()
+  else if (key === ' ') store.togglePlay()
   else if (key === 'ArrowLeft')
     stepPlayhead(event.shiftKey ? -Math.round(store.doc.settings.fps) : -1)
   else if (key === 'ArrowRight')

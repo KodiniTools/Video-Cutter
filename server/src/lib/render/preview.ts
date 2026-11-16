@@ -29,13 +29,14 @@ export const PREVIEW_MAX_HEIGHT = 540
 /** So viele Abschnitte ab dem Abspielkopf werden vorab gerendert; der Rest bei Abruf. */
 export const PREVIEW_AHEAD = 30
 /** Ändert sich das Encoding, werden alte Abschnitte nicht wiederverwendet. */
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const ENCODE = {
   preset: 'veryfast',
   crf: 27,
   audioBitrate: '128k',
   // Fragmentiert: sofort abspielbar und nahtlos aneinanderreihbar (MSE).
   movflags: 'frag_keyframe+empty_moov+default_base_moof',
+  seamless: true,
 } as const
 
 const KEY_RE = /^[0-9a-f]{32}$/

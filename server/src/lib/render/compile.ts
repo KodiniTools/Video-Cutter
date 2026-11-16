@@ -313,6 +313,12 @@ export interface EncodeOptions {
   gop?: number
   /** MP4-Schalter; Standard `+faststart` (Download). Die Vorschau nutzt fragmentiertes MP4. */
   movflags?: string
+  /**
+   * Für die Vorschau: Abschnitte, die der Browser lückenlos aneinanderreiht.
+   * Ohne B-Bilder und ohne Zeitverschiebung durch den Muxer liegt das erste
+   * Bild exakt bei 0 und jedes weitere auf dem Bildraster.
+   */
+  seamless?: boolean
 }
 
 /** Vollständige FFmpeg-Argumente für ein kompiliertes Stück (H.264 + AAC in MP4). */
@@ -336,6 +342,7 @@ export function buildRenderArgs(compiled: CompiledTimeline, enc: EncodeOptions):
     String(enc.crf),
     '-pix_fmt',
     'yuv420p',
+    ...(enc.seamless ? ['-bf', '0', '-avoid_negative_ts', 'disabled'] : []),
     ...(enc.gop
       ? ['-g', String(enc.gop), '-keyint_min', String(enc.gop), '-sc_threshold', '0']
       : []),

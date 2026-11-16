@@ -251,6 +251,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   (fragmentiertes MP4) und wartet bis zu 25 s darauf, `GET /api/preview/stats`
   zeigt Renderzeiten. Einstellungen: `PREVIEW_DIR`, `PREVIEW_CACHE_MB`,
   `PREVIEW_CONCURRENT`, `PREVIEW_THREADS`, `PREVIEW_TIMEOUT_SEC`.
+- **Vorschau-Player** (`src/components/timeline/PreviewPlayer.vue`,
+  `src/preview/`): hängt die Abschnitte des Servers über Media Source
+  Extensions zu einem durchgehenden Film aneinander (Abspielen/Pause mit der
+  Leertaste oder Klick aufs Bild, der Abspielkopf folgt). Nach einer Änderung
+  holt er einen neuen Plan und ersetzt nur Abschnitte mit geändertem Schlüssel;
+  geladen wird ab dem Abspielkopf etwa 20 s voraus. Im Browser wird nichts
+  gerechnet.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
