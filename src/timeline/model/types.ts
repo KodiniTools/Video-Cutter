@@ -142,6 +142,7 @@ export type OpError =
   | 'track-not-found'
   | 'clip-not-found'
   | 'asset-not-found'
+  | 'asset-in-use'
   | 'track-locked'
   | 'kind-mismatch'
   | 'overlap'

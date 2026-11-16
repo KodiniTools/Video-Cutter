@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import {
   addTrack as addTrackOp,
+  assetInUse,
   createDoc,
   docDuration,
   findClip,
@@ -9,6 +10,7 @@ import {
   isTime,
   moveClip as moveClipOp,
   putAsset as putAssetOp,
+  removeAsset as removeAssetOp,
   removeClip as removeClipOp,
   removeTrack as removeTrackOp,
   snapPoints,
@@ -186,6 +188,37 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (gestureStart === before) gestureStart = doc.value
   }
 
+  /**
+   * Medium abmelden – wie das Anmelden kein Verlaufsschritt. Abgelehnt, solange
+   * ein Clip es verwendet. Kommt es nur noch in früheren Ständen vor, wird der
+   * Verlauf geleert: „Rückgängig“ dürfte sonst Clips ohne Medium zurückholen.
+   */
+  function removeAsset(assetId: string): boolean {
+    endGesture()
+    const result = removeAssetOp(doc.value, assetId)
+    if (!result.ok) {
+      lastError.value = result.error
+      return false
+    }
+    lastError.value = null
+    const strip = (d: TimelineDoc): TimelineDoc => {
+      if (!d.assets[assetId]) return d
+      const assets = { ...d.assets }
+      delete assets[assetId]
+      return { ...d, assets }
+    }
+    if ([...past.value, ...future.value].some((d) => assetInUse(d, assetId))) {
+      past.value = []
+      future.value = []
+    } else {
+      // Sonst käme das Medium beim Rückgängigmachen aus einem alten Stand zurück.
+      past.value = past.value.map(strip)
+      future.value = future.value.map(strip)
+    }
+    doc.value = result.doc
+    return true
+  }
+
   const addTrack = (track: NewTrack, index?: number) => apply((d) => addTrackOp(d, track, index))
   const removeTrack = (trackId: string) => apply((d) => removeTrackOp(d, trackId))
   const updateTrack = (trackId: string, patch: TrackPatch) =>
@@ -295,6 +328,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     load,
     reset,
     putAsset,
+    removeAsset,
     addTrack,
     removeTrack,
     updateTrack,

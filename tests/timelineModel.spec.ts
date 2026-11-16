@@ -8,6 +8,7 @@ import {
   insertClip,
   moveClip,
   putAsset,
+  removeAsset,
   removeClip,
   removeTrack,
   secondsToTime,
@@ -117,6 +118,16 @@ describe('Spuren', () => {
     expect(errorOf(removeTrack(doc, 'V1'))).toBe('track-locked')
     expect(unwrap(removeTrack(doc, 'A1')).tracks.map((t) => t.id)).toEqual(['V1'])
     expect(errorOf(removeTrack(doc, 'nope'))).toBe('track-not-found')
+  })
+})
+
+describe('removeAsset', () => {
+  it('meldet ein unbenutztes Medium ab, ein verwendetes nicht', () => {
+    const doc = unwrap(insertClip(baseDoc(), 'V1', video('a', 0, 2)))
+    expect(errorOf(removeAsset(doc, 'vid'))).toBe('asset-in-use')
+    expect(errorOf(removeAsset(doc, 'nope'))).toBe('asset-not-found')
+    expect(Object.keys(unwrap(removeAsset(doc, 'img')).assets)).toEqual(['vid'])
+    expect(unwrap(removeAsset(unwrap(removeClip(doc, 'a')), 'vid')).assets.vid).toBeUndefined()
   })
 })
 

@@ -133,6 +133,30 @@ describe('Timeline-Store', () => {
     expect(validateDoc(store.doc)).toEqual([])
   })
 
+  it('meldet Medien ab: nicht solange verwendet, und ohne Rückkehr über den Verlauf', () => {
+    const store = setup()
+    store.putAsset({ id: 'frei', kind: 'video', name: 'f.mp4', duration: s(5) })
+    store.insertClip('V1', video('a', 0, 2))
+    expect(store.removeAsset('vid')).toBe(false)
+    expect(store.lastError).toBe('asset-in-use')
+    expect(store.removeAsset('nope')).toBe(false)
+
+    // Unbenutzt, kommt in keinem früheren Stand als Clip vor: Verlauf bleibt.
+    expect(store.removeAsset('frei')).toBe(true)
+    expect(store.canUndo).toBe(true)
+    store.undo()
+    expect(store.doc.assets.frei).toBeUndefined()
+    store.redo()
+    expect(store.doc.assets.frei).toBeUndefined()
+
+    // Nur noch im Verlauf verwendet: Verlauf wird geleert.
+    store.removeClip('a')
+    expect(store.removeAsset('vid')).toBe(true)
+    expect([store.canUndo, store.canRedo]).toEqual([false, false])
+    expect(store.doc.assets.vid).toBeUndefined()
+    expect(validateDoc(store.doc)).toEqual([])
+  })
+
   it('wertet das Anmelden eines Mediums während einer Geste nicht als Änderung', () => {
     const store = setup()
     store.beginGesture()
