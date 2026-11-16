@@ -311,6 +311,8 @@ export interface EncodeOptions {
   threads?: number
   /** Schlüsselbild-Abstand in Bildern (für die Vorschau klein halten). */
   gop?: number
+  /** MP4-Schalter; Standard `+faststart` (Download). Die Vorschau nutzt fragmentiertes MP4. */
+  movflags?: string
 }
 
 /** Vollständige FFmpeg-Argumente für ein kompiliertes Stück (H.264 + AAC in MP4). */
@@ -350,7 +352,10 @@ export function buildRenderArgs(compiled: CompiledTimeline, enc: EncodeOptions):
     '-t',
     sec(compiled.duration),
     '-movflags',
-    '+faststart',
+    enc.movflags ?? '+faststart',
+    // Dateiendung sagt nichts (temporäre Namen): Format ausdrücklich setzen.
+    '-f',
+    'mp4',
     enc.output,
   ]
 }

@@ -81,6 +81,18 @@ export const config = {
   derivedThreads: num('DERIVED_THREADS', 2),
   /** Zeitgrenze je abgeleiteter Datei. */
   derivedTimeoutMs: num('DERIVED_TIMEOUT_SEC', 60 * 60) * 1000,
+  /**
+   * Vorschau des Timeline-Editors: gerenderte Abschnitte (Zwischenspeicher).
+   * Darf jederzeit gelöscht werden, die Abschnitte entstehen bei Bedarf neu.
+   */
+  previewDir: process.env.PREVIEW_DIR ?? path.join(tmpDir, 'preview'),
+  /** Obergrenze des Zwischenspeichers; die am längsten ungenutzten Abschnitte fliegen zuerst. */
+  previewCacheBytes: num('PREVIEW_CACHE_MB', 2048) * 1024 * 1024,
+  /** Gleichzeitig gerenderte Vorschau-Abschnitte und FFmpeg-Threads je Abschnitt. */
+  previewConcurrent: num('PREVIEW_CONCURRENT', 2),
+  previewThreads: num('PREVIEW_THREADS', 3),
+  /** Zeitgrenze je Abschnitt. */
+  previewTimeoutMs: num('PREVIEW_TIMEOUT_SEC', 120) * 1000,
   /** Obergrenze für alle gespeicherten Videos zusammen. */
   maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
 

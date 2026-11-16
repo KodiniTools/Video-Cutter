@@ -8,6 +8,8 @@ import { cutRouter, SERVER_FEATURES } from './routes/cut'
 import { mediaRouter } from './routes/media'
 import { textRouter } from './routes/text'
 import { projectsRouter } from './routes/projects'
+import { previewRouter } from './routes/preview'
+import { previewStore } from './lib/render/preview'
 import { mediaStore } from './lib/media'
 import { derivedStore } from './lib/derived'
 import { ValidationError } from './lib/validate'
@@ -27,6 +29,7 @@ async function bootstrap(): Promise<void> {
       : 'Videos: nur im Arbeitsspeicher (MEDIA_INDEX_FILE leer)',
   )
   await derivedStore.init()
+  await previewStore.init()
   await mkdir(config.projectsDir, { recursive: true })
   console.log(`Projekte: ${config.projectsDir}`)
   await gallery.init()
@@ -83,6 +86,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api', textRouter)
   app.use('/api', aiRouter)
   app.use('/api', projectsRouter)
+  app.use('/api', previewRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))
@@ -132,6 +136,7 @@ async function bootstrap(): Promise<void> {
     console.log(`${signal} empfangen – fahre herunter …`)
     aiJobs.shutdown()
     derivedStore.shutdown()
+    void previewStore.shutdown()
     server.close(() => {
       void jobManager
         .shutdown()

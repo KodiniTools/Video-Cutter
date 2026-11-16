@@ -110,6 +110,7 @@ export const SERVER_FEATURES = [
   'animSpeed',
   'clipMute',
   'mediaDerived',
+  'timelinePreview',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

@@ -241,8 +241,16 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Editor geschickte Dokument (Grenzen, Regeln), `compileTimeline` übersetzt es
   ganz oder abschnittsweise in einen FFmpeg-Aufruf (je Spur Clips und Lücken
   verkettet, Video-Spuren per `overlay` gestapelt, Ton per `amix`, alles auf
-  dem Bildraster). Vorschau und Export nutzen denselben Code. Noch ohne
-  Endpunkt.
+  dem Bildraster). Vorschau und Export nutzen denselben Code.
+- **Server-Vorschau** (`server/src/lib/render/preview.ts`, Feature
+  `timelinePreview`): `POST /api/preview/plan` (`{ doc, at }`) teilt die
+  Timeline in 4-s-Abschnitte (höchstens 540 px hoch) und reiht fehlende ab dem
+  Abspielkopf zum Rendern ein. Jeder Abschnitt hat einen Schlüssel aus seinem
+  Inhalt: Nach einer Änderung werden nur betroffene Abschnitte neu gerendert,
+  überholte abgebrochen. `GET /api/preview/segment/:key` liefert den Abschnitt
+  (fragmentiertes MP4) und wartet bis zu 25 s darauf, `GET /api/preview/stats`
+  zeigt Renderzeiten. Einstellungen: `PREVIEW_DIR`, `PREVIEW_CACHE_MB`,
+  `PREVIEW_CONCURRENT`, `PREVIEW_THREADS`, `PREVIEW_TIMEOUT_SEC`.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
