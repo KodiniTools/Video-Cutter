@@ -25,12 +25,14 @@ function defaultCustomFontsDir(): string {
   return existsSync(deployed) ? deployed : repo
 }
 
+const tmpDir = process.env.TMP_DIR ?? path.join(os.tmpdir(), 'video-cutter')
+
 export const config = {
   port: num('PORT', 4021),
   host: process.env.HOST ?? '127.0.0.1',
 
   /** Temporäres Arbeitsverzeichnis (wird beim Start angelegt). */
-  tmpDir: process.env.TMP_DIR ?? path.join(os.tmpdir(), 'video-cutter'),
+  tmpDir,
 
   /** Upload-Obergrenze. */
   maxFileSizeBytes: num('MAX_FILE_SIZE_MB', 2048) * 1024 * 1024,
@@ -63,6 +65,12 @@ export const config = {
 
   /** Gespeicherte Videos (Bibliothek) werden nach so langer Nichtbenutzung gelöscht. */
   mediaTtlMs: num('MEDIA_TTL_SEC', 2 * 60 * 60) * 1000,
+  /**
+   * Verzeichnis der Bibliothek auf der Platte: Damit überstehen hochgeladene
+   * Videos einen Neustart (Deploy). Leer (`MEDIA_INDEX_FILE=`) = nur im
+   * Arbeitsspeicher, Videos werden beim Beenden gelöscht.
+   */
+  mediaIndexFile: process.env.MEDIA_INDEX_FILE ?? path.join(tmpDir, 'media-index.json'),
   /** Obergrenze für alle gespeicherten Videos zusammen. */
   maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
 

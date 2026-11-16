@@ -81,8 +81,12 @@ Zusammenfügen laden nichts erneut hoch.
 - **🗑** löscht ein Video sofort vom Server (ein laufender Upload wird abgebrochen).
 - **Auto-Aufräumen:** Videos, die `MEDIA_TTL_SEC` (Standard 2 h) nicht benutzt
   wurden, löscht der Server selbst; Gesamtlimit `MAX_MEDIA_TOTAL_MB`
-  (Standard 20 GB, sonst 507). Die Bibliothek liegt im Arbeitsspeicher des
-  Servers – ein Neustart des Backends löscht alle gespeicherten Videos.
+  (Standard 20 GB, sonst 507).
+- **Neustart:** Der Server führt ein Verzeichnis der Bibliothek
+  (`MEDIA_INDEX_FILE`, Standard `<TMP_DIR>/media-index.json`). Nach einem
+  Neustart des Backends (z. B. Deploy) sind die Videos unter derselben ID wieder
+  da; die Frist fürs Auto-Aufräumen läuft weiter. `MEDIA_INDEX_FILE=` (leer)
+  schaltet das ab – dann löscht ein Neustart alle gespeicherten Videos.
 - **Projekte:** Die Karte „Projekte" speichert den ganzen Bearbeitungsstand
   (Videos, Von/Bis, Auswahl/Ausschnitte, Texte, Formen, Bilder, Musik,
   Ton-Blende, Übergänge, Ausgabeformat) unter einem Namen auf dem Server.
