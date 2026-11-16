@@ -7,19 +7,23 @@ import {
   type GraphicKind,
 } from '@/lib/graphicOverlay'
 import { uploadGraphic } from '@/lib/graphicsApi'
+import { hasImageAsset } from '@/lib/imageAssets'
 import type { OverlayClip, TimelineDoc } from '@/timeline/model'
 
 /**
- * Formen, Symbole und Emojis auf Ebenen-Spuren.
+ * Formen, Symbole, Emojis und eigene Bilder auf Ebenen-Spuren.
  *
  * Im Dokument stehen nur die Einstellungen (Art, Größe, Farben, Lage,
  * Animation). Gezeichnet wird im Browser: Vor dem Senden an den Server
  * (Vorschau, Export) wird je Aussehen ein PNG erzeugt, einmal hochgeladen und
  * seine ID in die gesendete Kopie des Dokuments geschrieben. Das Dokument im
  * Editor bleibt davon unberührt – Rückgängig und Speichern kennen keine IDs.
+ *
+ * Eigene Bilder bleiben im Browser (`imageAssets`): Der Clip nennt die ID des
+ * geladenen Bildes, der Server sieht nur das fertig bearbeitete PNG.
  */
 
-/** Arten, die der neue Editor anlegen kann (Bilder folgen später). */
+/** Arten zum Anlegen aus der Liste (Bilder kommen über „+ Bild“ dazu). */
 export const TIMELINE_GRAPHIC_KINDS = [
   'rect',
   'ellipse',
@@ -39,8 +43,13 @@ export function isTimelineGraphicKind(v: unknown): v is TimelineGraphicKind {
 }
 
 /** Daten eines neuen Grafik-Clips: Standardwerte der Art, in der Bildmitte. */
-export function newGraphicData(kind: TimelineGraphicKind): Record<string, unknown> {
+export function newGraphicData(kind: TimelineGraphicKind | 'image'): Record<string, unknown> {
   return { ...defaultGraphic(kind), animSpeed: 1, x: 0.5, y: 0.5 }
+}
+
+/** Daten eines neuen Bild-Clips zu einem geladenen Bild (siehe `imageAssets`). */
+export function newImageData(imageId: string): Record<string, unknown> {
+  return { ...newGraphicData('image'), image: imageId }
 }
 
 /**
@@ -49,7 +58,8 @@ export function newGraphicData(kind: TimelineGraphicKind): Record<string, unknow
  * der Art zurück. Zeiten spielen hier keine Rolle – die trägt der Clip.
  */
 export function clipGraphic(data: Record<string, unknown>): GraphicData {
-  const kind: TimelineGraphicKind = isTimelineGraphicKind(data.kind) ? data.kind : 'rect'
+  const kind: GraphicKind =
+    isTimelineGraphicKind(data.kind) || data.kind === 'image' ? data.kind : 'rect'
   const merged: Record<string, unknown> = { ...defaultGraphic(kind), animSpeed: 1, x: 0.5, y: 0.5 }
   for (const key of Object.keys(merged)) {
     const value = data[key]
@@ -58,8 +68,9 @@ export function clipGraphic(data: Record<string, unknown>): GraphicData {
   return clampGraphic({ ...(merged as unknown as GraphicData), start: 0, end: 1 })
 }
 
-/** Hat die Grafik etwas zu zeigen? (Emoji ohne Zeichen: nein.) */
+/** Hat die Grafik etwas zu zeigen? (Emoji ohne Zeichen, Bild nicht geladen: nein.) */
 export function isDrawable(g: GraphicData): boolean {
+  if (g.kind === 'image') return hasImageAsset(g.image)
   return g.kind !== 'emoji' || g.emoji.trim() !== ''
 }
 

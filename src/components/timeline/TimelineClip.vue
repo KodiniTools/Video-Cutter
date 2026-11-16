@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { stripTileStyle } from '@/lib/derivedApi'
+import { getImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
 import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
@@ -47,6 +48,7 @@ const name = computed(() => {
   if (clip.kind === 'graphic') {
     const g = clipGraphic(clip.data)
     if (g.kind === 'emoji') return g.emoji || t('graphics.kinds.emoji')
+    if (g.kind === 'image') return getImageAsset(g.image)?.name ?? t('graphics.kinds.image')
     return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
   }
   return item.value?.name ?? ''

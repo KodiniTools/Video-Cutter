@@ -8,13 +8,17 @@ import {
   hasColors,
   hasFill,
   hasHeight,
+  imageHeight,
+  MAX_CROP,
   MAX_EMOJI_LENGTH,
   MAX_GRAPHIC_H,
   MAX_GRAPHIC_W,
   MAX_STROKE,
   MIN_GRAPHIC_SIZE,
+  MIN_IMAGE_OPACITY,
   SYMBOL_NAMES,
 } from '@/lib/graphicOverlay'
+import { hasImageAsset } from '@/lib/imageAssets'
 import { ANIM_SPEEDS, formatAnimSpeed } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic } from '@/timeline/graphics'
@@ -40,8 +44,22 @@ const g = computed(() => (clip.value ? clipGraphic(clip.value.data) : null))
 const isLine = computed(() => g.value?.kind === 'line' || g.value?.kind === 'arrow')
 const sizeLabel = computed(() => {
   if (isLine.value) return t('graphics.length')
-  return g.value && hasHeight(g.value.kind) ? t('graphics.width') : t('graphics.size')
+  return g.value && (hasHeight(g.value.kind) || g.value.kind === 'image')
+    ? t('graphics.width')
+    : t('graphics.size')
 })
+const isImage = computed(() => g.value?.kind === 'image')
+/** Bild-Clip, dessen Bild nicht (mehr) im Browser liegt. */
+const imageMissing = computed(() => !!g.value && isImage.value && !hasImageAsset(g.value.image))
+const CROP_SIDES = [
+  { key: 'cropL', label: 'left' },
+  { key: 'cropR', label: 'right' },
+  { key: 'cropT', label: 'top' },
+  { key: 'cropB', label: 'bottom' },
+] as const
+const cropped = computed(
+  () => !!g.value && (g.value.cropL || g.value.cropR || g.value.cropT || g.value.cropB) > 0,
+)
 const percent = (v: number) => Math.round(v * 1000) / 10
 
 let editing = false
@@ -72,6 +90,7 @@ function set(patch: Record<string, unknown>): void {
 
 const value = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement).value
 const number = (e: Event) => Number(value(e))
+const checked = (e: Event) => (e.target as HTMLInputElement).checked
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 function onEmoji(e: Event): void {
@@ -88,6 +107,7 @@ onBeforeUnmount(commit)
   <section v-if="clip && g" class="inspector" data-testid="graphic-inspector" @focusout="commit">
     <h3>{{ t('timeline.graphicInspector', { kind: t(`graphics.kinds.${g.kind}`) }) }}</h3>
 
+    <p v-if="imageMissing" class="warn" role="alert">{{ t('timeline.imageMissing') }}</p>
     <label v-if="g.kind === 'symbol'" class="field">
       <span>{{ t('graphics.symbol') }}</span>
       <select
@@ -128,7 +148,11 @@ onBeforeUnmount(commit)
 
     <div class="row">
       <label class="field">
-        <span>{{ sizeLabel }} {{ percent(g.w) }} %</span>
+        <span>
+          {{ sizeLabel }} {{ percent(g.w) }} %<template v-if="isImage">
+            · {{ t('graphics.height') }} {{ percent(imageHeight(g)) }} %</template
+          >
+        </span>
         <input
           type="range"
           :min="MIN_GRAPHIC_SIZE"
@@ -171,7 +195,15 @@ onBeforeUnmount(commit)
     <template v-if="hasColors(g.kind)">
       <div class="row">
         <label class="field color">
-          <span>{{ isLine ? t('graphics.lineColor') : t('graphics.strokeColor') }}</span>
+          <span>
+            {{
+              isLine
+                ? t('graphics.lineColor')
+                : isImage
+                  ? t('graphics.image.border')
+                  : t('graphics.strokeColor')
+            }}
+          </span>
           <input
             type="color"
             :value="g.stroke"
@@ -219,7 +251,7 @@ onBeforeUnmount(commit)
           />
         </label>
       </div>
-      <label v-if="g.kind === 'rect'" class="field">
+      <label v-if="g.kind === 'rect' || isImage" class="field">
         <span>{{ t('graphics.radius') }} {{ Math.round(g.radius * 100) }} %</span>
         <input
           type="range"
@@ -232,6 +264,67 @@ onBeforeUnmount(commit)
           @change="commit"
         />
       </label>
+    </template>
+
+    <template v-if="isImage">
+      <label class="field">
+        <span>{{ t('graphics.image.opacity') }} {{ Math.round(g.opacity * 100) }} %</span>
+        <input
+          type="range"
+          :min="MIN_IMAGE_OPACITY"
+          max="1"
+          step="0.01"
+          :value="g.opacity"
+          data-testid="graphic-opacity"
+          @input="edit({ opacity: number($event) })"
+          @change="commit"
+        />
+      </label>
+      <div class="crop">
+        <span>{{ t('graphics.image.crop') }}</span>
+        <label v-for="c in CROP_SIDES" :key="c.key" class="crop-row">
+          <span>{{ t(`graphics.image.sides.${c.label}`) }}</span>
+          <input
+            type="range"
+            min="0"
+            :max="MAX_CROP"
+            step="0.005"
+            :value="g[c.key]"
+            :data-testid="`graphic-${c.key}`"
+            @input="edit({ [c.key]: number($event) })"
+            @change="commit"
+          />
+          <span class="crop-value">{{ percent(g[c.key]) }} %</span>
+        </label>
+        <button
+          v-if="cropped"
+          type="button"
+          class="plain"
+          @click="set({ cropL: 0, cropR: 0, cropT: 0, cropB: 0 })"
+        >
+          {{ t('graphics.image.cropReset') }}
+        </button>
+      </div>
+      <div class="row">
+        <label class="check">
+          <input
+            type="checkbox"
+            :checked="g.flipX"
+            data-testid="graphic-flip"
+            @change="set({ flipX: checked($event) })"
+          />
+          <span>{{ t('graphics.image.flip') }}</span>
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            :checked="g.shadow"
+            data-testid="graphic-shadow"
+            @change="set({ shadow: checked($event) })"
+          />
+          <span>{{ t('graphics.image.shadow') }}</span>
+        </label>
+      </div>
     </template>
 
     <div class="row">
@@ -405,6 +498,43 @@ button:focus-visible {
 .emojis button[aria-pressed='true'] {
   border-color: var(--ds-accent);
   background: var(--ds-surface-2);
+}
+.crop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1, 4px);
+  color: var(--ds-text-2);
+}
+.crop-row {
+  display: grid;
+  grid-template-columns: 4.5em 1fr 3.5em;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.crop-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-2);
+  cursor: pointer;
+}
+.plain {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ds-link);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.warn {
+  margin: 0;
+  color: var(--ds-danger);
 }
 .hint {
   margin: 0;

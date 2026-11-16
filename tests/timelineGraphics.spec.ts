@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { MissingGraphicsError, parseMissingGraphics, uploadGraphic } from '@/lib/graphicsApi'
+import { registerImageAssetForTest } from '@/lib/imageAssets'
 import { parsePreviewPlan } from '@/lib/previewApi'
 import { startRender } from '@/lib/renderApi'
 import { useTimelineStore } from '@/stores/timeline'
@@ -9,6 +10,7 @@ import {
   GraphicImages,
   isDrawable,
   newGraphicData,
+  newImageData,
   TIMELINE_GRAPHIC_KINDS,
 } from '@/timeline/graphics'
 import { createDoc, type TimelineDoc } from '@/timeline/model'
@@ -30,9 +32,19 @@ describe('clipGraphic', () => {
     expect(g.strokeWidth).toBeGreaterThan(0)
   })
 
-  it('kennt nur die Arten des Editors (Bilder folgen später)', () => {
-    expect(clipGraphic({ kind: 'image' }).kind).toBe('rect')
+  it('fällt bei unbekannter Art auf das Rechteck zurück und kennt Bilder', () => {
+    expect(clipGraphic({ kind: 'video' }).kind).toBe('rect')
     expect(clipGraphic({}).kind).toBe('rect')
+    expect(clipGraphic(newImageData('img-x'))).toMatchObject({
+      kind: 'image',
+      image: 'img-x',
+      strokeWidth: 0,
+      opacity: 1,
+    })
+    expect(clipGraphic({ ...newImageData('img-x'), cropL: 0.9, opacity: 0 })).toMatchObject({
+      cropL: 0.45,
+      opacity: 0.05,
+    })
     for (const kind of TIMELINE_GRAPHIC_KINDS)
       expect(clipGraphic(newGraphicData(kind))).toMatchObject({ kind, x: 0.5, y: 0.5 })
   })
@@ -41,6 +53,16 @@ describe('clipGraphic', () => {
     expect(isDrawable(clipGraphic({ kind: 'emoji', emoji: ' ' }))).toBe(false)
     expect(isDrawable(clipGraphic({ kind: 'emoji', emoji: '🚀' }))).toBe(true)
     expect(isDrawable(clipGraphic({ kind: 'rect' }))).toBe(true)
+    // Bilder nur, solange sie im Browser geladen sind.
+    expect(isDrawable(clipGraphic(newImageData('fehlt')))).toBe(false)
+    registerImageAssetForTest({
+      id: 'img-test',
+      name: 'logo.png',
+      source: {} as CanvasImageSource,
+      width: 400,
+      height: 200,
+    })
+    expect(isDrawable(clipGraphic(newImageData('img-test')))).toBe(true)
   })
 })
 
@@ -147,6 +169,24 @@ describe('GraphicImages', () => {
     expect(upload).toHaveBeenCalledTimes(1)
     images.forget(['id1'])
     expect((await images.prepare(doc)).tracks[0].clips[1]).toMatchObject({ data: { png: 'id2' } })
+  })
+
+  it('zeichnet Bilder je Bearbeitung neu und lässt nicht geladene aus', async () => {
+    const { images, draw } = setup()
+    registerImageAssetForTest({
+      id: 'img-a',
+      name: 'a.png',
+      source: {} as CanvasImageSource,
+      width: 400,
+      height: 200,
+    })
+    const image = newImageData('img-a')
+    const doc = docWith(image, { ...image, cropL: 0.2 }, newImageData('img-weg'))
+    const sent = await images.prepare(doc)
+    expect(draw).toHaveBeenCalledTimes(2)
+    const pngs = sent.tracks[0].clips.map((c) => (c as { data: Record<string, unknown> }).data.png)
+    expect(pngs).toEqual(['id1', 'id2', undefined])
+    expect(sent.tracks[0].clips[0]).toMatchObject({ data: { kind: 'image' } })
   })
 
   it('reicht Fehler weiter und versucht es beim nächsten Mal erneut', async () => {

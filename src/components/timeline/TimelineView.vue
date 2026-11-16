@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
+import { addImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/lib/imageAssets'
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
@@ -10,6 +11,7 @@ import {
   DEFAULT_GRAPHIC_DURATION,
   isTimelineGraphicKind,
   newGraphicData,
+  newImageData,
   TIMELINE_GRAPHIC_KINDS,
 } from '@/timeline/graphics'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
@@ -273,6 +275,32 @@ function addGraphic(e: Event): void {
   )
 }
 
+const imageInput = ref<HTMLInputElement | null>(null)
+const imageBusy = ref(false)
+
+/** Eigenes Bild laden und am Abspielkopf als Clip anlegen. */
+async function addImage(e: Event): Promise<void> {
+  const el = e.target as HTMLInputElement
+  const file = el.files?.[0]
+  el.value = ''
+  if (!file || imageBusy.value) return
+  imageBusy.value = true
+  try {
+    const asset = await addImageAsset(file)
+    run(
+      () =>
+        store.addGraphic(newImageData(asset.id), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null,
+    )
+  } catch (err) {
+    hint.value =
+      err instanceof ImageAssetError
+        ? t(`graphics.image.errors.${err.code}`, { name: file.name })
+        : t('graphics.image.errors.decode', { name: file.name })
+  } finally {
+    imageBusy.value = false
+  }
+}
+
 const canSplit = computed(() => store.splitTargets.length > 0)
 
 function stepPlayhead(frames: number): void {
@@ -412,6 +440,24 @@ function onKeydown(event: KeyboardEvent): void {
           {{ t(`graphics.kinds.${k}`) }}
         </option>
       </select>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-add-image"
+        :title="t('timeline.addImageTitle')"
+        :disabled="imageBusy"
+        @click="imageInput?.click()"
+      >
+        {{ imageBusy ? t('graphics.image.loading') : t('timeline.addImage') }}
+      </button>
+      <input
+        ref="imageInput"
+        type="file"
+        hidden
+        :accept="IMAGE_ACCEPT"
+        data-testid="timeline-image-input"
+        @change="addImage"
+      />
       <span class="time" data-testid="timeline-time">{{ timeText }}</span>
       <span v-if="hint" class="hint" role="status">{{ hint }}</span>
       <span class="spacer"></span>
