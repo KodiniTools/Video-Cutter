@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ClipInspector from '@/components/timeline/ClipInspector.vue'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
@@ -95,6 +96,7 @@ function openProjects(): void {
     <div class="layout">
       <div class="side">
         <MediaPool />
+        <ClipInspector />
         <TextInspector />
         <GraphicInspector />
       </div>

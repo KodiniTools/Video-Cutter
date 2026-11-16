@@ -283,6 +283,14 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   und Schatten im selben Feld; der Server bekommt wie bei Formen nur das fertig
   bearbeitete PNG. Die Originale liegen im Browser und werden mit dem Projekt
   gespeichert.
+- **Clip-Einstellungen** (`ClipInspector.vue`): Ist ein Video- oder Ton-Clip
+  (bzw. ein verknüpftes Paar) markiert, zeigt die Seitenleiste das Feld „Clip“
+  mit Tempo (Stufen wie im bisherigen Editor, 0,29× bis 3,5×; gilt für Bild
+  und verknüpften Ton, Befehl `setClipSpeed`) und Lautstärke des Ton-Clips
+  (0–200 %, `setClipGain`). Das Tempo ändert die Länge des Clips, der
+  Quellbereich bleibt; „Folgende Clips mitverschieben“ rückt Späteres auf
+  allen nicht gesperrten Spuren mit. Nur Frontend: Der Compiler kannte Tempo
+  und Lautstärke bereits.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte

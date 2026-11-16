@@ -20,6 +20,8 @@ import {
   removeAsset as removeAssetOp,
   removeClip as removeClipOp,
   removeTrack as removeTrackOp,
+  setClipGain as setClipGainOp,
+  setClipSpeed as setClipSpeedOp,
   snapPoints,
   snapTime,
   snapToFrame,
@@ -298,6 +300,13 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Darstellungsdaten eines Clips auf einer Ebenen-Spur ändern (z. B. Text). */
   const updateClipData = (clipId: string, patch: Record<string, unknown>) =>
     apply((d) => updateClipDataOp(d, clipId, patch))
+
+  /** Tempo eines Video-/Ton-Clips (samt verknüpftem Clip); `ripple` rückt Späteres mit. */
+  const setClipSpeed = (clipId: string, speed: number, opts?: { ripple?: boolean }) =>
+    apply((d) => setClipSpeedOp(d, clipId, speed, opts))
+
+  /** Lautstärke eines Ton-Clips. */
+  const setClipGain = (clipId: string, gain: number) => apply((d) => setClipGainOp(d, clipId, gain))
 
   /**
    * Video aus der Medienliste ans Ende der Timeline legen (ein Verlaufsschritt)
@@ -581,6 +590,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     unlinkSelection,
     linkSelection,
     updateClipData,
+    setClipSpeed,
+    setClipGain,
     updateSettings,
     setZoom,
     snap,
