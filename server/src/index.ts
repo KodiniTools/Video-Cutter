@@ -9,6 +9,7 @@ import { mediaRouter } from './routes/media'
 import { textRouter } from './routes/text'
 import { projectsRouter } from './routes/projects'
 import { previewRouter } from './routes/preview'
+import { renderRouter } from './routes/render'
 import { previewStore } from './lib/render/preview'
 import { mediaStore } from './lib/media'
 import { derivedStore } from './lib/derived'
@@ -87,6 +88,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api', aiRouter)
   app.use('/api', projectsRouter)
   app.use('/api', previewRouter)
+  app.use('/api', renderRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))

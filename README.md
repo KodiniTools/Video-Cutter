@@ -258,6 +258,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   holt er einen neuen Plan und ersetzt nur Abschnitte mit geändertem Schlüssel;
   geladen wird ab dem Abspielkopf etwa 20 s voraus. Im Browser wird nichts
   gerechnet.
+- **Export** (`server/src/routes/render.ts`, Feature `timelineRender`,
+  `src/components/timeline/ExportDialog.vue`): `POST /api/render`
+  (`{ doc, quality, name }`) rendert die ganze Timeline in voller Größe aus den
+  Originalen (H.264 + AAC, MP4; Qualität `high`/`standard`/`small` = CRF
+  18/21/26) mit demselben Compiler wie die Vorschau. Fortschritt, Download und
+  Abbrechen laufen über die Job-Endpunkte `/api/cut/:id/…`; es gelten
+  `MAX_CONCURRENT` und `MAX_DURATION_SEC`.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,

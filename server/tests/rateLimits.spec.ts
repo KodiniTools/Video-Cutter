@@ -11,6 +11,7 @@ async function start(writeMax: number, readMax: number): Promise<string> {
   app.use('/api', createApiRateLimit({ windowMs: 60_000, writeMax, readMax }))
   app.get('/api/x', (_req, res) => res.json({ ok: true }))
   app.post('/api/x', (_req, res) => res.json({ ok: true }))
+  app.post('/api/preview/plan', (_req, res) => res.json({ ok: true }))
   server = app.listen(0, '127.0.0.1')
   await new Promise((r) => server!.once('listening', r))
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}/api/x`
@@ -29,6 +30,15 @@ describe('createApiRateLimit', () => {
     // Lesende Anfragen sind vom POST-Kontingent unabhängig.
     for (let i = 0; i < 3; i++) expect((await fetch(url)).status).toBe(200)
     expect((await fetch(url)).status).toBe(429)
+  })
+
+  it('zählt den Vorschau-Plan des Timeline-Editors wie lesende Anfragen', async () => {
+    const url = await start(1, 5)
+    const plan = url.replace(/x$/, 'preview/plan')
+    for (let i = 0; i < 5; i++) expect((await fetch(plan, { method: 'POST' })).status).toBe(200)
+    expect((await fetch(plan, { method: 'POST' })).status).toBe(429)
+    // Das POST-Kontingent ist davon unberührt.
+    expect((await fetch(url, { method: 'POST' })).status).toBe(200)
   })
 
   it('antwortet mit deutscher JSON-Meldung und Retry-After', async () => {
