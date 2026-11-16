@@ -281,8 +281,17 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   (`imageAssets`, wie im bisherigen Editor) und legt einen Grafik-Clip der Art
   `image` an. Breite, Drehung, Rahmen, Ecken, Deckkraft, Zuschnitt, Spiegeln
   und Schatten im selben Feld; der Server bekommt wie bei Formen nur das fertig
-  bearbeitete PNG. Die Originale liegen bis zu den Projekten (Phase 5) nur im
-  Browser.
+  bearbeitete PNG. Die Originale liegen im Browser und werden mit dem Projekt
+  gespeichert.
+- **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
+  `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
+  „Projekt“ speichert das Dokument über die bestehenden Endpunkte
+  `/api/projects` (Stand `{ format: 'timeline', version: 2, doc, images }`),
+  dazu die Videos (eigene Kopie im Projektordner) und die Originale der
+  Bild-Clips als Zusatzdateien (SHA-256). Die Projektliste nennt je Projekt
+  `kind` (`classic` | `timeline`); jeder Editor zeigt nur seine eigenen. Beim
+  Öffnen meldet der Server die Videos neu an (neue IDs), der Editor schreibt
+  das Dokument darauf um; was fehlt, wird ausgelassen und gemeldet.
 - **Positionsrahmen** (`PositionFrame.vue`, `src/timeline/positionFrame.ts`):
   Der markierte Text, die Form oder das Bild hat im Vorschaubild einen Rahmen
   zum Ziehen (mit Umschalttaste fein) bzw. Verschieben mit den Pfeiltasten

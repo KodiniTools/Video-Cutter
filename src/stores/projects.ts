@@ -82,7 +82,8 @@ export const useProjectStore = defineStore('projects', () => {
   let stopPending: (() => void) | null = null
 
   async function refresh(): Promise<void> {
-    projects.value = await listProjects()
+    // Projekte des Timeline-Editors gehören nicht in diese Liste.
+    projects.value = (await listProjects()).filter((p) => p.kind !== 'timeline')
     loaded.value = true
   }
 

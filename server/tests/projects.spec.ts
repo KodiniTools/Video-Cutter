@@ -11,6 +11,7 @@ import {
   ProjectStorageFullError,
   ProjectStore,
   parseSaveInput,
+  projectKind,
   projectName,
 } from '../src/lib/projects'
 import { ValidationError } from '../src/lib/validate'
@@ -80,7 +81,7 @@ describe('ProjectStore', () => {
       assets: [],
     })
     expect(r.missingAssets).toEqual([])
-    expect(r.project).toMatchObject({ name: 'Projekt A', videoCount: 1, size: 10 })
+    expect(r.project).toMatchObject({ name: 'Projekt A', kind: 'classic', videoCount: 1, size: 10 })
     expect((await store.list()).map((p) => p.id)).toEqual([r.project.id])
 
     // Bibliothek räumt auf (TTL/Neustart) -> Projekt hat eine eigene Kopie.
@@ -94,6 +95,23 @@ describe('ProjectStore', () => {
 
     const got = await store.get(r.project.id)
     expect(got.state).toEqual({ items: [{ media: v.id }] })
+  })
+
+  it('kennzeichnet Projekte des Timeline-Editors in der Liste', async () => {
+    expect(projectKind({ format: 'timeline', version: 2 })).toBe('timeline')
+    expect(projectKind({ version: 1, items: [] })).toBe('classic')
+    expect(projectKind(null)).toBe('classic')
+    const v = await video('a.mp4')
+    const state = { format: 'timeline', version: 2, doc: { assets: { [v.id]: {} } } }
+    const r = await store.save({ name: 'Timeline', state, media: [v.id], assets: [] })
+    expect(r.project.kind).toBe('timeline')
+    await store.save({ name: 'Alt', state: { items: [] }, media: [], assets: [] })
+    expect((await store.list()).map((p) => [p.name, p.kind]).sort()).toEqual([
+      ['Alt', 'classic'],
+      ['Timeline', 'timeline'],
+    ])
+    // Der Stand selbst kommt unverändert zurück.
+    expect((await store.get(r.project.id)).state).toEqual(state)
   })
 
   it('erneutes Speichern mit der neuen Bibliotheks-ID kopiert nicht noch einmal', async () => {

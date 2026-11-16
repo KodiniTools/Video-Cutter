@@ -10,8 +10,13 @@ import { parseMediaView, type MediaView } from './mediaApi'
 /** Fehler-Kennung: Das Backend kennt Projekte noch nicht (veraltet). */
 export const PROJECTS_UNSUPPORTED = 'PROJECTS_UNSUPPORTED'
 
+/** Womit ein Projekt bearbeitet wird: bisherige App oder Timeline-Editor. */
+export type ProjectKind = 'classic' | 'timeline'
+
 export interface ProjectSummary {
   id: string
+  /** Ältere Backends nennen keine Art: dann `classic`. */
+  kind: ProjectKind
   name: string
   createdAt: number
   updatedAt: number
@@ -52,6 +57,7 @@ export function parseSummary(data: unknown): ProjectSummary {
   if (typeof d.id !== 'string' || !d.id) throw new Error('Ungültige Serverantwort (Projekt).')
   return {
     id: d.id,
+    kind: d.kind === 'timeline' ? 'timeline' : 'classic',
     name: typeof d.name === 'string' && d.name ? d.name : 'Projekt',
     createdAt: num(d.createdAt),
     updatedAt: num(d.updatedAt),

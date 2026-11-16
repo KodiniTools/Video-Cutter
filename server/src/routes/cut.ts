@@ -115,6 +115,7 @@ export const SERVER_FEATURES = [
   'timelineNormalize',
   'timelineText',
   'timelineGraphics',
+  'timelineProjects',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

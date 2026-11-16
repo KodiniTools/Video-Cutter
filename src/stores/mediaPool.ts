@@ -227,10 +227,34 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     return 'removed'
   }
 
+  /**
+   * Liste durch bereits angemeldete Videos ersetzen (Projekt geöffnet bzw. neues
+   * Projekt). Das Timeline-Dokument setzt der Aufrufer; die bisherigen Videos
+   * bleiben auf dem Server (ein gespeichertes Projekt kann sie noch nutzen, der
+   * Rest verfällt von selbst).
+   */
+  function replaceAll(media: readonly MediaView[]): void {
+    dispose()
+    rejected.value = []
+    items.value = media.map((m) => ({
+      key: `pool-${++keySeq}`,
+      name: m.name,
+      size: m.size,
+      state: 'ready',
+      progress: 1,
+      error: null,
+      media: m,
+      prepare: 'idle',
+      derived: null,
+      peaks: null,
+    }))
+    for (const item of items.value) void prepare(item.key)
+  }
+
   /** Alle laufenden Uploads und Abfragen beenden. */
   function dispose(): void {
     for (const key of [...running.keys()]) stop(key)
   }
 
-  return { items, rejected, byAsset, add, prepare, remove, dispose }
+  return { items, rejected, byAsset, add, prepare, remove, replaceAll, dispose }
 })
