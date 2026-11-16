@@ -20,6 +20,7 @@ import {
   removeAsset as removeAssetOp,
   removeClip as removeClipOp,
   removeTrack as removeTrackOp,
+  setClipCrop as setClipCropOp,
   setClipGain as setClipGainOp,
   setClipSpeed as setClipSpeedOp,
   snapPoints,
@@ -35,6 +36,7 @@ import {
   validateDoc,
   type AssetRef,
   type Clip,
+  type ClipCrop,
   type DocIssue,
   type MoveTarget,
   type NewTrack,
@@ -304,6 +306,10 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Tempo eines Video-/Ton-Clips (samt verknüpftem Clip); `ripple` rückt Späteres mit. */
   const setClipSpeed = (clipId: string, speed: number, opts?: { ripple?: boolean }) =>
     apply((d) => setClipSpeedOp(d, clipId, speed, opts))
+
+  /** Zuschnitt eines Video-Clips (`null` = ganzes Bild). */
+  const setClipCrop = (clipId: string, crop: ClipCrop | null) =>
+    apply((d) => setClipCropOp(d, clipId, crop))
 
   /** Lautstärke eines Ton-Clips. */
   const setClipGain = (clipId: string, gain: number) => apply((d) => setClipGainOp(d, clipId, gain))
@@ -592,6 +598,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateClipData,
     setClipSpeed,
     setClipGain,
+    setClipCrop,
     updateSettings,
     setZoom,
     snap,

@@ -6,6 +6,8 @@ import {
   createDoc,
   findClip,
   putAsset,
+  normalizeCrop,
+  setClipCrop,
   setClipGain,
   setClipSpeed,
   updateTrack,
@@ -138,6 +140,58 @@ describe('setClipGain', () => {
     expect(must(setClipGain(doc, audio.id, 1))).toBe(doc)
     expect(error(setClipGain(doc, video.id, 0.5))).toBe('kind-mismatch')
     expect(error(setClipGain(doc, audio.id, Number.NaN))).toBe('invalid-settings')
+  })
+})
+
+describe('Zuschnitt', () => {
+  it('normalizeCrop begrenzt, rundet und erkennt das ganze Bild', () => {
+    expect(normalizeCrop(null)).toBeNull()
+    expect(normalizeCrop({ x: 0, y: 0, width: 1, height: 1 })).toBeNull()
+    expect(normalizeCrop({ x: Number.NaN, y: 0, width: 1, height: 1 })).toBeNull()
+    expect(normalizeCrop({ x: 0.123456, y: 0.2, width: 0.5, height: 0.5 })).toEqual({
+      x: 0.1235,
+      y: 0.2,
+      width: 0.5,
+      height: 0.5,
+    })
+    // Zu klein und über den Rand hinaus: Mindestgröße, ins Bild geschoben.
+    expect(normalizeCrop({ x: 0.95, y: -1, width: 0.01, height: 3 })).toEqual({
+      x: 0.9,
+      y: 0,
+      width: 0.1,
+      height: 1,
+    })
+  })
+
+  it('setClipCrop setzt und entfernt den Zuschnitt, nur bei Bild-Clips', () => {
+    const doc = twoClips()
+    const [video] = lane(doc, 'video')
+    const [audio] = lane(doc, 'audio')
+    const cropped = must(setClipCrop(doc, video.id, { x: 0.1, y: 0.2, width: 0.6, height: 0.5 }))
+    expect((lane(cropped, 'video')[0] as { crop?: unknown }).crop).toEqual({
+      x: 0.1,
+      y: 0.2,
+      width: 0.6,
+      height: 0.5,
+    })
+    expect(validateDoc(cropped)).toEqual([])
+    // Gleicher Wert: Dokument bleibt dasselbe (kein Rückgängig-Schritt).
+    expect(must(setClipCrop(cropped, video.id, { x: 0.1, y: 0.2, width: 0.6, height: 0.5 }))).toBe(
+      cropped,
+    )
+    const reset = must(setClipCrop(cropped, video.id, null))
+    expect('crop' in lane(reset, 'video')[0]).toBe(false)
+    expect(must(setClipCrop(doc, video.id, { x: 0, y: 0, width: 1, height: 1 }))).toBe(doc)
+    expect(error(setClipCrop(doc, audio.id, { x: 0, y: 0, width: 0.5, height: 0.5 }))).toBe(
+      'kind-mismatch',
+    )
+    expect(error(setClipCrop(doc, 'nope', null))).toBe('clip-not-found')
+    const locked = must(
+      updateTrack(doc, doc.tracks.find((t) => t.kind === 'video')!.id, { locked: true }),
+    )
+    expect(error(setClipCrop(locked, video.id, { x: 0, y: 0, width: 0.5, height: 0.5 }))).toBe(
+      'track-locked',
+    )
   })
 })
 

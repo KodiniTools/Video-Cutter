@@ -4,7 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { formatSpeedFactor, SPEED_STEPS, speedFactor } from '@/lib/clipSpeed'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
-import { MAX_CLIP_GAIN, timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
+import {
+  MAX_CLIP_GAIN,
+  MIN_CROP_SIZE,
+  timeToSeconds,
+  type AudioClip,
+  type VideoClip,
+} from '@/timeline/model'
 
 /**
  * Einstellungen des markierten Video- bzw. Ton-Clips: Tempo (gilt für Bild
@@ -78,6 +84,55 @@ function commit(): void {
   store.endGesture()
 }
 
+// --- Zuschnitt (Ränder in Anteilen der Quelle) ------------------------------
+
+const video = computed(() => clips.value.find((c): c is VideoClip => c.kind === 'video') ?? null)
+const CROP_SIDES = ['left', 'right', 'top', 'bottom'] as const
+type CropSide = (typeof CROP_SIDES)[number]
+
+/** Abgeschnittene Ränder des Clips (0 = nichts). */
+const margins = computed<Record<CropSide, number>>(() => {
+  const c = video.value?.crop
+  if (!c) return { left: 0, right: 0, top: 0, bottom: 0 }
+  return {
+    left: c.x,
+    right: Math.max(0, 1 - c.x - c.width),
+    top: c.y,
+    bottom: Math.max(0, 1 - c.y - c.height),
+  }
+})
+const cropped = computed(() => CROP_SIDES.some((side) => margins.value[side] > 0))
+const percent = (v: number) => Math.round(v * 1000) / 10
+/** So viel darf ein Rand höchstens wegnehmen (der Rest bleibt mindestens sichtbar). */
+const maxMargin = (side: CropSide) => {
+  const m = margins.value
+  const other =
+    side === 'left' ? m.right : side === 'right' ? m.left : side === 'top' ? m.bottom : m.top
+  return Math.max(0, 1 - MIN_CROP_SIZE - other)
+}
+
+function onCrop(side: CropSide, e: Event): void {
+  const clip = video.value
+  if (!clip) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const value = Number((e.target as HTMLInputElement).value) / 100
+  const m = { ...margins.value, [side]: Math.min(maxMargin(side), Math.max(0, value)) }
+  store.setClipCrop(clip.id, {
+    x: m.left,
+    y: m.top,
+    width: 1 - m.left - m.right,
+    height: 1 - m.top - m.bottom,
+  })
+}
+
+function resetCrop(): void {
+  commit()
+  if (video.value) store.setClipCrop(video.value.id, null)
+}
+
 const timing = computed(() => {
   const clip = main.value
   if (!clip) return ''
@@ -127,6 +182,33 @@ onBeforeUnmount(commit)
         @change="commit"
       />
     </label>
+    <fieldset v-if="video" class="crop" data-testid="clip-crop">
+      <legend>{{ t('timeline.clipInspector.crop') }}</legend>
+      <label v-for="side in CROP_SIDES" :key="side" class="side">
+        <span>{{ t(`timeline.clipInspector.cropSides.${side}`) }}</span>
+        <input
+          type="range"
+          min="0"
+          :max="Math.round(maxMargin(side) * 100)"
+          step="1"
+          :value="Math.round(margins[side] * 100)"
+          :data-testid="`clip-crop-${side}`"
+          @input="onCrop(side, $event)"
+          @change="commit"
+        />
+        <span class="value">{{ percent(margins[side]) }} %</span>
+      </label>
+      <button
+        v-if="cropped"
+        type="button"
+        class="plain"
+        data-testid="clip-crop-reset"
+        @click="resetCrop"
+      >
+        {{ t('timeline.clipInspector.cropReset') }}
+      </button>
+      <p class="hint">{{ t('timeline.clipInspector.cropHint') }}</p>
+    </fieldset>
     <p class="hint">
       {{ audio ? t('timeline.clipInspector.hint') : t('timeline.clipInspector.hintNoAudio') }}
     </p>
@@ -167,6 +249,39 @@ h3 {
   align-items: center;
   gap: var(--ds-space-2);
   color: var(--ds-text-2);
+}
+.crop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--ds-text-2);
+}
+.crop legend {
+  padding: 0;
+  margin-bottom: var(--ds-space-2);
+}
+.side {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) 3.5em;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.plain {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ds-link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 select {
   width: 100%;

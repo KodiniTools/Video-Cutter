@@ -289,8 +289,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   und verknüpften Ton, Befehl `setClipSpeed`) und Lautstärke des Ton-Clips
   (0–200 %, `setClipGain`). Das Tempo ändert die Länge des Clips, der
   Quellbereich bleibt; „Folgende Clips mitverschieben“ rückt Späteres auf
-  allen nicht gesperrten Spuren mit. Nur Frontend: Der Compiler kannte Tempo
-  und Lautstärke bereits.
+  allen nicht gesperrten Spuren mit. Unter „Zuschneiden“ nehmen vier Regler
+  (links, rechts, oben, unten) Ränder des Videos weg (`setClipCrop`,
+  mindestens 10 % bleiben sichtbar); der Rest wird ins Projektformat
+  eingepasst. Nur Frontend: Der Compiler kannte Tempo, Lautstärke und
+  Zuschnitt bereits.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte
@@ -306,8 +309,9 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   beim Zusammenfügen), Ton verknüpft auf A1 (stumme ohne Ton-Clip), Texte und
   Grafiken je Video als Clips auf Ebenen-Spuren mit umgerechneten Zeiten. Das
   gespeicherte Projekt bleibt unverändert; das Ergebnis ist ein neues,
-  ungespeichertes Projekt. Noch nicht übernommen und im Dialog genannt:
-  Übergänge, Hintergrundmusik, Ton-Blende, Standbilder in Lücken, Zuschnitt.
+  ungespeichertes Projekt. Der Zuschnitt des markierten Videos wird zum
+  Zuschnitt seines Clips. Noch nicht übernommen und im Dialog genannt:
+  Übergänge, Hintergrundmusik, Ton-Blende, Standbilder in Lücken.
   **Automatisches Speichern:** Ein geöffnetes (bereits gespeichertes) Projekt
   wird 3 s nach der letzten Änderung von selbst überschrieben (abschaltbar im
   Dialog, der Browser merkt es sich). Nicht bei neuen Projekten ohne Namen und

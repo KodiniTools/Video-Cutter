@@ -710,6 +710,10 @@ const messages = {
         noRoom:
           'Kein Platz: Der langsamere Clip würde in den nächsten ragen. „Folgende Clips mitverschieben“ einschalten oder den nächsten Clip verschieben.',
         gain: 'Lautstärke',
+        crop: 'Zuschneiden',
+        cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
+        cropReset: 'Zuschnitt zurücksetzen',
+        cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
         hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
       },
@@ -1530,6 +1534,10 @@ const messages = {
         noRoom:
           'No room: the slower clip would run into the next one. Turn on “Move following clips along” or move the next clip.',
         gain: 'Volume',
+        crop: 'Crop',
+        cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
+        cropReset: 'Reset crop',
+        cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
         hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
       },

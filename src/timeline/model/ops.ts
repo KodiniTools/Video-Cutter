@@ -7,6 +7,7 @@ import {
   TIMELINE_DOC_VERSION,
   type AssetRef,
   type Clip,
+  type ClipCrop,
   type ClipKind,
   type OpError,
   type OpResult,
@@ -567,6 +568,54 @@ export function setClipSpeed(
     result = withClips(result, i, clips)
   }
   return ok(result)
+}
+
+/** Kleinster Zuschnitt: Anteil der Quelle, der mindestens sichtbar bleibt. */
+export const MIN_CROP_SIZE = 0.1
+
+/** Zuschnitt in gültige Grenzen bringen; das ganze Bild (oder Ungültiges) ergibt `null`. */
+export function normalizeCrop(crop: ClipCrop | null | undefined): ClipCrop | null {
+  if (!crop) return null
+  const { x, y, width, height } = crop
+  if (![x, y, width, height].every((v) => Number.isFinite(v))) return null
+  const round = (v: number) => Math.round(v * 10000) / 10000
+  const w = round(Math.min(1, Math.max(MIN_CROP_SIZE, width)))
+  const h = round(Math.min(1, Math.max(MIN_CROP_SIZE, height)))
+  const cx = round(Math.min(1 - w, Math.max(0, x)))
+  const cy = round(Math.min(1 - h, Math.max(0, y)))
+  if (cx === 0 && cy === 0 && w === 1 && h === 1) return null
+  return { x: cx, y: cy, width: w, height: h }
+}
+
+/**
+ * Zuschnitt eines Video-Clips (Anteile der Quelle). `null` oder das ganze Bild
+ * hebt ihn auf. Das zugeschnittene Bild wird wie jedes Video ins Projektformat
+ * eingepasst.
+ */
+export function setClipCrop(doc: TimelineDoc, clipId: string, crop: ClipCrop | null): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const next = normalizeCrop(crop)
+  const before = normalizeCrop(clip.crop)
+  if (
+    (next === null && before === null) ||
+    (next !== null &&
+      before !== null &&
+      next.x === before.x &&
+      next.y === before.y &&
+      next.width === before.width &&
+      next.height === before.height)
+  ) {
+    return ok(doc)
+  }
+  const changed: Clip = { ...clip }
+  if (next) changed.crop = next
+  else delete changed.crop
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
 /** Lautstärke eines Ton-Clips (0 = stumm, 1 = unverändert, höchstens `MAX_CLIP_GAIN`). */
