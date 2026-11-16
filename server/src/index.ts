@@ -19,6 +19,12 @@ import { createApiRateLimit } from './lib/rateLimits'
 
 async function bootstrap(): Promise<void> {
   await mkdir(config.tmpDir, { recursive: true })
+  const restored = await mediaStore.init()
+  console.log(
+    config.mediaIndexFile
+      ? `Videos: ${restored} wiederhergestellt (${config.mediaIndexFile})`
+      : 'Videos: nur im Arbeitsspeicher (MEDIA_INDEX_FILE leer)',
+  )
   await mkdir(config.projectsDir, { recursive: true })
   console.log(`Projekte: ${config.projectsDir}`)
   await gallery.init()

@@ -1,4 +1,5 @@
-import { rm, stat } from 'node:fs/promises'
+import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from '../config'
 import type { MediaInfo } from './probe'
@@ -58,24 +59,136 @@ export function isMediaId(v: unknown): v is string {
   return typeof v === 'string' && ID_RE.test(v)
 }
 
+/** Dauerhaftes Verzeichnis der Bibliothek (übersteht einen Neustart des Servers). */
+export interface MediaPersistence {
+  /** JSON-Datei mit dem Verzeichnis aller Videos. */
+  indexFile: string
+  /** Nur Dateien in diesem Ordner werden beim Start wieder aufgenommen. */
+  baseDir: string
+}
+
+const INDEX_VERSION = 1
+
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+
+/** Liest einen Eintrag des Verzeichnisses; `null`, wenn er unbrauchbar ist. */
+function parseIndexEntry(raw: unknown, baseDir: string): MediaItem | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const info = r.info as Record<string, unknown> | null | undefined
+  if (!isMediaId(r.id) || typeof r.path !== 'string' || typeof r.name !== 'string') return null
+  if (!isCount(r.size) || !isCount(r.createdAt) || !isCount(r.lastUsed)) return null
+  if (!info || typeof info !== 'object') return null
+  if (!isCount(info.width) || !isCount(info.height) || !isCount(info.duration)) return null
+  if (typeof info.hasAudio !== 'boolean') return null
+  // Nur Dateien im eigenen Arbeitsordner: Ein manipuliertes Verzeichnis darf
+  // den Server nicht dazu bringen, fremde Dateien auszuliefern oder zu löschen.
+  const file = path.resolve(r.path)
+  if (!file.startsWith(path.resolve(baseDir) + path.sep)) return null
+  return {
+    id: r.id,
+    path: file,
+    name: r.name,
+    size: r.size,
+    info: {
+      width: info.width,
+      height: info.height,
+      hasAudio: info.hasAudio,
+      duration: info.duration,
+      ...(isCount(info.fps) ? { fps: info.fps } : {}),
+    },
+    createdAt: r.createdAt,
+    lastUsed: r.lastUsed,
+  }
+}
+
 /**
  * Bibliothek hochgeladener Videos und Ergebnisse. Dateien bleiben bis zum
  * Löschen durch den Nutzer – oder bis sie `mediaTtlMs` lang nicht benutzt
  * wurden. Während ein Job eine Datei liest, wird sie nicht gelöscht (Referenz-
  * zählung); ein Löschwunsch wird dann nach Jobende ausgeführt.
+ *
+ * Mit `persist` führt der Speicher ein Verzeichnis auf der Platte: Nach einem
+ * Neustart (z. B. Deploy) sind die Videos unter derselben ID wieder da. Ohne
+ * `persist` lebt die Bibliothek nur im Arbeitsspeicher und `shutdown` löscht
+ * alle Dateien.
  */
 export class MediaStore {
   private items = new Map<string, MediaItem>()
   private inUse = new Map<string, number>()
   private pendingDelete = new Set<string>()
   private sweeper: NodeJS.Timeout
+  /** Verzeichnis muss geschrieben werden / Schreiben ist bereits eingeplant. */
+  private dirty = false
+  /** Seit dem letzten Schreiben wurde ein Video benutzt (`lastUsed` geändert). */
+  private usedSinceSave = false
+  private saving: Promise<void> = Promise.resolve()
 
   constructor(
     private ttlMs = config.mediaTtlMs,
     private maxTotalBytes = config.maxMediaTotalBytes,
+    private persist?: MediaPersistence,
   ) {
     this.sweeper = setInterval(() => void this.sweep(), 60_000)
     this.sweeper.unref?.()
+  }
+
+  /**
+   * Liest das Verzeichnis ein (einmal beim Start). Einträge, deren Datei fehlt
+   * oder die unbrauchbar sind, werden übergangen. Liefert die Zahl der
+   * wiederhergestellten Videos.
+   */
+  async init(): Promise<number> {
+    if (!this.persist) return 0
+    let entries: unknown[] = []
+    try {
+      const parsed: unknown = JSON.parse(await readFile(this.persist.indexFile, 'utf8'))
+      const items = (parsed as { items?: unknown } | null)?.items
+      if (Array.isArray(items)) entries = items
+    } catch (err) {
+      // Kein Verzeichnis (erster Start) ist normal; alles andere melden.
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT')
+        console.error('Video-Verzeichnis nicht lesbar, beginne leer:', err)
+      return 0
+    }
+    let restored = 0
+    for (const raw of entries) {
+      const item = parseIndexEntry(raw, this.persist.baseDir)
+      if (!item || this.items.has(item.id)) continue
+      const st = await stat(item.path).catch(() => null)
+      if (!st?.isFile()) continue
+      this.items.set(item.id, { ...item, size: st.size })
+      restored++
+    }
+    if (restored !== entries.length) this.touch()
+    return restored
+  }
+
+  /** Plant das Schreiben des Verzeichnisses ein (mehrere Änderungen = ein Schreiben). */
+  private touch(): void {
+    if (!this.persist || this.dirty) return
+    this.dirty = true
+    this.saving = this.saving.then(() => this.writeIndex())
+  }
+
+  private async writeIndex(): Promise<void> {
+    if (!this.persist) return
+    this.dirty = false
+    this.usedSinceSave = false
+    const items = [...this.items.values()].filter((m) => !this.pendingDelete.has(m.id))
+    const tmp = `${this.persist.indexFile}.tmp`
+    try {
+      // Erst daneben schreiben, dann umbenennen: nie ein halbes Verzeichnis.
+      await writeFile(tmp, JSON.stringify({ version: INDEX_VERSION, items }))
+      await rename(tmp, this.persist.indexFile)
+    } catch (err) {
+      console.error('Video-Verzeichnis konnte nicht geschrieben werden:', err)
+    }
+  }
+
+  /** Wartet, bis das Verzeichnis geschrieben ist. */
+  async flush(): Promise<void> {
+    await this.saving
   }
 
   get totalBytes(): number {
@@ -112,6 +225,7 @@ export class MediaStore {
       lastUsed: now,
     }
     this.items.set(item.id, item)
+    this.touch()
     return item
   }
 
@@ -119,7 +233,10 @@ export class MediaStore {
   get(id: string): MediaItem | undefined {
     if (this.pendingDelete.has(id)) return undefined
     const m = this.items.get(id)
-    if (m) m.lastUsed = Date.now()
+    if (m) {
+      m.lastUsed = Date.now()
+      this.usedSinceSave = true
+    }
     return m
   }
 
@@ -140,7 +257,10 @@ export class MediaStore {
       if (n > 0) this.inUse.set(id, n)
       else this.inUse.delete(id)
       const m = this.items.get(id)
-      if (m) m.lastUsed = Date.now()
+      if (m) {
+        m.lastUsed = Date.now()
+        this.usedSinceSave = true
+      }
       if (n <= 0 && this.pendingDelete.has(id)) await this.removeNow(id)
     }
   }
@@ -163,6 +283,7 @@ export class MediaStore {
     const m = this.items.get(id)
     this.items.delete(id)
     this.pendingDelete.delete(id)
+    this.touch()
     if (m) await rm(m.path, { force: true }).catch(() => {})
   }
 
@@ -172,12 +293,24 @@ export class MediaStore {
       if ((this.inUse.get(id) ?? 0) > 0) continue
       if (now - m.lastUsed > this.ttlMs) await this.removeNow(id)
     }
+    // Letzte Benutzung gelegentlich festhalten, damit die Frist einen Neustart übersteht.
+    if (this.usedSinceSave) this.touch()
   }
 
   async shutdown(): Promise<void> {
     clearInterval(this.sweeper)
+    if (this.persist) {
+      // Dateien bleiben liegen; nach dem Neustart liest `init` sie wieder ein.
+      this.touch()
+      await this.flush()
+      return
+    }
     for (const id of [...this.items.keys()]) await this.removeNow(id)
   }
 }
 
-export const mediaStore = new MediaStore()
+export const mediaStore = new MediaStore(
+  config.mediaTtlMs,
+  config.maxMediaTotalBytes,
+  config.mediaIndexFile ? { indexFile: config.mediaIndexFile, baseDir: config.tmpDir } : undefined,
+)
