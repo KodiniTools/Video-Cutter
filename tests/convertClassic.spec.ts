@@ -209,7 +209,21 @@ describe('convertClassicProject', () => {
       { a: view('A'), b: view('B') },
     )
     expect(r.state.doc.settings).toMatchObject({ width: 1080, height: 1920, fps: 25 })
-    expect(r.skipped.sort()).toEqual(['audioFade', 'crop', 'music', 'transitions'])
+    expect(r.skipped.sort()).toEqual(['crop', 'music', 'transitions'])
+    // Ton-Blende: Einblenden am ersten Ton-Clip .
+    const sound = clips(r.state.doc, 'audio') as { fadeIn?: unknown; fadeOut?: unknown }[]
+    expect(sound[0].fadeIn).toEqual({ duration: 2_000_000, curve: 'tri' })
+    expect(sound.every((c) => c.fadeOut === undefined)).toBe(true)
+    expect(sound.slice(1).every((c) => c.fadeIn === undefined)).toBe(true)
+    // Ohne Ton-Clip (alles stumm) bleibt die Blende „nicht übernommen“.
+    const silent = convertClassicProject(
+      classic({
+        items: [item('a', { muted: true })],
+        audioFade: { fadeOut: { enabled: true, duration: 1, curve: 'exp' } },
+      }),
+      { a: view('A') },
+    )
+    expect(silent.skipped).toEqual(['audioFade'])
     // Ist das Video markiert, wandert der Zuschnitt an seinen Clip.
     const withSelection = convertClassicProject(
       classic({

@@ -75,10 +75,34 @@ export interface VideoClip extends MediaClipBase {
   crop?: ClipCrop | null
 }
 
+/** Kurvenformen der Ton-Blende (FFmpeg `afade curve=`, wie im bisherigen Editor). */
+export const FADE_CURVES = [
+  'tri',
+  'exp',
+  'log',
+  'qsin',
+  'hsin',
+  'esin',
+  'qua',
+  'cub',
+  'squ',
+] as const
+export type FadeCurve = (typeof FADE_CURVES)[number]
+
+/** Ton-Blende am Anfang bzw. Ende eines Clips (Dauer auf der Timeline). */
+export interface ClipFade {
+  duration: Time
+  curve: FadeCurve
+}
+
 export interface AudioClip extends MediaClipBase {
   kind: 'audio'
   /** Lautstärke 0–1 (und darüber für Verstärkung). */
   gain: number
+  /** Ton am Clip-Anfang einblenden. */
+  fadeIn?: ClipFade
+  /** Ton am Clip-Ende ausblenden. */
+  fadeOut?: ClipFade
 }
 
 /**

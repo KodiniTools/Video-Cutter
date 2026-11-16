@@ -292,8 +292,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   allen nicht gesperrten Spuren mit. Unter „Zuschneiden“ nehmen vier Regler
   (links, rechts, oben, unten) Ränder des Videos weg (`setClipCrop`,
   mindestens 10 % bleiben sichtbar); der Rest wird ins Projektformat
-  eingepasst. Nur Frontend: Der Compiler kannte Tempo, Lautstärke und
-  Zuschnitt bereits.
+  eingepasst. Der Compiler kannte Tempo, Lautstärke und Zuschnitt bereits.
+  „Ton-Blende“ (Feature `timelineAudioFade`, `setClipFade`) blendet den Ton
+  am Anfang bzw. Ende des Ton-Clips (bis 10 s je Seite, Kurven wie im
+  bisherigen Editor; Felder `fadeIn`/`fadeOut` am Clip). Der Compiler setzt
+  `afade` mit Zeiten im Clip (`clipFadeFilters`), damit eine Blende über
+  Abschnittsgrenzen der Vorschau hinweg wie im Export klingt. Beim Teilen
+  bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte
@@ -310,8 +315,9 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Grafiken je Video als Clips auf Ebenen-Spuren mit umgerechneten Zeiten. Das
   gespeicherte Projekt bleibt unverändert; das Ergebnis ist ein neues,
   ungespeichertes Projekt. Der Zuschnitt des markierten Videos wird zum
-  Zuschnitt seines Clips. Noch nicht übernommen und im Dialog genannt:
-  Übergänge, Hintergrundmusik, Ton-Blende, Standbilder in Lücken.
+  Zuschnitt seines Clips, die Ton-Blende zur Einblendung des ersten und
+  Ausblendung des letzten Ton-Clips. Noch nicht übernommen und im Dialog
+  genannt: Übergänge, Hintergrundmusik, Standbilder in Lücken.
   **Automatisches Speichern:** Ein geöffnetes (bereits gespeichertes) Projekt
   wird 3 s nach der letzten Änderung von selbst überschrieben (abschaltbar im
   Dialog, der Browser merkt es sich). Nicht bei neuen Projekten ohne Namen und
