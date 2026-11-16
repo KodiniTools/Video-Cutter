@@ -1,7 +1,9 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express'
 import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config'
+import { customFontsEnv } from '../lib/customFonts'
 import { jobManager } from '../lib/jobs'
 import { mediaStore } from '../lib/media'
 import { buildRenderArgs, compileTimeline } from '../lib/render/compile'
@@ -88,25 +90,30 @@ renderRouter.post(
 
     const id = randomUUID()
     const outputPath = path.join(config.tmpDir, `${id}-out.mp4`)
+    // Texte: Die Untertitel-Datei gehört dem Auftrag und wird danach gelöscht.
+    const assPath = compiled.ass === undefined ? null : path.join(config.tmpDir, `${id}-text.ass`)
     const args = buildRenderArgs(compiled, {
+      ...(assPath ? { assPath, fontsDir: config.fontsDir } : {}),
       output: outputPath,
       preset: 'medium',
       crf: RENDER_QUALITIES[settings.quality],
       audioBitrate: '192k',
     })
     // Verwendete Videos für die Dauer des Exports gegen Löschen sperren.
+    if (assPath) await writeFile(assPath, compiled.ass ?? '', 'utf8')
     const refs = Object.keys(sources)
     mediaStore.acquire(refs)
     const job = jobManager.create({
       id,
       inputPath: '',
       ownsInput: false,
+      extraInputPaths: assPath ? [assPath] : [],
       mediaRefs: refs,
       outputPath,
       outputName: settings.outputName,
     })
     // Nicht awaiten: läuft im Hintergrund, der Client verfolgt den Fortschritt.
-    void jobManager.run(job, args, compiled.duration)
+    void jobManager.run(job, args, compiled.duration, assPath ? customFontsEnv() : undefined)
 
     res.status(202).json({
       jobId: id,

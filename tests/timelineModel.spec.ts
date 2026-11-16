@@ -7,6 +7,7 @@ import {
   findClip,
   frameIndex,
   insertClip,
+  insertOverlayClip,
   moveTrack,
   nextTrackName,
   moveClip,
@@ -20,6 +21,7 @@ import {
   snapToFrame,
   splitClip,
   trimClip,
+  updateClipData,
   updateSettings,
   updateTrack,
   validateDoc,
@@ -461,6 +463,47 @@ describe('appendMedia', () => {
   it('lehnt Unbekanntes und Bilder ab', () => {
     expect(errorOf(appendMedia(empty(), 'nope'))).toBe('asset-not-found')
     expect(errorOf(appendMedia(empty(), 'img'))).toBe('kind-mismatch')
+  })
+})
+
+describe('Ebenen-Clips (Text)', () => {
+  const textClip = (id: string, start: number, duration: number) =>
+    ({ id, kind: 'text', start: s(start), duration: s(duration), data: { text: 'Hallo' } }) as const
+
+  it('legt bei Bedarf oben eine Ebenen-Spur an und nutzt sie weiter, solange Platz ist', () => {
+    let doc = unwrap(insertOverlayClip(baseDoc(), textClip('t1', 0, 3), 'T1', 'ovl'))
+    expect(doc.tracks[0]).toMatchObject({ id: 'ovl', kind: 'overlay', name: 'T1' })
+    doc = unwrap(insertOverlayClip(doc, textClip('t2', 5, 2), 'T2'))
+    expect(doc.tracks.filter((t) => t.kind === 'overlay')).toHaveLength(1)
+    expect(starts(doc, 'ovl')).toEqual([
+      ['t1', 0, s(3)],
+      ['t2', s(5), s(2)],
+    ])
+    // Überlappung: zweite Ebenen-Spur darüber.
+    doc = unwrap(insertOverlayClip(doc, textClip('t3', 1, 2), 'T2', 'ovl2'))
+    expect(doc.tracks.slice(0, 2).map((t) => t.id)).toEqual(['ovl2', 'ovl'])
+  })
+
+  it('ändert Darstellungsdaten, ohne die Eingabe anzufassen', () => {
+    const doc = unwrap(insertOverlayClip(baseDoc(), textClip('t1', 0, 3), 'T1', 'ovl'))
+    const next = unwrap(updateClipData(doc, 't1', { text: 'Neu', size: 0.1, color: undefined }))
+    const clip = next.tracks[0].clips[0]
+    expect('data' in clip && clip.data).toEqual({ text: 'Neu', size: 0.1 })
+    // Gleiche Werte: dasselbe Dokument.
+    const same = updateClipData(next, 't1', { text: 'Neu' })
+    expect(same.ok && same.doc === next).toBe(true)
+  })
+
+  it('lehnt unbekannte Clips, Medien-Clips und gesperrte Spuren ab', () => {
+    const doc = unwrap(insertOverlayClip(baseDoc(), textClip('t1', 0, 3), 'T1', 'ovl'))
+    expect(errorOf(updateClipData(doc, 'nix', { text: 'x' }))).toBe('clip-not-found')
+    const media = doc.tracks.find((t) => t.kind === 'video')?.clips[0]
+    if (media) expect(errorOf(updateClipData(doc, media.id, { text: 'x' }))).toBe('kind-mismatch')
+    const locked = unwrap(updateTrack(doc, 'ovl', { locked: true }))
+    expect(errorOf(updateClipData(locked, 't1', { text: 'x' }))).toBe('track-locked')
+    // Gesperrte Ebenen-Spur wird übergangen: neue Spur.
+    const more = unwrap(insertOverlayClip(locked, textClip('t2', 10, 1), 'T2', 'ovl2'))
+    expect(more.tracks[0].id).toBe('ovl2')
   })
 })
 

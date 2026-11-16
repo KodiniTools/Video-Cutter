@@ -6,6 +6,8 @@
  * läuft zuerst durch `parseTimelineDoc`; der Compiler vertraut dem Ergebnis.
  */
 
+import { MIN_TEXT_DURATION, parseTextOverlays, type TextOverlay } from '../textOverlay'
+
 /** Zeit bzw. Dauer in ganzen Mikrosekunden. */
 export type Time = number
 
@@ -65,9 +67,16 @@ export interface DocAudioClip extends DocClipBase {
   gain: number
 }
 
-/** Text/Grafik/Bild über dem Video – wird geprüft, aber erst später gerendert. */
+/** Darstellung eines Textes (ohne Zeiten – die kommen vom Clip). */
+export type DocTextStyle = Omit<TextOverlay, 'start' | 'end'>
+
+/**
+ * Text/Grafik/Bild über dem Video. Texte werden gerendert (`text` gesetzt);
+ * Grafiken und Bilder werden geprüft, aber erst später gerendert.
+ */
 export interface DocOverlayClip extends DocClipBase {
   kind: 'text' | 'graphic' | 'image'
+  text?: DocTextStyle
 }
 
 export interface DocVideoTrack {
@@ -285,7 +294,27 @@ export function parseTimelineDoc(
         if (kind === 'overlay') {
           if (ck !== 'text' && ck !== 'graphic' && ck !== 'image')
             return fail(`${cp}.kind`, 'Clip passt nicht zur Spur-Art.')
-          clips.push({ ...base, kind: ck })
+          if (ck !== 'text') {
+            clips.push({ ...base, kind: ck })
+            return
+          }
+          const data = isObject(rc.data) ? rc.data : {}
+          // Noch leerer Text (wird gerade getippt): gültig, aber nichts zu zeigen.
+          if (typeof data.text !== 'string' || !data.text.trim()) {
+            clips.push({ ...base, kind: ck })
+            return
+          }
+          // Sonst gleiche Regeln wie beim Einbrennen im bisherigen Editor.
+          try {
+            const seconds = Math.max(MIN_TEXT_DURATION, rc.duration / MICROS_PER_SECOND)
+            const [parsed] = parseTextOverlays([{ ...data, start: 0, end: seconds }], Infinity)
+            const text: Partial<TextOverlay> = { ...parsed }
+            delete text.start
+            delete text.end
+            clips.push({ ...base, kind: ck, text: text as DocTextStyle })
+          } catch (e) {
+            fail(`${cp}.data`, e instanceof Error ? e.message : 'Text ist ungültig.')
+          }
           return
         }
         const fits = kind === 'video' ? ck === 'video' || ck === 'still' : ck === 'audio'

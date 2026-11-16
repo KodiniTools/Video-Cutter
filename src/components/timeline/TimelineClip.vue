@@ -33,7 +33,15 @@ const width = computed(() => Math.max(2, timeToPx(props.clip.duration, props.zoo
 const item = computed(() =>
   'asset' in props.clip && props.clip.asset ? pool.byAsset(props.clip.asset) : undefined,
 )
-const name = computed(() => item.value?.name ?? '')
+const name = computed(() => {
+  const clip = props.clip
+  // Text-Clips zeigen ihre erste Zeile.
+  if (clip.kind === 'text')
+    return typeof clip.data.text === 'string'
+      ? clip.data.text.split('\n')[0].trim() || 'Text'
+      : 'Text'
+  return item.value?.name ?? ''
+})
 
 /** Vorschaubilder entlang eines Video-Clips (aus dem Filmstreifen). */
 const thumbs = computed(() => {
@@ -129,6 +137,10 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
 .clip[data-kind='audio'] {
   background: var(--ds-accent-soft);
   color: var(--ds-accent);
+}
+.clip[data-kind='text'] {
+  background: var(--ds-surface-2);
+  border-style: dashed;
 }
 .clip.selected {
   border-color: var(--ds-accent);

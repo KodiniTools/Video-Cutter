@@ -267,6 +267,14 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `MAX_CONCURRENT` und `MAX_DURATION_SEC`.
   `normalizeAudio: true` gleicht die Lautstärke des fertigen Tons an
   (`loudnorm`, −16 LUFS; nur im Export, Feature `timelineNormalize`).
+- **Texte** (Feature `timelineText`): „+ Text“ legt am Abspielkopf einen
+  Text-Clip auf eine Ebenen-Spur (`insertOverlayClip`, bei Bedarf entsteht
+  eine). Länge und Zeitpunkt wie bei jedem Clip in der Timeline; Inhalt,
+  Schrift, Größe, Farben, Stil, Animation und Position im Feld „Text
+  bearbeiten“ (`TextInspector.vue`, `updateClipData`). Der Compiler brennt die
+  Texte mit denselben Regeln wie der bisherige Editor ein (ASS/libass) und legt
+  sie über alle Video-Spuren; die Datei nennt Zeiten der ganzen Timeline,
+  sodass Animationen über Abschnittsgrenzen der Vorschau nahtlos laufen.
 - **Projektformat** (`ProjectSettings.vue`, Modell `updateSettings`): Größe
   (u. a. 16:9, 9:16, 1:1, 4:5), Bildrate und Hintergrundfarbe oben im Editor,
   rückgängig machbar. Das erste Video legt das Format fest; Clips anderer

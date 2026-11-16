@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
+import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
@@ -14,6 +15,7 @@ import {
   type OpError,
   type Time,
   type TrackKind,
+  secondsToTime,
 } from '@/timeline/model'
 
 /**
@@ -243,6 +245,17 @@ function run(command: () => boolean): void {
 const split = () => run(() => store.splitAtPlayhead())
 const remove = (ripple: boolean) => run(() => store.removeSelection({ ripple }))
 
+/** Text am Abspielkopf anlegen; die Einstellungen stehen danach neben der Vorschau. */
+function addText(): void {
+  run(
+    () =>
+      store.addText(
+        { ...DEFAULT_TEXT_STYLE, animSpeed: 1, text: t('text.defaultText') },
+        secondsToTime(DEFAULT_TEXT_DURATION),
+      ) !== null,
+  )
+}
+
 const canSplit = computed(() => store.splitTargets.length > 0)
 
 function stepPlayhead(frames: number): void {
@@ -360,6 +373,15 @@ function onKeydown(event: KeyboardEvent): void {
         @click="run(() => store.newTrack('audio'))"
       >
         {{ t('timeline.addAudioTrack') }}
+      </button>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-add-text"
+        :title="t('timeline.addTextTitle')"
+        @click="addText"
+      >
+        {{ t('timeline.addText') }}
       </button>
       <span class="time" data-testid="timeline-time">{{ timeText }}</span>
       <span v-if="hint" class="hint" role="status">{{ hint }}</span>

@@ -1,10 +1,12 @@
 import { LOUDNORM_FILTER, PROGRESS, atempoFilters, buildCropFilter } from '../args'
+import { buildAss, escapeFilterPath, type TextOverlay } from '../textOverlay'
 import {
   MICROS_PER_SECOND,
   clipEnd,
   docDuration,
   type DocAudioClip,
   type DocAudioTrack,
+  type DocOverlayTrack,
   type DocVideoClip,
   type DocVideoTrack,
   type RenderDoc,
@@ -48,11 +50,21 @@ export interface CompileOptions {
   normalizeAudio?: boolean
 }
 
+/** Platzhalter im Filter; `buildRenderArgs` setzt die echten Pfade ein. */
+export const ASS_PLACEHOLDER = '@@ASS@@'
+export const FONTS_PLACEHOLDER = '@@FONTS@@'
+
 export interface CompiledTimeline {
   /** Eingaben (`-ss … -i …`) in der Reihenfolge der Filter-Eingänge. */
   inputs: string[]
   /** Inhalt für `-filter_complex`; Ausgänge heißen `[vout]` und `[aout]`. */
   filter: string
+  /**
+   * Inhalt der Untertitel-Datei (ASS) für die Texte dieses Stücks, falls es
+   * welche gibt. Der Filter verweist darauf über Platzhalter; wer rendert,
+   * schreibt die Datei und nennt `buildRenderArgs` ihren Pfad.
+   */
+  ass?: string
   /** Länge des Ergebnisses in Bildern und Sekunden. */
   frames: number
   duration: number
@@ -250,6 +262,38 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     chains.push(`[${current}]format=yuv420p[vout]`)
   }
 
+  // --- Texte -----------------------------------------------------------------
+
+  // Texte liegen über allen Video-Spuren. Die Datei nennt Zeiten der ganzen
+  // Timeline; das Bild wird für den Filter kurz auf diese Zeiten verschoben.
+  // So laufen Animationen über Abschnittsgrenzen hinweg nahtlos weiter.
+  const t0 = secondsOf(f0)
+  const t1 = secondsOf(f1)
+  const texts: TextOverlay[] = []
+  const overlayTracks = doc.tracks.filter(
+    (t): t is DocOverlayTrack => t.kind === 'overlay' && !t.hidden,
+  )
+  for (const track of overlayTracks.slice().reverse()) {
+    for (const clip of track.clips) {
+      if (clip.kind !== 'text' || !clip.text) continue
+      const start = secondsOf(frameOf(clip.start))
+      const end = secondsOf(frameOf(clipEnd(clip)))
+      if (end <= t0 || start >= t1 || end <= start) continue
+      texts.push({ ...clip.text, start, end })
+    }
+  }
+  let ass: string | undefined
+  if (texts.length > 0) {
+    ass = buildAss(texts, width, height)
+    const last = chains.length - 1
+    chains[last] = chains[last].replace(/\[vout\]$/, '[vplain]')
+    chains.push(
+      `[vplain]setpts=PTS+${sec(t0)}/TB,` +
+        `ass=filename=${ASS_PLACEHOLDER}:fontsdir=${FONTS_PLACEHOLDER},` +
+        'setpts=PTS-STARTPTS,format=yuv420p[vout]',
+    )
+  }
+
   // --- Ton -------------------------------------------------------------------
 
   const audioAll = doc.tracks.filter((t): t is DocAudioTrack => t.kind === 'audio')
@@ -311,7 +355,17 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     chains.push(`[amixed]${LOUDNORM_FILTER},aresample=${sr},atrim=duration=${sec(duration)}[aout]`)
   }
 
-  return { inputs, filter: chains.join(';'), frames, duration, width, height, fps, sampleRate: sr }
+  return {
+    inputs,
+    filter: chains.join(';'),
+    ...(ass === undefined ? {} : { ass }),
+    frames,
+    duration,
+    width,
+    height,
+    fps,
+    sampleRate: sr,
+  }
 }
 
 export interface EncodeOptions {
@@ -332,6 +386,19 @@ export interface EncodeOptions {
    * Bild exakt bei 0 und jedes weitere auf dem Bildraster.
    */
   seamless?: boolean
+  /** Pfad der geschriebenen ASS-Datei und Schriftordner (nötig, wenn `compiled.ass` gesetzt ist). */
+  assPath?: string
+  fontsDir?: string
+}
+
+/** Setzt die Pfade für die Text-Datei in den Filter ein. */
+function resolveFilter(compiled: CompiledTimeline, enc: EncodeOptions): string {
+  if (compiled.ass === undefined) return compiled.filter
+  if (!enc.assPath || !enc.fontsDir)
+    throw new CompileError('Für Texte fehlen ASS-Datei oder Schriftordner.')
+  return compiled.filter
+    .replace(ASS_PLACEHOLDER, () => escapeFilterPath(enc.assPath as string))
+    .replace(FONTS_PLACEHOLDER, () => escapeFilterPath(enc.fontsDir as string))
 }
 
 /** Vollständige FFmpeg-Argumente für ein kompiliertes Stück (H.264 + AAC in MP4). */
@@ -340,7 +407,7 @@ export function buildRenderArgs(compiled: CompiledTimeline, enc: EncodeOptions):
     ...PROGRESS,
     ...compiled.inputs,
     '-filter_complex',
-    compiled.filter,
+    resolveFilter(compiled, enc),
     '-map',
     '[vout]',
     '-map',

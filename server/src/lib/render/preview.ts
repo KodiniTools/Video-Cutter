@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, rename, rm, stat, utimes } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../../config'
+import { customFontsEnv } from '../customFonts'
 import { runFfmpeg, type RunHandle } from '../ffmpeg'
 import {
   buildRenderArgs,
@@ -29,7 +30,7 @@ export const PREVIEW_MAX_HEIGHT = 540
 /** So viele Abschnitte ab dem Abspielkopf werden vorab gerendert; der Rest bei Abruf. */
 export const PREVIEW_AHEAD = 30
 /** Ändert sich das Encoding, werden alte Abschnitte nicht wiederverwendet. */
-const CACHE_VERSION = 2
+const CACHE_VERSION = 3
 const ENCODE = {
   preset: 'veryfast',
   crf: 27,
@@ -192,7 +193,16 @@ export class PreviewStore {
     for (const range of ranges) {
       const compiled = compileTimeline(doc, { sources, range, size })
       const key = createHash('sha256')
-        .update(JSON.stringify([CACHE_VERSION, compiled.inputs, compiled.filter, ENCODE, gop]))
+        .update(
+          JSON.stringify([
+            CACHE_VERSION,
+            compiled.inputs,
+            compiled.filter,
+            compiled.ass ?? '',
+            ENCODE,
+            gop,
+          ]),
+        )
         .digest('hex')
         .slice(0, 32)
       keys.push(key)
@@ -298,15 +308,25 @@ export class PreviewStore {
     job.state = 'rendering'
     this.active++
     const tmp = path.join(this.dir, `${job.key}.part`)
+    // Texte: Untertitel-Datei neben dem Abschnitt, nach dem Rendern wieder weg.
+    const assPath = job.compiled.ass === undefined ? null : path.join(this.dir, `${job.key}.ass`)
     const started = Date.now()
     try {
+      if (assPath) await writeFile(assPath, job.compiled.ass ?? '', 'utf8')
       const args = buildRenderArgs(job.compiled, {
         ...ENCODE,
+        ...(assPath ? { assPath, fontsDir: config.fontsDir } : {}),
         output: tmp,
         threads: this.threads,
         gop: Math.max(1, Math.round(job.compiled.frames / job.compiled.duration)),
       })
-      job.handle = this.run(args, job.compiled.duration, () => {}, undefined, this.timeoutMs)
+      job.handle = this.run(
+        args,
+        job.compiled.duration,
+        () => {},
+        assPath ? customFontsEnv() : undefined,
+        this.timeoutMs,
+      )
       await job.handle.promise
       // Inzwischen überholt (neuer Plan) oder Server fährt herunter: Ergebnis verwerfen.
       if (this.stopped || this.jobs.get(job.key) !== job) {
@@ -332,6 +352,7 @@ export class PreviewStore {
         for (const done of job.waiters.splice(0)) done('error')
       }
     } finally {
+      if (assPath) await rm(assPath, { force: true }).catch(() => {})
       job.handle = undefined
       this.active--
       this.pump()

@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { config } from '../src/config'
 import {
+  ASS_PLACEHOLDER,
   buildRenderArgs,
   CompileError,
   compileTimeline,
@@ -381,6 +383,100 @@ describe('compileTimeline', () => {
   })
 })
 
+/** Ebenen-Spur mit einem Text-Clip, wie ihn der Editor schickt. */
+function textTrack(start: number, duration: number, data: Record<string, unknown> = {}): Loose {
+  return {
+    id: 'T1',
+    kind: 'overlay',
+    name: 'T1',
+    locked: false,
+    hidden: false,
+    clips: [
+      {
+        id: 't1',
+        kind: 'text',
+        start: s(start),
+        duration: s(duration),
+        data: {
+          text: 'MMMM',
+          x: 0.5,
+          y: 0.5,
+          font: 'roboto',
+          size: 0.3,
+          color: '#ffffff',
+          style: 'box',
+          accent: '#00ff00',
+          animation: 'none',
+          animSpeed: 1,
+          ...data,
+        },
+      },
+    ],
+  }
+}
+
+describe('Texte auf Ebenen-Spuren', () => {
+  const withText = (start: number, duration: number, data: Record<string, unknown> = {}) => {
+    const raw = rawDoc()
+    ;(raw.tracks as Loose[]).unshift(textTrack(start, duration, data))
+    return raw
+  }
+
+  it('prüft Text-Clips mit den Regeln des Einbrennens', () => {
+    const ok = parseTimelineDoc(withText(0.5, 1))
+    expect(ok.ok).toBe(true)
+    if (ok.ok) {
+      const clip = ok.doc.tracks[0].clips[0] as Loose
+      expect(clip.text).toMatchObject({ text: 'MMMM', font: 'roboto', style: 'box' })
+      expect(clip.text.start).toBeUndefined()
+    }
+    const bad = parseTimelineDoc(withText(0.5, 1, { size: 'riesig' }))
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.errors[0].path).toBe('tracks[0].clips[0].data')
+    // Leerer Text (wird gerade getippt) ist gültig und wird nicht gerendert.
+    const blank = parseTimelineDoc(withText(0.5, 1, { text: '   ' }))
+    expect(blank.ok && (blank.doc.tracks[0].clips[0] as Loose).text).toBeUndefined()
+    if (blank.ok) expect(compileTimeline(blank.doc, { sources }).ass).toBeUndefined()
+    expect(parseTimelineDoc(withText(0.5, 1, { font: 'comic' })).ok).toBe(false)
+  })
+
+  it('legt Texte mit Zeiten der ganzen Timeline über das fertige Bild', () => {
+    const doc = parsed(withText(0.5, 1))
+    const c = compileTimeline(doc, { sources })
+    expect(c.filter).toContain(
+      `[vplain]setpts=PTS+0.000000/TB,ass=filename=${ASS_PLACEHOLDER}:fontsdir=@@FONTS@@,setpts=PTS-STARTPTS,format=yuv420p[vout]`,
+    )
+    expect(c.filter.match(/\[vout\]/g)).toHaveLength(1)
+    expect(c.ass).toContain('Dialogue: 0,0:00:00.51,0:00:01.51,')
+
+    // Abschnitt 1–2 s: gleiche Zeiten in der Datei, das Bild wird verschoben.
+    const part = compileTimeline(doc, { sources, range: { start: s(1), end: s(2) } })
+    expect(part.filter).toContain('setpts=PTS+1.000000/TB,ass=')
+    expect(part.ass).toContain('Dialogue: 0,0:00:00.51,0:00:01.51,')
+
+    // Abschnitt ohne Text und ausgeblendete Spur: kein Text-Filter.
+    expect(compileTimeline(doc, { sources, range: { start: s(2), end: s(3) } }).ass).toBeUndefined()
+    const hidden = withText(0.5, 1)
+    ;(hidden.tracks as Loose[])[0].hidden = true
+    expect(compileTimeline(parsed(hidden), { sources }).filter).not.toContain('ass=')
+  })
+
+  it('setzt die Pfade ein und verlangt sie, wenn Texte da sind', () => {
+    const c = compileTimeline(parsed(withText(0.5, 1)), { sources })
+    const enc = { output: '/o.mp4', preset: 'veryfast', crf: 28 }
+    expect(() => buildRenderArgs(c, enc)).toThrow(CompileError)
+    const args = buildRenderArgs(c, { ...enc, assPath: "/tmp/a b:c'd.ass", fontsDir: '/fonts' })
+    const filter = args[args.indexOf('-filter_complex') + 1]
+    expect(filter).not.toContain('@@')
+    expect(filter).toContain("ass=filename=/tmp/a b\\\\:c\\\\\\'d.ass:fontsdir=/fonts")
+  })
+
+  it('verlängert die Timeline, wenn ein Text über das letzte Video hinausragt', () => {
+    const doc = parsed(withText(3.5, 2))
+    expect(docDuration(doc)).toBe(s(5.5))
+  })
+})
+
 describe('compileTimeline mit echtem FFmpeg', () => {
   let dir = ''
   const probe = (file: string, entries: string, stream: string) =>
@@ -478,5 +574,46 @@ describe('compileTimeline mit echtem FFmpeg', () => {
     // Ton: 0–2 s Sinus mit halber Lautstärke, danach Stille.
     expect(volume(out, 0.2, 1.5)).toBeGreaterThan(-40)
     expect(volume(out, 2.3, 1.5)).toBeLessThan(-70)
+  }, 120_000)
+
+  it('brennt Texte zur richtigen Zeit ein, auch in einem Abschnitt', async () => {
+    const raw = rawDoc()
+    const tracks = raw.tracks as Loose[]
+    tracks[0].clips = [tracks[0].clips[0]]
+    tracks[0].clips[0].duration = s(3)
+    tracks.unshift(textTrack(0.5, 1))
+    const real = { a: { path: path.join(dir, 'a.mp4'), hasAudio: true } }
+    const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) <= 40)
+    const render = async (name: string, range?: { start: number; end: number }) => {
+      const out = path.join(dir, `${name}.mp4`)
+      const assPath = path.join(dir, `${name}.ass`)
+      const c = compileTimeline(parsed(raw), { sources: real, range })
+      await writeFile(assPath, c.ass ?? '', 'utf8')
+      execFileSync(
+        'ffmpeg',
+        buildRenderArgs(c, {
+          output: out,
+          preset: 'ultrafast',
+          crf: 20,
+          assPath,
+          fontsDir: config.fontsDir,
+        }),
+        { stdio: 'ignore' },
+      )
+      return out
+    }
+
+    // Ganz: Text von 0,5 bis 1,5 s in der Bildmitte (weiß auf grüner Box), sonst rot.
+    const whole = await render('text')
+    expect(near(pixel(whole, 0.2, 316, 176), [255, 0, 0])).toBe(true)
+    expect(near(pixel(whole, 1.0, 316, 176), [255, 0, 0])).toBe(false)
+    expect(near(pixel(whole, 2.0, 316, 176), [255, 0, 0])).toBe(true)
+    expect(near(pixel(whole, 1.0, 20, 20), [255, 0, 0])).toBe(true)
+
+    // Abschnitt 1–2 s: Der Text endet dort nach 0,5 s.
+    const part = await render('text-part', { start: s(1), end: s(2) })
+    expect(probe(part, 'stream=nb_read_frames', 'v:0')).toEqual(['25'])
+    expect(near(pixel(part, 0.2, 316, 176), [255, 0, 0])).toBe(false)
+    expect(near(pixel(part, 0.8, 316, 176), [255, 0, 0])).toBe(true)
   }, 120_000)
 })
