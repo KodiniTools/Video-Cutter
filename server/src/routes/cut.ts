@@ -112,6 +112,7 @@ export const SERVER_FEATURES = [
   'mediaDerived',
   'timelinePreview',
   'timelineRender',
+  'timelineNormalize',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

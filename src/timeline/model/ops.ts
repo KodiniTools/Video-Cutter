@@ -25,6 +25,47 @@ export const DEFAULT_SETTINGS: TimelineSettings = {
   sampleRate: 48000,
 }
 
+/** Größte Seitenlänge eines Projekts in Pixel (wie auf dem Server). */
+export const MAX_PROJECT_SIDE = 3840
+export const MIN_PROJECT_SIDE = 16
+export const MIN_FPS = 1
+export const MAX_FPS = 60
+
+export type SettingsPatch = Partial<
+  Pick<TimelineSettings, 'width' | 'height' | 'fps' | 'background'>
+>
+
+const validSide = (v: number) =>
+  Number.isInteger(v) && v >= MIN_PROJECT_SIDE && v <= MAX_PROJECT_SIDE && v % 2 === 0
+
+/**
+ * Projektformat ändern (Größe, Bildrate, Hintergrund). Die Regeln entsprechen
+ * der Prüfung auf dem Server: gerade Seitenlängen von 16 bis 3840 Pixel,
+ * 1 bis 60 Bilder je Sekunde, Farbe als `#rrggbb`. Clips bleiben unverändert;
+ * sie werden beim Rendern in das neue Format eingepasst.
+ */
+export function updateSettings(doc: TimelineDoc, patch: SettingsPatch): OpResult {
+  const next = { ...doc.settings }
+  if (patch.width !== undefined) next.width = patch.width
+  if (patch.height !== undefined) next.height = patch.height
+  if (patch.fps !== undefined) next.fps = patch.fps
+  if (patch.background !== undefined) next.background = patch.background.toLowerCase()
+  if (
+    !validSide(next.width) ||
+    !validSide(next.height) ||
+    !Number.isFinite(next.fps) ||
+    next.fps < MIN_FPS ||
+    next.fps > MAX_FPS ||
+    !/^#[0-9a-f]{6}$/.test(next.background)
+  )
+    return fail('invalid-settings')
+  const same = (Object.keys(next) as Array<keyof TimelineSettings>).every(
+    (k) => next[k] === doc.settings[k],
+  )
+  // Nichts geändert: kein neuer Stand (und damit kein leerer Rückgängig-Schritt).
+  return same ? ok(doc) : ok({ ...doc, settings: next })
+}
+
 /** Erzeugt eine neue, eindeutige ID. */
 export function createId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')

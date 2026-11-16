@@ -1,4 +1,4 @@
-import { PROGRESS, atempoFilters, buildCropFilter } from '../args'
+import { LOUDNORM_FILTER, PROGRESS, atempoFilters, buildCropFilter } from '../args'
 import {
   MICROS_PER_SECOND,
   clipEnd,
@@ -40,6 +40,12 @@ export interface CompileOptions {
   range?: { start: Time; end: Time }
   /** Ausgabegröße (z. B. kleiner für die Vorschau); Standard: Projektgröße. */
   size?: { width: number; height: number }
+  /**
+   * Lautstärke des fertigen Tons angleichen (EBU R128, -16 LUFS). Nur für den
+   * Export des Ganzen sinnvoll: Abschnittsweise angewandt würde jeder Abschnitt
+   * für sich geregelt.
+   */
+  normalizeAudio?: boolean
 }
 
 export interface CompiledTimeline {
@@ -296,6 +302,13 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     chains.push(
       `${mixes.map((l) => `[${l}]`).join('')}amix=inputs=${mixes.length}:duration=longest:normalize=0[aout]`,
     )
+  }
+
+  if (opts.normalizeAudio && mixes.length > 0) {
+    // `loudnorm` arbeitet intern mit 192 kHz: danach zurück auf die Projektrate.
+    const last = chains.length - 1
+    chains[last] = chains[last].replace(/\[aout\]$/, '[amixed]')
+    chains.push(`[amixed]${LOUDNORM_FILTER},aresample=${sr},atrim=duration=${sec(duration)}[aout]`)
   }
 
   return { inputs, filter: chains.join(';'), frames, duration, width, height, fps, sampleRate: sr }

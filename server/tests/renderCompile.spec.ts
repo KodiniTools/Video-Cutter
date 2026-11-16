@@ -310,6 +310,26 @@ describe('compileTimeline', () => {
     expect(c.filter).toContain('anullsrc=r=48000:cl=stereo,atrim=duration=4.000000[aout]')
   })
 
+  it('gleicht auf Wunsch die Lautstärke des fertigen Tons an', () => {
+    const doc = parsed(rawDoc())
+    const plain = compileTimeline(doc, { sources })
+    const c = compileTimeline(doc, { sources, normalizeAudio: true })
+    expect(plain.filter).not.toContain('loudnorm')
+    expect(
+      c.filter.endsWith(
+        '[amixed];[amixed]loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,atrim=duration=4.000000[aout]',
+      ),
+    ).toBe(true)
+    expect(c.filter.match(/\[aout\]/g)).toHaveLength(1)
+    // Ohne Ton bleibt es bei Stille.
+    const silent = compileTimeline(doc, {
+      sources,
+      range: { start: s(2), end: s(3) },
+      normalizeAudio: true,
+    })
+    expect(silent.filter).not.toContain('loudnorm')
+  })
+
   it('liefert für leere Bereiche Hintergrund und Stille, wirft bei leerem Abschnitt', () => {
     const doc = parsed(rawDoc())
     const c = compileTimeline(doc, { sources, range: { start: s(2), end: s(3) } })

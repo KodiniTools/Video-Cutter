@@ -150,6 +150,7 @@ export type OpError =
   | 'too-short'
   | 'out-of-source'
   | 'duplicate-id'
+  | 'invalid-settings'
 
 /** Ergebnis eines Befehls: neues Dokument oder Ablehnungsgrund (Eingabe bleibt unverändert). */
 export type OpResult = { ok: true; doc: TimelineDoc } | { ok: false; error: OpError }

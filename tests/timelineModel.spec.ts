@@ -20,6 +20,7 @@ import {
   snapToFrame,
   splitClip,
   trimClip,
+  updateSettings,
   updateTrack,
   validateDoc,
   type AudioClip,
@@ -460,6 +461,44 @@ describe('appendMedia', () => {
   it('lehnt Unbekanntes und Bilder ab', () => {
     expect(errorOf(appendMedia(empty(), 'nope'))).toBe('asset-not-found')
     expect(errorOf(appendMedia(empty(), 'img'))).toBe('kind-mismatch')
+  })
+})
+
+describe('updateSettings', () => {
+  it('ändert Größe, Bildrate und Hintergrund, ohne die Eingabe anzufassen', () => {
+    const doc = createDoc()
+    const r = updateSettings(doc, { width: 1080, height: 1920, fps: 25, background: '#FFAA00' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.doc.settings).toMatchObject({
+      width: 1080,
+      height: 1920,
+      fps: 25,
+      background: '#ffaa00',
+      sampleRate: 48000,
+    })
+    expect(doc.settings.width).toBe(1920)
+    expect(r.doc.tracks).toBe(doc.tracks)
+  })
+
+  it('liefert bei gleichen Werten dasselbe Dokument (kein leerer Schritt)', () => {
+    const doc = createDoc()
+    const r = updateSettings(doc, { width: 1920, fps: 30 })
+    expect(r.ok && r.doc === doc).toBe(true)
+  })
+
+  it('lehnt ab, was der Server nicht annähme', () => {
+    const doc = createDoc()
+    for (const patch of [
+      { width: 1081 },
+      { height: 8 },
+      { width: 4000 },
+      { fps: 0 },
+      { fps: 120 },
+      { fps: Number.NaN },
+      { background: 'rot' },
+    ])
+      expect(updateSettings(doc, patch)).toEqual({ ok: false, error: 'invalid-settings' })
   })
 })
 
