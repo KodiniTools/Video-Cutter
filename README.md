@@ -305,8 +305,8 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Originalgröße, ohne Tempo, Zuschnitt, Texte oder Grafiken, und der Ton ist
   der unveränderte Ton dieses Clips oder fehlt ganz. Sonst nennt der Dialog
   den Grund. Dieselbe Prüfung steht im Editor (`src/timeline/lossless.ts`)
-  und im Server (`server/src/lib/render/lossless.ts`, maßgeblich); `POST
-  /api/render` mit `lossless: true` kopiert dann mit `-c copy` in den
+  und im Server (`server/src/lib/render/lossless.ts`, maßgeblich);
+  `POST /api/render` mit `lossless: true` kopiert dann mit `-c copy` in den
   Container der Quelle und antwortet mit `lossless: true`, andernfalls 422
   mit `losslessBlocker`. Wie beim bisherigen verlustfreien Schneiden beginnt
   die Kopie am Schlüsselbild vor dem Schnitt.
