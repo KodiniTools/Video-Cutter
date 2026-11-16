@@ -4,7 +4,9 @@
  */
 import { isTime, MAX_SPEED, MICROS_PER_SECOND, MIN_CLIP_DURATION, MIN_SPEED } from './time'
 import {
+  CLIP_TRANSITIONS,
   FADE_CURVES,
+  type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
   type AssetRef,
   type Clip,
@@ -181,6 +183,16 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
       return 'out-of-source'
   } else if (clip.asset !== undefined && !doc.assets[clip.asset]) {
     return 'asset-not-found'
+  }
+  if ((clip.kind === 'video' || clip.kind === 'still') && clip.transitionIn !== undefined) {
+    const t = clip.transitionIn
+    if (
+      !(CLIP_TRANSITIONS as readonly string[]).includes(t?.preset) ||
+      !isTime(t.duration) ||
+      t.duration < MIN_TRANSITION ||
+      t.duration > MAX_TRANSITION
+    )
+      return 'invalid-settings'
   }
   if (clip.kind === 'audio') {
     for (const fade of [clip.fadeIn, clip.fadeOut]) {
@@ -666,6 +678,44 @@ export function setClipCrop(doc: TimelineDoc, clipId: string, crop: ClipCrop | n
   return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 
+/** Kürzester und längster Übergang (Gesamtdauer). */
+export const MIN_TRANSITION: Time = 100_000
+export const MAX_TRANSITION: Time = 10 * MICROS_PER_SECOND
+
+/**
+ * Übergang am Anfang eines Video-Clips setzen; `null` hebt ihn auf. Die Dauer
+ * wird auf den erlaubten Bereich begrenzt; ohne `duration` bleibt die
+ * bisherige (sonst 1 s).
+ */
+export function setClipTransition(
+  doc: TimelineDoc,
+  clipId: string,
+  transition: { preset: ClipTransitionPreset; duration?: Time } | null,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const before = clip.transitionIn
+  const changed: Clip = { ...clip }
+  if (transition === null) {
+    if (!before) return ok(doc)
+    delete changed.transitionIn
+  } else {
+    if (!(CLIP_TRANSITIONS as readonly string[]).includes(transition.preset))
+      return fail('invalid-settings')
+    const wanted = transition.duration ?? before?.duration ?? MICROS_PER_SECOND
+    if (!Number.isFinite(wanted)) return fail('invalid-time')
+    const duration = Math.min(MAX_TRANSITION, Math.max(MIN_TRANSITION, Math.round(wanted)))
+    if (before && before.preset === transition.preset && before.duration === duration)
+      return ok(doc)
+    changed.transitionIn = { preset: transition.preset, duration }
+  }
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
 /** Längste Ton-Blende, die sich einstellen lässt. */
 export const MAX_CLIP_FADE: Time = 10 * MICROS_PER_SECOND
 
@@ -786,6 +836,8 @@ export function splitClip(
     // Die Einblendung bleibt am Anfang, die Ausblendung am Ende.
     if (left.kind === 'audio') delete left.fadeOut
     if (right.kind === 'audio') delete right.fadeIn
+    // Der Übergang gehört zum Anfang und bleibt am ersten Teil.
+    if (right.kind === 'video' || right.kind === 'still') delete right.transitionIn
     if (rightGroup) right.linkGroup = rightGroup
     else delete right.linkGroup
     if (hasId(next, right.id)) return fail('duplicate-id')

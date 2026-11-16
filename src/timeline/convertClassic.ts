@@ -2,6 +2,7 @@ import { speedFactor } from '@/lib/clipSpeed'
 import type { MediaView } from '@/lib/mediaApi'
 import { mergeTimeline } from '@/lib/mergeTimeline'
 import type { ProjectItemState, ProjectState } from '@/lib/projectState'
+import type { SeamPreset } from '@/stores/library'
 import { assetFromMedia } from './assets'
 import {
   addTrack,
@@ -15,6 +16,7 @@ import {
   putAsset,
   secondsToTime,
   setClipFade,
+  setClipTransition,
   snapToFrame,
   type OpResult,
   type OverlayClip,
@@ -35,6 +37,8 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  *  - Texte und Grafiken eines Videos werden zu Clips auf Ebenen-Spuren; ihre
  *    Zeiten (im Originalvideo) werden auf die Timeline umgerechnet.
  *  - Der Zuschnitt des markierten Videos wird zum Zuschnitt seines Clips.
+ *  - Übergänge je Nahtstelle (bzw. die globale Animation) werden zum Übergang
+ *    am Anfang des jeweils folgenden Clips; die Clips überlappen dabei nicht.
  *  - Die Ton-Blende wird zur Einblendung des ersten und Ausblendung des
  *    letzten Ton-Clips.
  *  - Was der neue Editor noch nicht kann, wird ausgelassen und in `skipped`
@@ -42,7 +46,7 @@ import { buildTimelineProject, type TimelineProjectState } from './projectFile'
  */
 
 /** Was nicht übernommen werden konnte. */
-export type ClassicSkip = 'transitions' | 'music' | 'audioFade' | 'holds' | 'crop'
+export type ClassicSkip = 'music' | 'audioFade' | 'holds' | 'crop'
 
 export interface ClassicConversion {
   /** Dokument mit den IDs der jetzt angemeldeten Videos; Bilder noch per Schlüssel. */
@@ -134,12 +138,12 @@ export function convertClassicProject(
     'none',
     0,
   )
-  if (placed.length > 1) {
-    const used = new Set(placed.map((p) => classic.items.indexOf(p.item)))
-    const perSeam = classic.seams.some(
-      (s) => s.preset !== 'none' && used.has(s.from) && used.has(s.to),
-    )
-    if (perSeam || classic.anim.animation !== 'none') skipped.add('transitions')
+  /** Übergang vor dem Clip `i`: je Nahtstelle gewählt, sonst die globale Animation. */
+  const seamBefore = (i: number): SeamPreset => {
+    const from = classic.items.indexOf(placed[i - 1].item)
+    const to = classic.items.indexOf(placed[i].item)
+    const seam = classic.seams.find((s) => s.from === from && s.to === to)
+    return seam?.preset ?? (classic.anim.animation as SeamPreset)
   }
   if (classic.music) skipped.add('music')
   // Der Zuschnitt gehört zum markierten Video der Liste.
@@ -172,15 +176,27 @@ export function convertClassicProject(
       const base = { asset: p.view.id, start, duration, sourceIn, speed: p.factor }
       const withCrop = crop !== null && p.item === cropItem
       if (withCrop) cropUsed = true
+      const videoId = createId()
       doc = must(
         insertClip(doc, videoTrack, {
           ...base,
-          id: createId(),
+          id: videoId,
           kind: 'video',
           ...(linkGroup ? { linkGroup } : {}),
           ...(withCrop ? { crop } : {}),
         }),
       )
+      // Übergang zur vorigen Nahtstelle. Anders als bisher überlappen die Clips
+      // nicht: Die Länge bleibt, der Übergang liegt am Anfang dieses Clips.
+      const preset = i > 0 ? seamBefore(i) : 'none'
+      if (preset !== 'none') {
+        doc = must(
+          setClipTransition(doc, videoId, {
+            preset,
+            duration: secondsToTime(classic.anim.duration),
+          }),
+        )
+      }
       if (withAudio) {
         if (audioTrack === null) {
           audioTrack = createId()

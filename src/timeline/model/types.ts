@@ -69,10 +69,28 @@ export interface ClipCrop {
   height: number
 }
 
+/** Übergänge vom vorigen Clip (wie im bisherigen Editor). */
+export const CLIP_TRANSITIONS = ['fade', 'slide', 'scale', 'flip'] as const
+export type ClipTransitionPreset = (typeof CLIP_TRANSITIONS)[number]
+
+/**
+ * Übergang am Anfang eines Clips. `duration` ist die Gesamtdauer: Die Hälfte
+ * liegt am Anfang dieses Clips; bei `fade` (Blende über den Hintergrund)
+ * blendet in der anderen Hälfte der vorige Clip aus. Die übrigen Übergänge
+ * laufen über dem angehaltenen letzten Bild des vorigen Clips. Zeiten auf der
+ * Timeline ändern sich nicht.
+ */
+export interface ClipTransition {
+  preset: ClipTransitionPreset
+  duration: Time
+}
+
 export interface VideoClip extends MediaClipBase {
   /** `still` = Standbild (Bild-Asset) mit frei wählbarer Dauer. */
   kind: 'video' | 'still'
   crop?: ClipCrop | null
+  /** Übergang vom vorigen Clip derselben Spur (oder aus dem Hintergrund). */
+  transitionIn?: ClipTransition
 }
 
 /** Kurvenformen der Ton-Blende (FFmpeg `afade curve=`, wie im bisherigen Editor). */

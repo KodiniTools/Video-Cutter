@@ -2,7 +2,8 @@ import { PROGRESS, formatFfmpegTime } from '../args'
 import { MICROS_PER_SECOND, type RenderDoc, type Time } from './doc'
 
 /** Warum der Export nicht verlustfrei geht. */
-export type LosslessBlocker = 'clips' | 'overlays' | 'speed' | 'crop' | 'audio' | 'format'
+export type LosslessBlocker =
+  'clips' | 'overlays' | 'speed' | 'crop' | 'transition' | 'audio' | 'format'
 
 export type LosslessCheck =
   | {
@@ -43,6 +44,7 @@ export function checkLossless(
     return no('overlays')
   if (clip.speed !== 1) return no('speed')
   if (clip.crop) return no('crop')
+  if (clip.transitionIn) return no('transition')
   const source = info(clip.asset)
   if (
     !source ||
@@ -115,6 +117,7 @@ export const LOSSLESS_BLOCKER_TEXT: Record<LosslessBlocker, string> = {
   overlays: 'Verlustfrei geht nicht mit Texten, Grafiken oder Bildern.',
   speed: 'Verlustfrei geht nicht mit geändertem Tempo.',
   crop: 'Verlustfrei geht nicht mit Zuschnitt.',
+  transition: 'Verlustfrei geht nicht mit einem Übergang.',
   audio: 'Verlustfrei geht nur mit dem unveränderten Ton des Clips oder ganz ohne Ton.',
   format: 'Verlustfrei geht nur, wenn das Projektformat der Größe des Videos entspricht.',
 }

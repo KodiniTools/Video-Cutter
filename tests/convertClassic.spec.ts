@@ -209,7 +209,11 @@ describe('convertClassicProject', () => {
       { a: view('A'), b: view('B') },
     )
     expect(r.state.doc.settings).toMatchObject({ width: 1080, height: 1920, fps: 25 })
-    expect(r.skipped.sort()).toEqual(['crop', 'music', 'transitions'])
+    expect(r.skipped.sort()).toEqual(['crop', 'music'])
+    // Übergang der Nahtstelle liegt am Anfang des zweiten Clips (Dauer aus der Animation).
+    expect(
+      clips(r.state.doc, 'video').map((c) => ('transitionIn' in c ? c.transitionIn : null)),
+    ).toEqual([null, { preset: 'slide', duration: 2_000_000 }])
     // Ton-Blende: Einblenden am ersten Ton-Clip .
     const sound = clips(r.state.doc, 'audio') as { fadeIn?: unknown; fadeOut?: unknown }[]
     expect(sound[0].fadeIn).toEqual({ duration: 2_000_000, curve: 'tri' })
@@ -237,7 +241,7 @@ describe('convertClassicProject', () => {
     expect(
       clips(withSelection.state.doc, 'video').map((c) => ('crop' in c ? c.crop : null)),
     ).toEqual([null, { x: 0.1, y: 0.1, width: 0.5, height: 0.5 }])
-    // Ohne Überblendung: harte Schnitte, nichts überlappt.
+    // Die Clips überlappen nicht: Der Übergang liegt im zweiten Clip.
     expect(brief(clips(r.state.doc, 'video'))).toEqual([
       ['A', 0, 10, 0, 1],
       ['B', 10, 10, 0, 1],
@@ -248,7 +252,21 @@ describe('convertClassicProject', () => {
       parseProjectState({ version: 1, items: [item('a'), item('b')], anim: { animation: 'fade' } }),
       { a: view('A'), b: view('B') },
     )
-    expect(global.skipped).toEqual(['transitions'])
+    expect(global.skipped).toEqual([])
+    expect(
+      clips(global.state.doc, 'video').map((c) => ('transitionIn' in c ? c.transitionIn : null)),
+    ).toEqual([null, { preset: 'fade', duration: 2_000_000 }])
+    // Eine Nahtstelle mit „kein Übergang“ gewinnt gegen die globale Animation.
+    const cut = convertClassicProject(
+      parseProjectState({
+        version: 1,
+        items: [item('a'), item('b')],
+        seams: [{ from: 0, to: 1, preset: 'none' }],
+        anim: { animation: 'fade' },
+      }),
+      { a: view('A'), b: view('B') },
+    )
+    expect(clips(cut.state.doc, 'video').every((c) => !('transitionIn' in c))).toBe(true)
     const one = convertClassicProject(
       parseProjectState({ version: 1, items: [item('a')], anim: { animation: 'fade' } }),
       { a: view('A') },

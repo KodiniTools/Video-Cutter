@@ -723,6 +723,11 @@ const messages = {
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
         cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
+        transition: 'Übergang am Anfang',
+        transitionType: 'Art',
+        transitionDuration: 'Dauer',
+        transitionHint:
+          'Der Übergang kommt vom vorigen Clip derselben Spur, sonst aus dem Hintergrund. „Ein-/Ausblenden“ blendet den vorigen Clip aus und diesen ein (je die halbe Dauer). Die anderen laufen in der halben Dauer über dem angehaltenen letzten Bild des vorigen Clips. Die Länge der Timeline bleibt gleich.',
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
         hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
       },
@@ -820,6 +825,7 @@ const messages = {
           overlays: 'Nicht möglich: Texte, Grafiken oder Bilder müssen eingerechnet werden.',
           speed: 'Nicht möglich: Der Clip hat ein geändertes Tempo.',
           crop: 'Nicht möglich: Der Clip ist zugeschnitten.',
+          transition: 'Nicht möglich: Der Clip hat einen Übergang.',
           audio:
             'Nicht möglich: Der Ton ist verändert (Lautstärke, Blende, verschoben oder weitere Ton-Clips).',
           format: 'Nicht möglich: Das Projektformat weicht von der Größe des Videos ab.',
@@ -864,7 +870,6 @@ const messages = {
         'Es stammt aus dem bisherigen Editor und wurde umgewandelt. Speichere es hier als neues Projekt; das ursprüngliche bleibt unverändert.',
       notConverted: 'Noch nicht übernommen: {list}.',
       skipped: {
-        transitions: 'Übergänge zwischen den Videos',
         music: 'Hintergrundmusik',
         audioFade: 'Ton ein-/ausblenden',
         holds: 'Standbilder in Lücken (die Lücken bleiben leer)',
@@ -1591,6 +1596,11 @@ const messages = {
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
+        transition: 'Transition at the start',
+        transitionType: 'Type',
+        transitionDuration: 'Duration',
+        transitionHint:
+          'The transition comes from the previous clip on the same track, otherwise from the background. “Fade in/out” fades the previous clip out and this one in (half the duration each). The others run for half the duration over the frozen last frame of the previous clip. The length of the timeline stays the same.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
         hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
       },
@@ -1686,6 +1696,7 @@ const messages = {
           overlays: 'Not possible: texts, graphics or images have to be rendered in.',
           speed: 'Not possible: the clip has a changed speed.',
           crop: 'Not possible: the clip is cropped.',
+          transition: 'Not possible: the clip has a transition.',
           audio: 'Not possible: the sound is changed (volume, fade, moved or further audio clips).',
           format: 'Not possible: the project format differs from the size of the video.',
         },
@@ -1729,7 +1740,6 @@ const messages = {
         'It comes from the previous editor and was converted. Save it here as a new project; the original stays unchanged.',
       notConverted: 'Not carried over yet: {list}.',
       skipped: {
-        transitions: 'transitions between videos',
         music: 'background music',
         audioFade: 'audio fade in/out',
         holds: 'still frames in gaps (the gaps stay empty)',

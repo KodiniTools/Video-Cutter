@@ -5,13 +5,17 @@ import { formatSpeedFactor, SPEED_STEPS, speedFactor } from '@/lib/clipSpeed'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import {
+  CLIP_TRANSITIONS,
   FADE_CURVES,
   MAX_CLIP_FADE,
   MAX_CLIP_GAIN,
+  MAX_TRANSITION,
   MIN_CROP_SIZE,
+  MIN_TRANSITION,
   secondsToTime,
   timeToSeconds,
   type AudioClip,
+  type ClipTransitionPreset,
   type FadeCurve,
   type VideoClip,
 } from '@/timeline/model'
@@ -19,7 +23,7 @@ import {
 /**
  * Einstellungen des markierten Video- bzw. Ton-Clips: Tempo (gilt für Bild
  * und verknüpften Ton gemeinsam), Lautstärke und Blende des Ton-Clips,
- * Zuschnitt des Video-Clips. Jede Änderung
+ * Zuschnitt und Übergang des Video-Clips. Jede Änderung
  * geht ins Dokument; die Vorschau rendert den betroffenen Abschnitt neu.
  */
 const { t, locale } = useI18n()
@@ -178,6 +182,42 @@ function resetCrop(): void {
   if (video.value) store.setClipCrop(video.value.id, null)
 }
 
+// --- Übergang am Anfang ------------------------------------------------------
+
+const transition = computed(() => video.value?.transitionIn ?? null)
+const transitionSeconds = computed(() =>
+  transition.value ? timeToSeconds(transition.value.duration) : 1,
+)
+const transitionLabel = computed(() =>
+  transitionSeconds.value.toLocaleString(locale.value, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }),
+)
+
+function onTransitionPreset(e: Event): void {
+  commit()
+  const clip = video.value
+  if (!clip) return
+  const value = (e.target as HTMLSelectElement).value
+  store.setClipTransition(clip.id, value === '' ? null : { preset: value as ClipTransitionPreset })
+}
+
+function onTransitionDuration(e: Event): void {
+  const clip = video.value
+  const current = transition.value
+  if (!clip || !current) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const seconds = Number((e.target as HTMLInputElement).value)
+  store.setClipTransition(clip.id, {
+    preset: current.preset,
+    duration: secondsToTime(seconds),
+  })
+}
+
 const timing = computed(() => {
   const clip = main.value
   if (!clip) return ''
@@ -258,6 +298,35 @@ onBeforeUnmount(commit)
         </label>
       </template>
       <p class="hint">{{ t('timeline.clipInspector.fadeHint') }}</p>
+    </fieldset>
+    <fieldset v-if="video" class="crop" data-testid="clip-transition">
+      <legend>{{ t('timeline.clipInspector.transition') }}</legend>
+      <label class="side curve">
+        <span>{{ t('timeline.clipInspector.transitionType') }}</span>
+        <select
+          :value="transition?.preset ?? ''"
+          data-testid="clip-transition-preset"
+          @change="onTransitionPreset"
+        >
+          <option value="">{{ t('anim.none') }}</option>
+          <option v-for="p in CLIP_TRANSITIONS" :key="p" :value="p">{{ t(`anim.${p}`) }}</option>
+        </select>
+      </label>
+      <label v-if="transition" class="side">
+        <span>{{ t('timeline.clipInspector.transitionDuration') }}</span>
+        <input
+          type="range"
+          :min="timeToSeconds(MIN_TRANSITION) * 2"
+          :max="timeToSeconds(MAX_TRANSITION)"
+          step="0.1"
+          :value="transitionSeconds"
+          data-testid="clip-transition-duration"
+          @input="onTransitionDuration"
+          @change="commit"
+        />
+        <span class="value">{{ transitionLabel }} s</span>
+      </label>
+      <p class="hint">{{ t('timeline.clipInspector.transitionHint') }}</p>
     </fieldset>
     <fieldset v-if="video" class="crop" data-testid="clip-crop">
       <legend>{{ t('timeline.clipInspector.crop') }}</legend>
