@@ -237,6 +237,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
 - **Spuren**: „+ Video-Spur“ (oben, im Bild vorn) und „+ Ton-Spur“ (unten). Im
   Spurkopf: Doppelklick benennt um, dazu nach oben/unten, sperren,
   stummschalten bzw. ausblenden, entfernen (rückgängig machbar).
+- **Compiler** (`server/src/lib/render/`): `parseTimelineDoc` prüft das vom
+  Editor geschickte Dokument (Grenzen, Regeln), `compileTimeline` übersetzt es
+  ganz oder abschnittsweise in einen FFmpeg-Aufruf (je Spur Clips und Lücken
+  verkettet, Video-Spuren per `overlay` gestapelt, Ton per `amix`, alles auf
+  dem Bildraster). Vorschau und Export nutzen denselben Code. Noch ohne
+  Endpunkt.
 - **Datenmodell** (`src/timeline/model/`): reines TypeScript ohne Vue. Zeiten sind
   ganze Mikrosekunden, Clips einer Spur überlappen nicht, alle Befehle
   (`insertClip`, `moveClip`, `trimClip`, `splitClip`, `removeClip` mit Ripple,
