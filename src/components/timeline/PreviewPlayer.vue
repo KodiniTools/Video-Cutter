@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import PositionFrame from './PositionFrame.vue'
 import {
   fetchPreviewPlan,
   fetchPreviewStats,
@@ -243,6 +244,7 @@ onBeforeUnmount(() => {
         data-testid="preview-video"
         @click="store.togglePlay()"
       />
+      <PositionFrame v-if="!empty && !problem" />
       <p v-if="message" class="message" :class="{ over: !empty && !problem }" role="status">
         {{ message }}
       </p>
