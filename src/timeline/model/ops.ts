@@ -926,6 +926,68 @@ export function removeClip(
 
 // --- Zusammengesetzte Befehle ----------------------------------------------
 
+/**
+ * Bereiche (Zeiten auf der Timeline) aus einem Clip herausschneiden und die
+ * Lücken schließen: Der Clip wird an den Rändern geteilt, das Stück dazwischen
+ * samt verknüpften Clips gelöscht, und alles Spätere rückt nach. Bereiche
+ * außerhalb des Clips werden beschnitten, überlappende zusammengefasst und zu
+ * kurze übergangen. Wie viel nachrückt, begrenzt `removeClip` (ripple).
+ */
+export function cutClipRanges(
+  doc: TimelineDoc,
+  clipId: string,
+  ranges: readonly { start: Time; end: Time }[],
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const from = loc.clip.start
+  const to = clipEnd(loc.clip)
+  // Beschneiden, sortieren, zusammenfassen.
+  const merged: { start: Time; end: Time }[] = []
+  const sorted = ranges
+    .filter((r) => isTime(r.start) && isTime(r.end))
+    .map((r) => ({ start: Math.max(from, r.start), end: Math.min(to, r.end) }))
+    .filter((r) => r.end - r.start >= MIN_CLIP_DURATION)
+    .sort((a, b) => a.start - b.start)
+  for (const r of sorted) {
+    const last = merged[merged.length - 1]
+    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end)
+    else merged.push({ ...r })
+  }
+  // Reste, die kürzer als ein Clip sein darf, gehören mit zum Schnitt.
+  for (const r of merged) {
+    if (r.start - from < MIN_CLIP_DURATION) r.start = from
+    if (to - r.end < MIN_CLIP_DURATION) r.end = to
+  }
+
+  let next = doc
+  // Von hinten nach vorn: Der vordere Teil behält die ID des Clips.
+  for (const r of merged.reverse()) {
+    const current = findClip(next, clipId)
+    if (!current) break
+    let target = clipId
+    if (r.end < clipEnd(current.clip)) {
+      const split = splitClip(next, clipId, r.end, opts)
+      if (!split.ok) return split
+      next = split.doc
+    }
+    if (r.start > current.clip.start) {
+      const split = splitClip(next, clipId, r.start, opts)
+      if (!split.ok) return split
+      next = split.doc
+      const middle = next.tracks[current.trackIndex].clips.find((c) => c.start === r.start)
+      if (!middle) return fail('clip-not-found')
+      target = middle.id
+    }
+    const removed = removeClip(next, target, { ripple: true })
+    if (!removed.ok) return removed
+    next = removed.doc
+  }
+  return ok(next)
+}
+
 function trackEnd(track: Track): Time {
   let end = 0
   for (const c of track.clips) end = Math.max(end, clipEnd(c))

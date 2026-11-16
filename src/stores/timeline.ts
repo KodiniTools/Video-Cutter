@@ -8,6 +8,7 @@ import {
   docDuration,
   findClip,
   createId,
+  cutClipRanges as cutClipRangesOp,
   insertClip as insertClipOp,
   insertOverlayClip,
   insertOverlayClips,
@@ -271,6 +272,9 @@ export const useTimelineStore = defineStore('timeline', () => {
     apply((d) => trimClipOp(d, clipId, edge, to))
   const splitClip = (clipId: string, at: Time, opts?: { linked?: boolean }) =>
     apply((d) => splitClipOp(d, clipId, at, opts))
+  /** Bereiche aus einem Clip herausschneiden und die Lücken schließen (ein Verlaufsschritt). */
+  const cutClipRanges = (clipId: string, ranges: readonly { start: Time; end: Time }[]) =>
+    apply((d) => cutClipRangesOp(d, clipId, ranges))
   const removeClip = (clipId: string, opts?: { ripple?: boolean; linked?: boolean }) =>
     apply((d) => removeClipOp(d, clipId, opts))
 
@@ -649,6 +653,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipFade,
     setClipCrop,
     setClipTransition,
+    cutClipRanges,
     setClipHold,
     updateSettings,
     setZoom,

@@ -10,19 +10,20 @@ import {
   type TranscribeLanguage,
   type TranslateTarget,
 } from '@/lib/aiApi'
+import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineAiStore } from '@/stores/timelineAi'
-import type { AudioClip, VideoClip } from '@/timeline/model'
+import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
 
 /**
  * KI-Assistent des Timeline-Editors: Untertitel für den markierten Clip
- * (Sprache erkennen + Claude) als Text-Clips auf einer Ebenen-Spur, und alle
- * Texte übersetzen. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
+ * (Sprache erkennen + Claude) als Text-Clips auf einer Ebenen-Spur, alle
+ * Texte übersetzen und Schnittvorschläge für den markierten Clip. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
  */
 const { t } = useI18n()
 const store = useTimelineStore()
 const ai = useTimelineAiStore()
-const { status, statusChecked, task, progress, running, textClips } = storeToRefs(ai)
+const { status, statusChecked, task, progress, running, textClips, suggestions } = storeToRefs(ai)
 
 onMounted(() => void ai.loadStatus())
 
@@ -50,11 +51,16 @@ const hasMedia = computed(() =>
   store.doc.tracks.some((tr) => tr.kind !== 'overlay' && tr.clips.length > 0),
 )
 
-watch(clip, () => {
-  if (running.value) return
-  error.value = ''
-  notice.value = ''
-})
+// Nur ein anderer Clip räumt die Meldungen ab, nicht eine Änderung am selben
+// (nach dem Herausschneiden bleibt der vordere Teil markiert).
+watch(
+  () => clip.value?.id,
+  () => {
+    if (running.value) return
+    error.value = ''
+    notice.value = ''
+  },
+)
 
 const outdated = computed(() => statusChecked.value && status.value === null)
 const canTranscribe = computed(() => status.value?.transcribe === true)
@@ -84,6 +90,49 @@ async function onSubtitles(): Promise<void> {
     else if (r.dropped > 0) {
       notice.value = t('timeline.ai.subtitlesPartly', { n: r.added, m: r.dropped })
     } else notice.value = t('ai.subtitlesAdded', { n: r.added })
+  } catch (e) {
+    fail(e)
+  }
+}
+
+// --- Schnittvorschläge -------------------------------------------------------
+
+const minPause = ref(1.2)
+/** Vorschläge des markierten Clips mit ihrer Lage auf der Timeline. */
+const cutList = computed(() => {
+  const current = suggestions.value
+  if (!current || current.clipId !== clip.value?.id) return []
+  return current.items.flatMap((s) => {
+    const range = ai.suggestionRange(s)
+    return range ? [{ ...s, range }] : []
+  })
+})
+const cutChecked = computed(() => cutList.value.filter((s) => s.checked))
+const cutSeconds = computed(() =>
+  cutChecked.value.reduce((sum, s) => sum + timeToSeconds(s.range.end - s.range.start), 0),
+)
+
+async function onSuggest(): Promise<void> {
+  const c = clip.value
+  if (!c || running.value) return
+  error.value = ''
+  notice.value = ''
+  try {
+    const n = await ai.suggestCuts(c.id, language.value, minPause.value)
+    if (n === 0) notice.value = t('ai.noSuggestions')
+  } catch (e) {
+    fail(e)
+  }
+}
+
+function onApplyCuts(): void {
+  if (running.value || cutChecked.value.length === 0) return
+  error.value = ''
+  try {
+    const r = ai.applyCuts()
+    notice.value = r.dropped
+      ? t('timeline.ai.cutsAppliedPartly', { n: r.cut, m: r.dropped })
+      : t('timeline.ai.cutsApplied', { n: r.cut })
   } catch (e) {
     fail(e)
   }
@@ -151,6 +200,80 @@ async function onTranslate(): Promise<void> {
           </button>
           <p class="hint">{{ t('timeline.ai.subtitlesHint') }}</p>
         </template>
+      </div>
+
+      <div v-if="clip" class="block" data-testid="timeline-ai-cuts">
+        <span class="label">{{ t('ai.cuts') }}</span>
+        <label class="pause">
+          <span>{{ t('ai.minPause') }}</span>
+          <input
+            v-model.number="minPause"
+            type="number"
+            min="0.5"
+            max="10"
+            step="0.1"
+            :disabled="running"
+            data-testid="timeline-ai-min-pause"
+          />
+          <span>s</span>
+        </label>
+        <button
+          type="button"
+          class="action"
+          :disabled="running || !canTranscribe || !canClaude"
+          data-testid="timeline-ai-suggest"
+          @click="onSuggest"
+        >
+          {{ cutList.length ? t('ai.resuggest') : t('ai.suggest') }}
+        </button>
+        <template v-if="cutList.length">
+          <div class="list-head">
+            <button
+              type="button"
+              class="plain"
+              :disabled="running"
+              @click="ai.setAllSuggestionsChecked(cutChecked.length !== cutList.length)"
+            >
+              {{ cutChecked.length === cutList.length ? t('ai.none') : t('ai.all') }}
+            </button>
+            <small>{{
+              t('ai.selected', { n: cutChecked.length, s: cutSeconds.toFixed(1) })
+            }}</small>
+          </div>
+          <ul class="cuts" data-testid="timeline-ai-cut-list">
+            <li v-for="s in cutList" :key="s.id" :class="{ off: !s.checked }">
+              <input
+                type="checkbox"
+                :checked="s.checked"
+                :disabled="running"
+                :aria-label="t('ai.toggle')"
+                @change="ai.setSuggestionChecked(s.id, ($event.target as HTMLInputElement).checked)"
+              />
+              <button type="button" class="cut" @click="store.seek(s.range.start)">
+                <span class="top">
+                  <span class="kind">{{ t(`ai.kind.${s.kind}`) }}</span>
+                  <small>
+                    {{ formatTimeMs(timeToSeconds(s.range.start)) }} –
+                    {{ formatTimeMs(timeToSeconds(s.range.end)) }}
+                  </small>
+                </span>
+                <span v-if="s.text">„{{ s.text }}“</span>
+                <small v-if="s.reason">{{ s.reason }}</small>
+              </button>
+            </li>
+          </ul>
+          <button
+            type="button"
+            class="action"
+            :disabled="running || !cutChecked.length"
+            data-testid="timeline-ai-apply-cuts"
+            @click="onApplyCuts"
+          >
+            {{ t('timeline.ai.applyCuts', { n: cutChecked.length }) }}
+          </button>
+          <p class="hint">{{ t('timeline.ai.applyCutsHint') }}</p>
+        </template>
+        <p v-else class="hint">{{ t('timeline.ai.cutsHint') }}</p>
       </div>
 
       <div v-if="textClips.length" class="block">
@@ -286,6 +409,72 @@ select {
   .spinner {
     animation: none;
   }
+}
+.pause {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-2);
+}
+.pause input {
+  width: 5em;
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: inherit;
+  font: inherit;
+}
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-2);
+}
+.cuts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.cuts li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-2);
+}
+.cuts li.off {
+  opacity: 0.55;
+}
+.cut {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cut .top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+}
+.cut .kind {
+  font-weight: var(--ds-weight-semibold);
+}
+.cut small {
+  color: var(--ds-text-2);
 }
 .plain {
   padding: 0;

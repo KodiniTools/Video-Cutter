@@ -359,7 +359,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   außerhalb des Clips entfallen. Alle Untertitel landen gemeinsam auf einer
   Spur (`insertOverlayClips`) und sind ein Rückgängig-Schritt. „Texte
   übersetzen“ ersetzt alle Texte auf nicht gesperrten Spuren
-  (`/api/ai/translate`). Nur Frontend.
+  (`/api/ai/translate`). „Schnittvorschläge“ (`/api/ai/cuts`,
+  `src/timeline/cutSuggestions.ts`) listet Füllwörter, Versprecher,
+  Wiederholungen und Pausen des markierten Clips mit den Zeiten der Timeline;
+  ein Klick springt zur Stelle. „Herausschneiden und Lücken schließen“
+  (`cutClipRanges`) teilt den Clip an den Rändern der angehakten Bereiche,
+  löscht sie samt verknüpftem Ton und rückt alles Spätere nach, in einem
+  Rückgängig-Schritt. Nur Frontend.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte

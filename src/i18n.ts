@@ -751,6 +751,14 @@ const messages = {
           '{n} Untertitel eingefügt, {m} ausgelassen (außerhalb des Clips oder zu kurz).',
         translateHint:
           'Ersetzt alle Texte auf nicht gesperrten Spuren durch die Übersetzung. Zeit, Position und Design bleiben. Mit Rückgängig zurückholbar.',
+        cutsHint:
+          'Sucht im markierten Clip Füllwörter, Versprecher, Wiederholungen und Pausen. Ein Klick auf einen Vorschlag setzt den Abspielkopf dorthin.',
+        applyCuts: 'Herausschneiden und Lücken schließen ({n})',
+        applyCutsHint:
+          'Teilt den Clip an den Rändern der gewählten Bereiche, löscht sie samt verknüpftem Ton und rückt alles Spätere nach. Mit Rückgängig zurückholbar. Tipp: erst schneiden, dann Untertitel erzeugen.',
+        cutsApplied: '{n} Bereiche herausgeschnitten.',
+        cutsAppliedPartly:
+          '{n} Bereiche herausgeschnitten, {m} lagen nicht mehr im Clip und wurden ausgelassen.',
       },
       textInspector: 'Text bearbeiten',
       textInspectorHint:
@@ -1624,6 +1632,14 @@ const messages = {
         subtitlesPartly: '{n} subtitles added, {m} left out (outside the clip or too short).',
         translateHint:
           'Replaces all texts on unlocked tracks with the translation. Timing, position and design stay. Undo brings them back.',
+        cutsHint:
+          'Looks for filler words, slips, repetitions and pauses in the selected clip. Click a suggestion to move the playhead there.',
+        applyCuts: 'Cut out and close gaps ({n})',
+        applyCutsHint:
+          'Splits the clip at the edges of the chosen ranges, deletes them together with the linked sound and moves everything later up. Undo brings them back. Tip: cut first, then create subtitles.',
+        cutsApplied: '{n} ranges cut out.',
+        cutsAppliedPartly:
+          '{n} ranges cut out, {m} were no longer inside the clip and were skipped.',
       },
       textInspector: 'Edit text',
       textInspectorHint:
