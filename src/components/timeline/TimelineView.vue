@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
+import TrackHeader from './TrackHeader.vue'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
@@ -24,10 +25,10 @@ const { t } = useI18n()
 const store = useTimelineStore()
 
 /** Breite der Spalte mit den Spurnamen (px). */
-const HEADER_WIDTH = 96
+const HEADER_WIDTH = 150
 /** Freier Platz hinter dem letzten Clip (px). */
 const TAIL = 240
-const TRACK_HEIGHT: Record<TrackKind, number> = { video: 56, audio: 44, overlay: 32 }
+const TRACK_HEIGHT: Record<TrackKind, number> = { video: 56, audio: 48, overlay: 48 }
 const ZOOM_STEP = 1.5
 
 const scroller = ref<HTMLDivElement | null>(null)
@@ -231,6 +232,12 @@ function run(command: () => boolean): void {
     const key = store.lastError ? HINTS[store.lastError] : undefined
     hint.value = key ? t(key) : ''
   }
+  // Verschwindet der gedrückte Knopf (z. B. Spur entfernt), bliebe die Tastatur
+  // sonst ohne Ziel: nach dem Neuzeichnen Fokus zurück auf die Timeline.
+  void nextTick(() => {
+    const el = root.value
+    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true })
+  })
 }
 
 const split = () => run(() => store.splitAtPlayhead())
@@ -335,6 +342,24 @@ function onKeydown(event: KeyboardEvent): void {
         <input v-model="store.snapping" type="checkbox" data-testid="timeline-snap" />
         {{ t('timeline.snap') }}
       </label>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-add-video"
+        :title="t('timeline.addVideoTrackTitle')"
+        @click="run(() => store.newTrack('video'))"
+      >
+        {{ t('timeline.addVideoTrack') }}
+      </button>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-add-audio"
+        :title="t('timeline.addAudioTrackTitle')"
+        @click="run(() => store.newTrack('audio'))"
+      >
+        {{ t('timeline.addAudioTrack') }}
+      </button>
       <span class="time" data-testid="timeline-time">{{ timeText }}</span>
       <span v-if="hint" class="hint" role="status">{{ hint }}</span>
       <span class="spacer"></span>
@@ -395,16 +420,24 @@ function onKeydown(event: KeyboardEvent): void {
         </div>
 
         <div
-          v-for="track in store.doc.tracks"
+          v-for="(track, index) in store.doc.tracks"
           :key="track.id"
           class="row track"
           :data-kind="track.kind"
           :data-track="track.id"
+          :data-locked="track.locked"
+          :data-off="track.kind === 'audio' ? track.muted : track.hidden"
           :style="{ height: `${TRACK_HEIGHT[track.kind]}px` }"
         >
           <div class="head" :style="{ width: `${HEADER_WIDTH}px` }">
-            <span class="track-name">{{ track.name }}</span>
-            <span class="track-kind">{{ t(`timeline.kind.${track.kind}`) }}</span>
+            <TrackHeader
+              :track="track"
+              :can-move-up="index > 0"
+              :can-move-down="index < store.doc.tracks.length - 1"
+              @update="(patch) => run(() => store.updateTrack(track.id, patch))"
+              @move="(delta) => run(() => store.moveTrack(track.id, index + delta))"
+              @remove="run(() => store.removeTrack(track.id))"
+            />
           </div>
           <div
             class="lane"
@@ -545,13 +578,11 @@ function onKeydown(event: KeyboardEvent): void {
   background: var(--ds-surface-2);
   box-sizing: border-box;
 }
-.track-name {
-  font-size: var(--ds-text-sm);
-  font-weight: var(--ds-weight-semibold);
+.track[data-locked='true'] .lane {
+  background: repeating-linear-gradient(135deg, transparent 0 8px, var(--ds-surface-2) 8px 16px);
 }
-.track-kind {
-  font-size: var(--ds-text-xs);
-  color: var(--ds-text-3);
+.track[data-off='true'] .lane {
+  opacity: 0.45;
 }
 .ruler-row {
   height: 28px;

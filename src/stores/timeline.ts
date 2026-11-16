@@ -11,6 +11,8 @@ import {
   isTime,
   linkGroupIds,
   moveClip as moveClipOp,
+  moveTrack as moveTrackOp,
+  nextTrackName,
   putAsset as putAssetOp,
   removeAsset as removeAssetOp,
   removeClip as removeClipOp,
@@ -32,6 +34,7 @@ import {
   type OpResult,
   type Time,
   type TimelineDoc,
+  type TrackKind,
   type TrackPatch,
 } from '@/timeline/model'
 
@@ -226,6 +229,20 @@ export const useTimelineStore = defineStore('timeline', () => {
   const removeTrack = (trackId: string) => apply((d) => removeTrackOp(d, trackId))
   const updateTrack = (trackId: string, patch: TrackPatch) =>
     apply((d) => updateTrackOp(d, trackId, patch))
+  const moveTrack = (trackId: string, index: number) => apply((d) => moveTrackOp(d, trackId, index))
+
+  /** Leere Spur anlegen: Bild-Spuren oben (Vordergrund), Ton-Spuren unten. */
+  function newTrack(kind: TrackKind): boolean {
+    const prefix = kind === 'video' ? 'V' : kind === 'audio' ? 'A' : 'E'
+    return apply((d) =>
+      addTrackOp(
+        d,
+        { kind, name: nextTrackName(d, prefix) },
+        kind === 'audio' ? d.tracks.length : 0,
+      ),
+    )
+  }
+
   const insertClip = (trackId: string, clip: Clip) => apply((d) => insertClipOp(d, trackId, clip))
   const moveClip = (clipId: string, to: MoveTarget, opts?: { linked?: boolean }) =>
     apply((d) => moveClipOp(d, clipId, to, opts))
@@ -455,6 +472,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     addTrack,
     removeTrack,
     updateTrack,
+    moveTrack,
+    newTrack,
     insertClip,
     moveClip,
     trimClip,

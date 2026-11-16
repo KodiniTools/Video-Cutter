@@ -210,6 +210,19 @@ export function removeTrack(doc: TimelineDoc, trackId: string): OpResult {
   return ok({ ...doc, tracks: doc.tracks.filter((t) => t.id !== trackId) })
 }
 
+/** Spur an eine andere Stelle der Reihenfolge setzen (`index` 0 = ganz oben). */
+export function moveTrack(doc: TimelineDoc, trackId: string, index: number): OpResult {
+  const from = doc.tracks.findIndex((t) => t.id === trackId)
+  if (from < 0) return fail('track-not-found')
+  if (!Number.isFinite(index)) return fail('invalid-time')
+  const to = Math.min(Math.max(0, Math.trunc(index)), doc.tracks.length - 1)
+  if (to === from) return ok(doc)
+  const tracks = doc.tracks.slice()
+  const [track] = tracks.splice(from, 1)
+  tracks.splice(to, 0, track)
+  return ok({ ...doc, tracks })
+}
+
 export interface TrackPatch {
   name?: string
   locked?: boolean
@@ -225,9 +238,15 @@ export function updateTrack(doc: TimelineDoc, trackId: string, patch: TrackPatch
   if (index < 0) return fail('track-not-found')
   const track = doc.tracks[index]
   const next: Record<string, unknown> = { ...track }
+  let changed = false
   for (const [key, value] of Object.entries(patch)) {
-    if (value !== undefined && key in track) next[key] = value
+    if (value === undefined || !(key in track)) continue
+    if ((track as unknown as Record<string, unknown>)[key] === value) continue
+    next[key] = value
+    changed = true
   }
+  // Nichts geändert: kein neuer Stand (und damit kein leerer Rückgängig-Schritt).
+  if (!changed) return ok(doc)
   const tracks = doc.tracks.slice()
   tracks[index] = next as unknown as Track
   return ok({ ...doc, tracks })
@@ -468,7 +487,7 @@ function trackEnd(track: Track): Time {
 }
 
 /** Nächster freier Name wie „V2“ für eine neue Spur. */
-function nextTrackName(doc: TimelineDoc, prefix: string): string {
+export function nextTrackName(doc: TimelineDoc, prefix: string): string {
   const names = new Set(doc.tracks.map((t) => t.name))
   let n = 1
   while (names.has(`${prefix}${n}`)) n++
