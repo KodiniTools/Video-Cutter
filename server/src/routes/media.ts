@@ -84,7 +84,7 @@ mediaRouter.post(
 )
 
 /**
- * POST /api/media/still (multipart: image, duration, width, height, fps?, name?)
+ * POST /api/media/still (multipart: image, duration, width, height, fps?, name?, audio?)
  * -> 201 MediaView. Erzeugt aus einem Bild einen Video-Clip mit stiller
  * Tonspur und legt ihn in der Bibliothek ab.
  */

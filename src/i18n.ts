@@ -721,6 +721,12 @@ const messages = {
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
         hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
       },
+      still: {
+        open: '+ Bild-Clip / KI-Bild / KI-Video',
+        close: 'Schließen',
+        added: '„{name}“ liegt jetzt in der Medienliste. Mit „+ Timeline“ einfügen.',
+        hint: 'Der Bild-Clip entsteht im Projektformat ({w} × {h}) ohne Ton und verhält sich wie ein Video: in der Timeline kürzen, teilen, verschieben. Länger als hier eingestellt wird er nicht (höchstens {max} s), also lieber etwas großzügiger wählen.',
+      },
       ai: {
         pickClip:
           'Einen Clip mit Ton in der Timeline markieren, dann lassen sich Untertitel erzeugen.',
@@ -1560,6 +1566,12 @@ const messages = {
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
         hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
+      },
+      still: {
+        open: '+ Image clip / AI image / AI video',
+        close: 'Close',
+        added: '“{name}” is now in the media list. Insert it with “+ Timeline”.',
+        hint: 'The image clip is created in the project format ({w} × {h}) without sound and behaves like a video: trim, split and move it in the timeline. It cannot get longer than set here (at most {max} s), so choose generously.',
       },
       ai: {
         pickClip: 'Select a clip with sound in the timeline to create subtitles.',

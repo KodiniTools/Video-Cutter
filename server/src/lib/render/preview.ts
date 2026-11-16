@@ -253,7 +253,11 @@ export class PreviewStore {
     const base = { index: range.index, start: range.start, duration: range.end - range.start, key }
     const cached = this.cache.get(key)
     if (cached)
-      return { ...base, state: 'ready', ...(cached.renderMs ? { renderMs: cached.renderMs } : {}) }
+      return {
+        ...base,
+        state: 'ready',
+        ...(cached.renderMs !== undefined ? { renderMs: cached.renderMs } : {}),
+      }
     const job = this.jobs.get(key)
     if (job?.state === 'error') return { ...base, state: 'error', error: job.error }
     return { ...base, state: job?.state ?? 'queued' }

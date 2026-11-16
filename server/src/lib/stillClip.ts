@@ -25,6 +25,8 @@ export interface StillParams {
   height: number
   /** Bildrate (ganzzahlig). */
   fps: number
+  /** Stille Tonspur anhängen (Standard). Der Timeline-Editor braucht keine. */
+  audio: boolean
 }
 
 function toNum(v: unknown): number {
@@ -39,7 +41,8 @@ function even(n: number): number {
 }
 
 /**
- * Prüft die Formularfelder (`duration`, `width`, `height`, optional `fps`).
+ * Prüft die Formularfelder (`duration`, `width`, `height`, optional `fps`
+ * und `audio`; `audio=0` lässt die stille Tonspur weg).
  * Wirft ValidationError mit verständlicher Meldung.
  */
 export function parseStillParams(body: Record<string, unknown>): StillParams {
@@ -75,6 +78,7 @@ export function parseStillParams(body: Record<string, unknown>): StillParams {
     width,
     height,
     fps: Math.round(rawFps),
+    audio: !(body.audio === '0' || body.audio === 'false' || body.audio === false),
   }
 }
 
@@ -95,16 +99,12 @@ export function buildStillArgs(imagePath: string, outputPath: string, p: StillPa
     String(p.fps),
     '-i',
     imagePath,
-    '-f',
-    'lavfi',
-    '-i',
-    'anullsrc=r=48000:cl=stereo',
+    ...(p.audio ? ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo'] : []),
     '-t',
     dur,
     '-map',
     '0:v:0',
-    '-map',
-    '1:a:0',
+    ...(p.audio ? ['-map', '1:a:0'] : ['-an']),
     '-vf',
     `scale=${p.width}:${p.height}:force_original_aspect_ratio=decrease,` +
       `pad=${p.width}:${p.height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p`,
@@ -120,11 +120,7 @@ export function buildStillArgs(imagePath: string, outputPath: string, p: StillPa
     '18',
     '-g',
     String(p.fps),
-    '-c:a',
-    'aac',
-    '-b:a',
-    '128k',
-    '-shortest',
+    ...(p.audio ? ['-c:a', 'aac', '-b:a', '128k', '-shortest'] : []),
     '-movflags',
     '+faststart',
     '-progress',

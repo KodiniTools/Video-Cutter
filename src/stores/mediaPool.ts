@@ -251,10 +251,33 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     for (const item of items.value) void prepare(item.key)
   }
 
+  /**
+   * Medium aufnehmen, das schon auf dem Server liegt (Bild-Clip, KI-Video).
+   * Ist es bereits in der Liste, bleibt alles, wie es ist.
+   */
+  function addMedia(media: MediaView): void {
+    if (byAsset(media.id)) return
+    const key = `pool-${++keySeq}`
+    items.value.push({
+      key,
+      name: media.name,
+      size: media.size,
+      state: 'ready',
+      progress: 1,
+      error: null,
+      media,
+      prepare: 'idle',
+      derived: null,
+      peaks: null,
+    })
+    useTimelineStore().putAsset(assetFromMedia(media))
+    void prepare(key)
+  }
+
   /** Alle laufenden Uploads und Abfragen beenden. */
   function dispose(): void {
     for (const key of [...running.keys()]) stop(key)
   }
 
-  return { items, rejected, byAsset, add, prepare, remove, replaceAll, dispose }
+  return { items, rejected, byAsset, add, addMedia, prepare, remove, replaceAll, dispose }
 })

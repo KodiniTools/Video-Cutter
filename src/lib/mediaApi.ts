@@ -125,6 +125,8 @@ export interface StillClipRequest {
   height: number
   fps: number
   name?: string
+  /** `false` = ohne stille Tonspur (Timeline-Editor). */
+  audio?: boolean
 }
 
 /**
@@ -142,6 +144,7 @@ export async function createStillClip(
   form.append('height', String(req.height))
   form.append('fps', String(req.fps))
   if (req.name) form.append('name', req.name)
+  if (req.audio === false) form.append('audio', '0')
   form.append('image', req.image, 'bild.png')
   const res = await fetch(`${API_BASE}/api/media/still`, { method: 'POST', body: form, signal })
   if (!res.ok) throw errorFrom(res.status, await res.text().catch(() => ''), retryAfterOf(res))
