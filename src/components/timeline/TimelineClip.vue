@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { stripTileStyle } from '@/lib/derivedApi'
 import { useMediaPoolStore } from '@/stores/mediaPool'
+import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
 import type { Clip } from '@/timeline/model'
 
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   (e: 'grab', id: string, mode: ClipGrab, event: PointerEvent): void
 }>()
 
+const { t } = useI18n()
 const pool = useMediaPoolStore()
 
 const left = computed(() => timeToPx(props.clip.start, props.zoom))
@@ -40,6 +43,12 @@ const name = computed(() => {
     return typeof clip.data.text === 'string'
       ? clip.data.text.split('\n')[0].trim() || 'Text'
       : 'Text'
+  // Grafik-Clips zeigen ihr Emoji bzw. ihre Art.
+  if (clip.kind === 'graphic') {
+    const g = clipGraphic(clip.data)
+    if (g.kind === 'emoji') return g.emoji || t('graphics.kinds.emoji')
+    return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
+  }
   return item.value?.name ?? ''
 })
 
@@ -91,7 +100,7 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
     @pointerdown.stop="grab('move', $event)"
   >
     <div v-if="thumbs.length" class="thumbs" aria-hidden="true">
-      <span v-for="t in thumbs" :key="t.key" class="thumb" :style="t.style"></span>
+      <span v-for="thumb in thumbs" :key="thumb.key" class="thumb" :style="thumb.style"></span>
     </div>
     <div v-if="peaks && peaks.length" class="wave"><WaveformCanvas :peaks="peaks" /></div>
     <span v-if="name" class="label">{{ name }}</span>
@@ -138,7 +147,8 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   background: var(--ds-accent-soft);
   color: var(--ds-accent);
 }
-.clip[data-kind='text'] {
+.clip[data-kind='text'],
+.clip[data-kind='graphic'] {
   background: var(--ds-surface-2);
   border-style: dashed;
 }

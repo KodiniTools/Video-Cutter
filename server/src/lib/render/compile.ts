@@ -1,4 +1,5 @@
 import { LOUDNORM_FILTER, PROGRESS, atempoFilters, buildCropFilter } from '../args'
+import { graphicFilter } from '../graphicOverlay'
 import { buildAss, escapeFilterPath, type TextOverlay } from '../textOverlay'
 import {
   MICROS_PER_SECOND,
@@ -35,9 +36,21 @@ export interface RenderSource {
   hasAudio: boolean
 }
 
+/** Hochgeladene Grafik (PNG) auf der Platte, mit ihren Pixelmaßen. */
+export interface RenderGraphic {
+  path: string
+  width: number
+  height: number
+}
+
 export interface CompileOptions {
   /** Dateien je Asset-ID. Fehlt eine benötigte Quelle, wirft der Compiler. */
   sources: Record<string, RenderSource>
+  /**
+   * Bilder je Grafik-ID. Grafiken, deren Bild fehlt, werden ausgelassen (der
+   * Aufrufer meldet das dem Editor, der das Bild dann erneut hochlädt).
+   */
+  graphics?: Record<string, RenderGraphic>
   /** Abschnitt der Timeline; Standard: 0 bis zum Ende des letzten Clips. */
   range?: { start: Time; end: Time }
   /** Ausgabegröße (z. B. kleiner für die Vorschau); Standard: Projektgröße. */
@@ -262,34 +275,77 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     chains.push(`[${current}]format=yuv420p[vout]`)
   }
 
-  // --- Texte -----------------------------------------------------------------
+  // --- Grafiken und Texte ----------------------------------------------------
 
-  // Texte liegen über allen Video-Spuren. Die Datei nennt Zeiten der ganzen
-  // Timeline; das Bild wird für den Filter kurz auf diese Zeiten verschoben.
-  // So laufen Animationen über Abschnittsgrenzen hinweg nahtlos weiter.
+  // Beide liegen über allen Video-Spuren: erst die Grafiken (untere Spur
+  // zuerst), darüber die Texte. Ihre Zeiten sind die der ganzen Timeline; das
+  // Bild wird dafür kurz auf diese Zeiten verschoben. So laufen Animationen
+  // über Abschnittsgrenzen hinweg nahtlos weiter.
   const t0 = secondsOf(f0)
   const t1 = secondsOf(f1)
   const texts: TextOverlay[] = []
+  const graphics: Array<{ index: number; filter: (i: string, o: string) => string }> = []
   const overlayTracks = doc.tracks.filter(
     (t): t is DocOverlayTrack => t.kind === 'overlay' && !t.hidden,
   )
   for (const track of overlayTracks.slice().reverse()) {
     for (const clip of track.clips) {
-      if (clip.kind !== 'text' || !clip.text) continue
       const start = secondsOf(frameOf(clip.start))
       const end = secondsOf(frameOf(clipEnd(clip)))
       if (end <= t0 || start >= t1 || end <= start) continue
-      texts.push({ ...clip.text, start, end })
+      if (clip.kind === 'text' && clip.text) texts.push({ ...clip.text, start, end })
+      const g = clip.kind === 'graphic' ? clip.graphic : undefined
+      const image = g ? opts.graphics?.[g.png] : undefined
+      if (!g || !image) continue
+      // Das PNG ist für die Projekthöhe `refHeight` gezeichnet: auf die
+      // Ausgabegröße bringen (Vorschau kleiner, Export meist 1:1).
+      const factor = height / g.refHeight
+      const w = Math.max(1, Math.round(image.width * factor))
+      const h = Math.max(1, Math.round(image.height * factor))
+      const pre = [
+        `setpts=PTS+${sec(t0)}/TB`,
+        ...(w === image.width && h === image.height ? [] : [`scale=${w}:${h}`]),
+      ]
+      inputs.push('-loop', '1', '-framerate', fps, '-t', sec(duration + 1), '-i', image.path)
+      const index = inputCount++
+      const overlay = {
+        width: w,
+        height: h,
+        x: g.x,
+        y: g.y,
+        start,
+        end,
+        animation: g.animation,
+        loop: g.loop,
+        animSpeed: g.animSpeed,
+      }
+      graphics.push({
+        index,
+        filter: (i, o) => graphicFilter(overlay, index, `[${i}]`, `[${o}]`, width, height, pre),
+      })
     }
   }
   let ass: string | undefined
-  if (texts.length > 0) {
-    ass = buildAss(texts, width, height)
+  if (texts.length > 0) ass = buildAss(texts, width, height)
+  if (ass !== undefined || graphics.length > 0) {
     const last = chains.length - 1
     chains[last] = chains[last].replace(/\[vout\]$/, '[vplain]')
+    let head = `[vplain]setpts=PTS+${sec(t0)}/TB,`
+    if (graphics.length > 0) {
+      let current = label('gbase')
+      chains.push(`[vplain]setpts=PTS+${sec(t0)}/TB[${current}]`)
+      for (const g of graphics) {
+        const next = label('gmix')
+        chains.push(g.filter(current, next))
+        current = next
+      }
+      head = `[${current}]`
+    }
     chains.push(
-      `[vplain]setpts=PTS+${sec(t0)}/TB,` +
-        `ass=filename=${ASS_PLACEHOLDER}:fontsdir=${FONTS_PLACEHOLDER},` +
+      head +
+        (ass === undefined
+          ? ''
+          : `ass=filename=${ASS_PLACEHOLDER}:fontsdir=${FONTS_PLACEHOLDER},`) +
         'setpts=PTS-STARTPTS,format=yuv420p[vout]',
     )
   }

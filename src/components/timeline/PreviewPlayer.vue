@@ -7,9 +7,11 @@ import {
   PREVIEW_UNSUPPORTED,
   type PreviewStats,
 } from '@/lib/previewApi'
+import { GRAPHICS_UNSUPPORTED } from '@/lib/graphicsApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { PreviewEngine, previewSupported } from '@/preview/player'
 import { useTimelineStore } from '@/stores/timeline'
+import { graphicImages } from '@/timeline/graphics'
 import { frameTime, MICROS_PER_SECOND, timeToSeconds, type TimelineDoc } from '@/timeline/model'
 
 /**
@@ -40,7 +42,8 @@ const timeLabel = computed(
 )
 const message = computed(() => {
   if (problem.value === 'browser') return t('timelinePreview.browser')
-  if (problem.value === PREVIEW_UNSUPPORTED) return t('timelinePreview.unsupported')
+  if (problem.value === PREVIEW_UNSUPPORTED || problem.value === GRAPHICS_UNSUPPORTED)
+    return t('timelinePreview.unsupported')
   if (problem.value) return problem.value
   if (empty.value) return t('timelinePreview.empty')
   return buffered.value ? '' : t('timelinePreview.rendering')
@@ -97,7 +100,22 @@ async function requestPlan(): Promise<void> {
   }
   const ctrl = (planCtrl = new AbortController())
   try {
-    const plan = await fetchPreviewPlan(store.doc, store.playhead, ctrl.signal)
+    // Formen und Emojis zeichnet der Browser: Bilder vorab hochladen. Hat der
+    // Server eines nicht mehr (Zwischenspeicher geleert), noch einmal.
+    let plan = await fetchPreviewPlan(
+      await graphicImages.prepare(store.doc),
+      store.playhead,
+      ctrl.signal,
+    )
+    for (let retry = 0; retry < 2 && plan.missingGraphics.length > 0; retry++) {
+      if (ctrl.signal.aborted) return
+      graphicImages.forget(plan.missingGraphics)
+      plan = await fetchPreviewPlan(
+        await graphicImages.prepare(store.doc),
+        store.playhead,
+        ctrl.signal,
+      )
+    }
     if (ctrl.signal.aborted || !engine) return
     problem.value = null
     engine.setPlan(plan)

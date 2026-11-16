@@ -93,6 +93,12 @@ export const config = {
   previewThreads: num('PREVIEW_THREADS', 3),
   /** Zeitgrenze je Abschnitt. */
   previewTimeoutMs: num('PREVIEW_TIMEOUT_SEC', 120) * 1000,
+  /**
+   * Grafiken des Timeline-Editors (vom Browser gezeichnete PNGs). Zwischenspeicher:
+   * Fehlt ein Bild, lädt der Editor es erneut hoch.
+   */
+  graphicsDir: process.env.GRAPHICS_DIR ?? path.join(tmpDir, 'graphics'),
+  graphicsCacheBytes: num('GRAPHICS_CACHE_MB', 512) * 1024 * 1024,
   /** Obergrenze für alle gespeicherten Videos zusammen. */
   maxMediaTotalBytes: num('MAX_MEDIA_TOTAL_MB', 20 * 1024) * 1024 * 1024,
 

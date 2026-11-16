@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase'
+import { MissingGraphicsError, parseMissingGraphics } from './graphicsApi'
 import { fallbackErrorMessage, retryAfterOf } from './httpError'
 import type { TimelineDoc } from '@/timeline/model'
 
@@ -39,7 +40,7 @@ export async function startRender(
     }),
     signal,
   })
-  let data: { jobId?: unknown; error?: unknown } = {}
+  let data: { jobId?: unknown; error?: unknown; missingGraphics?: unknown } = {}
   try {
     data = (await res.json()) as typeof data
   } catch {
@@ -50,6 +51,9 @@ export async function startRender(
     // Altes Backend: Route unbekannt -> generisches „Nicht gefunden.“ bzw. HTML.
     if (res.status === 404 && (!msg || msg === 'Nicht gefunden.'))
       throw new Error(RENDER_UNSUPPORTED)
+    const missing = parseMissingGraphics(data.missingGraphics)
+    if (res.status === 409 && missing.length > 0)
+      throw new MissingGraphicsError(missing, msg || fallbackErrorMessage(409, null))
     throw new Error(msg || fallbackErrorMessage(res.status, retryAfterOf(res)))
   }
   if (typeof data.jobId !== 'string' || !data.jobId)

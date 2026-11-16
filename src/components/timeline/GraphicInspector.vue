@@ -1,0 +1,414 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
+import {
+  EMOJI_PRESETS,
+  GRAPHIC_ANIMATIONS,
+  GRAPHIC_LOOPS,
+  hasColors,
+  hasFill,
+  hasHeight,
+  MAX_EMOJI_LENGTH,
+  MAX_GRAPHIC_H,
+  MAX_GRAPHIC_W,
+  MAX_STROKE,
+  MIN_GRAPHIC_SIZE,
+  SYMBOL_NAMES,
+} from '@/lib/graphicOverlay'
+import { ANIM_SPEEDS, formatAnimSpeed } from '@/lib/textOverlay'
+import { useTimelineStore } from '@/stores/timeline'
+import { clipGraphic } from '@/timeline/graphics'
+
+/**
+ * Einstellungen des markierten Grafik-Clips (Form, Symbol, Emoji). Jede
+ * Änderung geht ins Dokument; die Vorschau zeichnet das Bild neu und rendert
+ * den betroffenen Abschnitt. Ziehen eines Reglers zählt als ein
+ * Rückgängig-Schritt.
+ */
+
+const { t, locale } = useI18n()
+const store = useTimelineStore()
+
+/** Der Grafik-Clip, wenn genau einer markiert ist. */
+const clip = computed(() => {
+  const [only, ...rest] = store.selectedClips
+  return only && rest.length === 0 && only.kind === 'graphic' ? only : null
+})
+/** Vollständige Einstellungen in gültigen Grenzen. */
+const g = computed(() => (clip.value ? clipGraphic(clip.value.data) : null))
+
+const isLine = computed(() => g.value?.kind === 'line' || g.value?.kind === 'arrow')
+const sizeLabel = computed(() => {
+  if (isLine.value) return t('graphics.length')
+  return g.value && hasHeight(g.value.kind) ? t('graphics.width') : t('graphics.size')
+})
+const percent = (v: number) => Math.round(v * 1000) / 10
+
+let editing = false
+
+/** Änderung übernehmen; bis `commit` zählt alles als ein Schritt. */
+function edit(patch: Record<string, unknown>): void {
+  const id = clip.value?.id
+  if (!id) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  store.updateClipData(id, patch)
+}
+
+function commit(): void {
+  if (!editing) return
+  editing = false
+  store.endGesture()
+}
+
+/** Einzelne Auswahl (Liste, Farbe, Knopf): sofort ein eigener Schritt. */
+function set(patch: Record<string, unknown>): void {
+  commit()
+  const id = clip.value?.id
+  if (id) store.updateClipData(id, patch)
+}
+
+const value = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement).value
+const number = (e: Event) => Number(value(e))
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+
+function onEmoji(e: Event): void {
+  const el = e.target as HTMLInputElement
+  const text = Array.from(el.value).slice(0, MAX_EMOJI_LENGTH).join('')
+  if (text !== el.value) el.value = text
+  edit({ emoji: text })
+}
+
+onBeforeUnmount(commit)
+</script>
+
+<template>
+  <section v-if="clip && g" class="inspector" data-testid="graphic-inspector" @focusout="commit">
+    <h3>{{ t('timeline.graphicInspector', { kind: t(`graphics.kinds.${g.kind}`) }) }}</h3>
+
+    <label v-if="g.kind === 'symbol'" class="field">
+      <span>{{ t('graphics.symbol') }}</span>
+      <select
+        :value="g.symbol"
+        data-testid="graphic-symbol"
+        @change="set({ symbol: value($event) })"
+      >
+        <option v-for="s in SYMBOL_NAMES" :key="s" :value="s">
+          {{ t(`graphics.symbols.${s}`) }}
+        </option>
+      </select>
+    </label>
+    <template v-if="g.kind === 'emoji'">
+      <label class="field">
+        <span>{{ t('graphics.emoji') }}</span>
+        <input
+          type="text"
+          :value="g.emoji"
+          :placeholder="t('graphics.customEmoji')"
+          data-testid="graphic-emoji"
+          @input="onEmoji"
+          @change="commit"
+        />
+      </label>
+      <div class="emojis">
+        <button
+          v-for="e in EMOJI_PRESETS"
+          :key="e"
+          type="button"
+          :aria-pressed="g.emoji === e"
+          :aria-label="e"
+          @click="set({ emoji: e })"
+        >
+          {{ e }}
+        </button>
+      </div>
+    </template>
+
+    <div class="row">
+      <label class="field">
+        <span>{{ sizeLabel }} {{ percent(g.w) }} %</span>
+        <input
+          type="range"
+          :min="MIN_GRAPHIC_SIZE"
+          :max="MAX_GRAPHIC_W"
+          step="0.005"
+          :value="g.w"
+          data-testid="graphic-w"
+          @input="edit({ w: number($event) })"
+          @change="commit"
+        />
+      </label>
+      <label v-if="hasHeight(g.kind)" class="field">
+        <span>{{ t('graphics.height') }} {{ percent(g.h) }} %</span>
+        <input
+          type="range"
+          :min="MIN_GRAPHIC_SIZE"
+          :max="MAX_GRAPHIC_H"
+          step="0.005"
+          :value="g.h"
+          data-testid="graphic-h"
+          @input="edit({ h: number($event) })"
+          @change="commit"
+        />
+      </label>
+    </div>
+    <label class="field">
+      <span>{{ t('graphics.rotation') }} {{ Math.round(g.rotation) }}°</span>
+      <input
+        type="range"
+        min="-180"
+        max="180"
+        step="1"
+        :value="g.rotation"
+        data-testid="graphic-rotation"
+        @input="edit({ rotation: number($event) })"
+        @change="commit"
+      />
+    </label>
+
+    <template v-if="hasColors(g.kind)">
+      <div class="row">
+        <label class="field color">
+          <span>{{ isLine ? t('graphics.lineColor') : t('graphics.strokeColor') }}</span>
+          <input
+            type="color"
+            :value="g.stroke"
+            data-testid="graphic-stroke"
+            @change="set({ stroke: value($event) })"
+          />
+        </label>
+        <label class="field">
+          <span>{{ t('graphics.strokeWidth') }} {{ percent(g.strokeWidth) }} %</span>
+          <input
+            type="range"
+            min="0"
+            :max="MAX_STROKE"
+            step="0.001"
+            :value="g.strokeWidth"
+            data-testid="graphic-stroke-width"
+            @input="edit({ strokeWidth: number($event) })"
+            @change="commit"
+          />
+        </label>
+      </div>
+      <div v-if="hasFill(g.kind)" class="row">
+        <label class="field color">
+          <span>
+            {{ g.kind === 'symbol' ? t('graphics.symbolColor') : t('graphics.fillColor') }}
+          </span>
+          <input
+            type="color"
+            :value="g.fill"
+            data-testid="graphic-fill"
+            @change="set({ fill: value($event) })"
+          />
+        </label>
+        <label class="field">
+          <span>{{ t('graphics.fillOpacity') }} {{ Math.round(g.fillOpacity * 100) }} %</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            :value="g.fillOpacity"
+            data-testid="graphic-fill-opacity"
+            @input="edit({ fillOpacity: number($event) })"
+            @change="commit"
+          />
+        </label>
+      </div>
+      <label v-if="g.kind === 'rect'" class="field">
+        <span>{{ t('graphics.radius') }} {{ Math.round(g.radius * 100) }} %</span>
+        <input
+          type="range"
+          min="0"
+          max="0.5"
+          step="0.01"
+          :value="g.radius"
+          data-testid="graphic-radius"
+          @input="edit({ radius: number($event) })"
+          @change="commit"
+        />
+      </label>
+    </template>
+
+    <div class="row">
+      <label class="field">
+        <span>{{ t('graphics.entry') }}</span>
+        <select
+          :value="g.animation"
+          data-testid="graphic-animation"
+          @change="set({ animation: value($event) })"
+        >
+          <option v-for="a in GRAPHIC_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.animations.${a}`) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('graphics.loop') }}</span>
+        <select :value="g.loop" data-testid="graphic-loop" @change="set({ loop: value($event) })">
+          <option v-for="l in GRAPHIC_LOOPS" :key="l" :value="l">
+            {{ t(`graphics.loops.${l}`) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('text.animSpeed') }}</span>
+        <select
+          :value="g.animSpeed ?? 1"
+          :disabled="g.animation === 'none' && g.loop === 'none'"
+          data-testid="graphic-anim-speed"
+          @change="set({ animSpeed: number($event) })"
+        >
+          <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
+            {{ formatAnimSpeed(s, locale) }}
+          </option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row">
+      <label class="field">
+        <span>{{ t('text.pos.x') }} {{ percent(g.x) }} %</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.005"
+          :value="g.x"
+          data-testid="graphic-x"
+          @input="edit({ x: clamp01(number($event)) })"
+          @change="commit"
+        />
+      </label>
+      <label class="field">
+        <span>{{ t('text.pos.y') }} {{ percent(g.y) }} %</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.005"
+          :value="g.y"
+          data-testid="graphic-y"
+          @input="edit({ y: clamp01(number($event)) })"
+          @change="commit"
+        />
+      </label>
+    </div>
+    <p class="hint">{{ t('timeline.graphicInspectorHint') }}</p>
+  </section>
+</template>
+
+<style scoped>
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-1);
+  font-size: var(--ds-text-sm);
+}
+h3 {
+  margin: 0;
+  font-size: var(--ds-text-md, var(--ds-text-sm));
+  font-weight: var(--ds-weight-semibold);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-3);
+}
+.field {
+  display: flex;
+  flex: 1 1 120px;
+  flex-direction: column;
+  gap: var(--ds-space-1, 4px);
+  min-width: 0;
+  color: var(--ds-text-2);
+}
+/* Direkt im Feld-Stapel: natürliche Höhe (die Basis oben gilt nur in Zeilen). */
+.inspector > .field {
+  flex: none;
+}
+.field.color {
+  flex: 0 0 auto;
+}
+input[type='text'],
+select {
+  width: 100%;
+  padding: var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font: inherit;
+}
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--ds-accent);
+}
+input[type='color'] {
+  width: var(--ds-control-sm);
+  height: var(--ds-control-sm);
+  padding: 2px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  cursor: pointer;
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-2);
+}
+.presets button {
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-3);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  cursor: pointer;
+}
+.presets button:hover {
+  border-color: var(--ds-accent);
+}
+select:focus-visible,
+input:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+.emojis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.emojis button {
+  width: var(--ds-control-sm);
+  height: var(--ds-control-sm);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: none;
+  font-size: var(--ds-text-md, var(--ds-text-sm));
+  cursor: pointer;
+}
+.emojis button:hover,
+.emojis button[aria-pressed='true'] {
+  border-color: var(--ds-accent);
+  background: var(--ds-surface-2);
+}
+.hint {
+  margin: 0;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs, var(--ds-text-sm));
+}
+</style>

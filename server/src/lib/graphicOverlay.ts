@@ -203,12 +203,18 @@ export function rotationBox(width: number, height: number): number {
  * die bisherige Filterkette.
  */
 export function graphicFilter(
-  g: GraphicOverlay,
+  g: Omit<GraphicOverlay, 'png'>,
   inputIndex: number,
   inLabel: string,
   outLabel: string,
   frameW: number,
   frameH: number,
+  /**
+   * Zusätzliche Filter direkt hinter dem Eingang (Timeline-Editor: Zeit
+   * verschieben, auf Vorschaugröße bringen). `g.width`/`g.height` nennen dann
+   * die Maße **nach** diesen Filtern.
+   */
+  pre: readonly string[] = [],
 ): string {
   const dur = g.end - g.start
   const sp = g.animSpeed ?? 1
@@ -219,7 +225,7 @@ export function graphicFilter(
   const loop = g.loop ?? 'none'
   const st = f3(g.start)
   const u = `(t-${st})`
-  const src = [`[${inputIndex}:v]format=rgba`]
+  const src = [`[${inputIndex}:v]format=rgba`, ...pre]
   let fadeIn = 0
   /** Zusätzlicher y-Versatz in px (Ausdruck) – Hereingleiten/Schweben. */
   const yParts: string[] = []

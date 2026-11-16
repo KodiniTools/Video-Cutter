@@ -6,7 +6,18 @@
  * läuft zuerst durch `parseTimelineDoc`; der Compiler vertraut dem Ergebnis.
  */
 
-import { MIN_TEXT_DURATION, parseTextOverlays, type TextOverlay } from '../textOverlay'
+import {
+  GRAPHIC_ANIMATIONS,
+  GRAPHIC_LOOPS,
+  type GraphicAnimation,
+  type GraphicLoop,
+} from '../graphicOverlay'
+import {
+  MIN_TEXT_DURATION,
+  parseAnimSpeed,
+  parseTextOverlays,
+  type TextOverlay,
+} from '../textOverlay'
 
 /** Zeit bzw. Dauer in ganzen Mikrosekunden. */
 export type Time = number
@@ -71,12 +82,31 @@ export interface DocAudioClip extends DocClipBase {
 export type DocTextStyle = Omit<TextOverlay, 'start' | 'end'>
 
 /**
- * Text/Grafik/Bild über dem Video. Texte werden gerendert (`text` gesetzt);
- * Grafiken und Bilder werden geprüft, aber erst später gerendert.
+ * Grafik (Form, Symbol, Emoji): Der Browser zeichnet sie als PNG und lädt es
+ * hoch; das Dokument nennt nur die ID des Bildes, Lage und Animation.
+ */
+export interface DocGraphic {
+  /** ID des hochgeladenen PNGs (Hash des Inhalts). */
+  png: string
+  /** Projekthöhe, für die das PNG gezeichnet wurde (Maßstab). */
+  refHeight: number
+  /** Mittelpunkt als Anteil der Bildbreite/-höhe. */
+  x: number
+  y: number
+  animation: GraphicAnimation
+  loop: GraphicLoop
+  animSpeed: number
+}
+
+/**
+ * Text/Grafik/Bild über dem Video. Texte (`text`) und Grafiken (`graphic`)
+ * werden gerendert, sobald ihr Inhalt da ist; Bilder werden geprüft, aber
+ * erst später gerendert.
  */
 export interface DocOverlayClip extends DocClipBase {
   kind: 'text' | 'graphic' | 'image'
   text?: DocTextStyle
+  graphic?: DocGraphic
 }
 
 export interface DocVideoTrack {
@@ -139,6 +169,7 @@ export type ParseResult = { ok: true; doc: RenderDoc } | { ok: false; errors: Do
 const MAX_ERRORS = 20
 const ID_MAX = 64
 const SAMPLE_RATES = [44100, 48000]
+const GRAPHIC_ID_RE = /^[0-9a-f]{32}$/
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -294,11 +325,57 @@ export function parseTimelineDoc(
         if (kind === 'overlay') {
           if (ck !== 'text' && ck !== 'graphic' && ck !== 'image')
             return fail(`${cp}.kind`, 'Clip passt nicht zur Spur-Art.')
+          const data = isObject(rc.data) ? rc.data : {}
+          if (ck === 'graphic') {
+            // Noch nicht hochgeladen (wird gerade gezeichnet): gültig, aber nichts zu zeigen.
+            if (data.png === undefined || data.png === null || data.png === '') {
+              clips.push({ ...base, kind: ck })
+              return
+            }
+            const gp = `${cp}.data`
+            if (typeof data.png !== 'string' || !GRAPHIC_ID_RE.test(data.png))
+              return fail(`${gp}.png`, 'Ungültige Grafik.')
+            const ref = data.renderHeight
+            if (
+              typeof ref !== 'number' ||
+              !Number.isInteger(ref) ||
+              ref < 16 ||
+              ref > limits.maxSide
+            )
+              return fail(`${gp}.renderHeight`, 'Ungültiger Maßstab der Grafik.')
+            if (!inRange(data.x, 0, 1) || !inRange(data.y, 0, 1))
+              return fail(gp, 'Ungültige Position der Grafik.')
+            const animation = data.animation ?? 'none'
+            if (!(GRAPHIC_ANIMATIONS as readonly unknown[]).includes(animation))
+              return fail(`${gp}.animation`, 'Ungültige Animation der Grafik.')
+            const loop = data.loop ?? 'none'
+            if (!(GRAPHIC_LOOPS as readonly unknown[]).includes(loop))
+              return fail(`${gp}.loop`, 'Ungültige Dauer-Animation der Grafik.')
+            let animSpeed = 1
+            try {
+              animSpeed = parseAnimSpeed(data.animSpeed, 'Tempo der Grafik')
+            } catch (e) {
+              return fail(`${gp}.animSpeed`, e instanceof Error ? e.message : 'Ungültiges Tempo.')
+            }
+            clips.push({
+              ...base,
+              kind: ck,
+              graphic: {
+                png: data.png,
+                refHeight: ref,
+                x: data.x,
+                y: data.y,
+                animation: animation as GraphicAnimation,
+                loop: loop as GraphicLoop,
+                animSpeed,
+              },
+            })
+            return
+          }
           if (ck !== 'text') {
             clips.push({ ...base, kind: ck })
             return
           }
-          const data = isObject(rc.data) ? rc.data : {}
           // Noch leerer Text (wird gerade getippt): gültig, aber nichts zu zeigen.
           if (typeof data.text !== 'string' || !data.text.trim()) {
             clips.push({ ...base, kind: ck })
