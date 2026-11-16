@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { addImageAsset, getImageAsset } from '@/lib/imageAssets'
 import {
   deleteProject,
@@ -43,6 +43,21 @@ export const TIMELINE_PROJECT_BUSY = 'TIMELINE_PROJECT_BUSY'
 /** Grenzen des Servers je Projekt. */
 export const MAX_PROJECT_MEDIA = 50
 export const MAX_PROJECT_IMAGES = 200
+
+/** So lange nach der letzten Änderung wird automatisch gespeichert. */
+export const AUTOSAVE_DELAY_MS = 3000
+const AUTOSAVE_KEY = 'vc-timeline-autosave'
+
+/** Stand des automatischen Speicherns (für die Anzeige). */
+export type AutosaveState = 'idle' | 'pending' | 'saving' | 'error'
+
+function readAutosave(): boolean {
+  try {
+    return localStorage.getItem(AUTOSAVE_KEY) !== 'off'
+  } catch {
+    return true // localStorage nicht verfügbar -> Standard
+  }
+}
 
 export interface TimelineOpenResult {
   /** So viele Videos oder Bilder ließen sich nicht wiederherstellen. */
@@ -89,6 +104,18 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
   )
   /** Gibt es Änderungen, die noch nicht gespeichert sind? */
   const dirty = computed(() => hasContent.value && timeline.doc !== savedDoc.value)
+
+  /** Geöffnete Projekte nach jeder Änderung von selbst speichern (merkt sich der Browser). */
+  const autosave = ref(readAutosave())
+  const autosaveState = ref<AutosaveState>('idle')
+  /** Fehler des letzten automatischen Speicherns (Kennung oder Meldung des Servers). */
+  const autosaveError = ref('')
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Beim Öffnen fehlte etwas (Video, Bild): Ein automatisches Speichern würde
+   * den Verlust im Projekt festschreiben. Erst wieder nach bewusstem Speichern.
+   */
+  const incomplete = ref(false)
 
   async function refresh(): Promise<void> {
     // Auch Projekte der bisherigen App: Sie lassen sich hier umgewandelt öffnen.
@@ -170,6 +197,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
       current.value = { id: result.project.id, name: result.project.name, savedAt: Date.now() }
       savedDoc.value = doc
       suggestedName.value = ''
+      incomplete.value = false
       await refresh().catch(() => {})
       return result.project
     } finally {
@@ -243,11 +271,13 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
         current.value = null
         savedDoc.value = null
         suggestedName.value = project.name
+        incomplete.value = false
       } else {
         suggestedName.value = ''
         current.value = { id: project.id, name: project.name, savedAt: project.updatedAt }
         // Fehlte etwas, weicht das Dokument vom gespeicherten Stand ab.
         savedDoc.value = missing > 0 ? null : timeline.doc
+        incomplete.value = missing > 0
       }
       return { missing, converted, skipped, name: project.name }
     } finally {
@@ -264,6 +294,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     current.value = null
     savedDoc.value = null
     suggestedName.value = ''
+    incomplete.value = false
   }
 
   async function remove(id: string): Promise<void> {
@@ -281,7 +312,76 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     }
   }
 
+  // --- Automatisches Speichern ----------------------------------------------
+
+  function clearAutosaveTimer(): void {
+    if (autosaveTimer !== null) clearTimeout(autosaveTimer)
+    autosaveTimer = null
+  }
+
+  function scheduleAutosave(): void {
+    clearAutosaveTimer()
+    autosaveState.value = 'pending'
+    autosaveTimer = setTimeout(() => void runAutosave(), AUTOSAVE_DELAY_MS)
+  }
+
+  async function runAutosave(): Promise<void> {
+    autosaveTimer = null
+    const open = current.value
+    if (!autosave.value || !open || !dirty.value || incomplete.value) {
+      autosaveState.value = 'idle'
+      return
+    }
+    // Gerade beschäftigt (Speichern, Öffnen, Upload): später noch einmal versuchen.
+    if (busy.value || pool.items.some((i) => i.state === 'uploading')) {
+      scheduleAutosave()
+      return
+    }
+    autosaveState.value = 'saving'
+    try {
+      await save(open.name)
+      autosaveError.value = ''
+      // Währenddessen geändert? Dann läuft bereits die nächste Frist.
+      if (autosaveTimer === null) autosaveState.value = 'idle'
+    } catch (e) {
+      // Kein Dauerversuch: Die nächste Änderung (oder „Speichern“) versucht es erneut.
+      autosaveError.value = e instanceof Error ? e.message : String(e)
+      if (autosaveTimer === null) autosaveState.value = 'error'
+    }
+  }
+
+  function setAutosave(on: boolean): void {
+    autosave.value = on
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, on ? 'on' : 'off')
+    } catch {
+      /* localStorage nicht verfügbar -> gilt nur für diese Sitzung */
+    }
+  }
+
+  // Nur ein bereits gespeichertes (geöffnetes) Projekt wird von selbst
+  // überschrieben; ein neues braucht erst einen Namen.
+  watch(
+    [() => timeline.doc, savedDoc, () => current.value?.id ?? null, autosave, incomplete],
+    () => {
+      if (autosave.value && current.value && dirty.value && !incomplete.value) scheduleAutosave()
+      else {
+        clearAutosaveTimer()
+        if (autosaveState.value !== 'saving') {
+          autosaveState.value = 'idle'
+          autosaveError.value = ''
+        }
+      }
+    },
+    { flush: 'sync' },
+  )
+
   return {
+    autosave,
+    autosaveState,
+    autosaveError,
+    incomplete,
+    setAutosave,
     projects,
     loaded,
     current,

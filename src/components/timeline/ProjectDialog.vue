@@ -23,7 +23,19 @@ const emit = defineEmits<{ close: [] }>()
 const { t, locale } = useI18n()
 const store = useTimelineProjectStore()
 const timeline = useTimelineStore()
-const { projects, loaded, current, busy, progress, hasContent, dirty } = storeToRefs(store)
+const {
+  projects,
+  loaded,
+  current,
+  busy,
+  progress,
+  hasContent,
+  dirty,
+  autosave,
+  autosaveState,
+  autosaveError,
+  incomplete,
+} = storeToRefs(store)
 
 const dialogEl = ref<HTMLDialogElement | null>(null)
 const name = ref('')
@@ -245,6 +257,30 @@ function formatSize(bytes: number): string {
         </p>
       </form>
 
+      <label class="auto">
+        <input
+          type="checkbox"
+          :checked="autosave"
+          data-testid="project-autosave"
+          @change="store.setAutosave(($event.target as HTMLInputElement).checked)"
+        />
+        <span>
+          {{ t('timelineProjects.autosave') }}
+          <small>{{ t('timelineProjects.autosaveHint') }}</small>
+        </span>
+      </label>
+      <p v-if="autosave && incomplete" class="hint" data-testid="project-autosave-paused">
+        {{ t('timelineProjects.autosavePaused') }}
+      </p>
+      <p
+        v-if="autosaveState === 'error'"
+        class="hint warn"
+        role="alert"
+        data-testid="project-autosave-error"
+      >
+        {{ t('timelineProjects.autosaveFailed', { error: messageOf(new Error(autosaveError)) }) }}
+      </p>
+
       <p v-if="progress" class="hint status" role="status">
         <span class="spinner" aria-hidden="true" />
         {{ t(progress.key, progress.params ?? {}) }}
@@ -374,6 +410,17 @@ function formatSize(bytes: number): string {
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-2);
+}
+.auto {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text-sm);
+}
+.auto small {
+  display: block;
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
 }
 .field-label {
   font-size: var(--ds-text-sm);

@@ -300,6 +300,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   gespeicherte Projekt bleibt unverändert; das Ergebnis ist ein neues,
   ungespeichertes Projekt. Noch nicht übernommen und im Dialog genannt:
   Übergänge, Hintergrundmusik, Ton-Blende, Standbilder in Lücken, Zuschnitt.
+  **Automatisches Speichern:** Ein geöffnetes (bereits gespeichertes) Projekt
+  wird 3 s nach der letzten Änderung von selbst überschrieben (abschaltbar im
+  Dialog, der Browser merkt es sich). Nicht bei neuen Projekten ohne Namen und
+  nicht, wenn beim Öffnen Dateien fehlten (sonst würde der Verlust
+  festgeschrieben). Bei ungespeicherten Änderungen fragt der Browser vor dem
+  Verlassen der Seite nach.
 - **Positionsrahmen** (`PositionFrame.vue`, `src/timeline/positionFrame.ts`):
   Der markierte Text, die Form oder das Bild hat im Vorschaubild einen Rahmen
   zum Ziehen (mit Umschalttaste fein) bzw. Verschieben mit den Pfeiltasten
