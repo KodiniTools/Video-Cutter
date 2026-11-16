@@ -1,0 +1,252 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { MAX_TIMELINE_HISTORY, MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
+import {
+  createDoc,
+  secondsToTime as s,
+  validateDoc,
+  type AudioClip,
+  type VideoClip,
+} from '@/timeline/model'
+
+const video = (id: string, start: number, duration: number, extra: Partial<VideoClip> = {}) =>
+  ({
+    id,
+    kind: 'video',
+    asset: 'vid',
+    start: s(start),
+    duration: s(duration),
+    sourceIn: 0,
+    speed: 1,
+    ...extra,
+  }) satisfies VideoClip
+
+const audio = (id: string, start: number, duration: number, extra: Partial<AudioClip> = {}) =>
+  ({
+    id,
+    kind: 'audio',
+    asset: 'vid',
+    start: s(start),
+    duration: s(duration),
+    sourceIn: 0,
+    speed: 1,
+    gain: 1,
+    ...extra,
+  }) satisfies AudioClip
+
+function setup() {
+  const store = useTimelineStore()
+  store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10) })
+  store.addTrack({ id: 'A1', kind: 'audio', name: 'Ton' })
+  store.addTrack({ id: 'V1', kind: 'video', name: 'Video' })
+  return store
+}
+
+const clips = (store: ReturnType<typeof useTimelineStore>, trackId: string) =>
+  store.doc.tracks.find((t) => t.id === trackId)!.clips.map((c) => [c.id, c.start, c.duration])
+
+describe('Timeline-Store', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('führt Befehle aus und macht sie rückgängig/wiederholbar', () => {
+    const store = setup()
+    expect(store.insertClip('V1', video('a', 0, 4))).toBe(true)
+    expect(store.moveClip('a', { start: s(2) })).toBe(true)
+    expect(clips(store, 'V1')).toEqual([['a', s(2), s(4)]])
+    expect(store.duration).toBe(s(6))
+
+    expect(store.undo()).toBe(true)
+    expect(clips(store, 'V1')).toEqual([['a', 0, s(4)]])
+    expect(store.canRedo).toBe(true)
+    expect(store.redo()).toBe(true)
+    expect(clips(store, 'V1')).toEqual([['a', s(2), s(4)]])
+    expect(store.redo()).toBe(false)
+  })
+
+  it('lässt bei abgelehnten Befehlen alles unverändert und nennt den Grund', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 4))
+    const before = store.doc
+    expect(store.insertClip('V1', video('b', 2, 4))).toBe(false)
+    expect(store.lastError).toBe('overlap')
+    expect(store.doc).toBe(before)
+    store.undo()
+    // Der abgelehnte Befehl hat keinen Verlaufsschritt erzeugt.
+    expect(clips(store, 'V1')).toEqual([])
+    expect(store.insertClip('V1', video('b', 2, 4))).toBe(true)
+    expect(store.lastError).toBeNull()
+  })
+
+  it('verwirft „Wiederholen“ nach einem neuen Befehl', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    store.undo()
+    store.insertClip('V1', video('b', 0, 2))
+    expect(store.canRedo).toBe(false)
+  })
+
+  it('fasst eine Geste zu einem Schritt zusammen', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    store.beginGesture()
+    store.moveClip('a', { start: s(1) })
+    store.moveClip('a', { start: s(2) })
+    store.moveClip('a', { start: s(3) })
+    store.endGesture()
+    expect(clips(store, 'V1')).toEqual([['a', s(3), s(2)]])
+    store.undo()
+    expect(clips(store, 'V1')).toEqual([['a', 0, s(2)]])
+    store.redo()
+    expect(clips(store, 'V1')).toEqual([['a', s(3), s(2)]])
+  })
+
+  it('erzeugt für eine Geste ohne Änderung keinen Schritt und kann abbrechen', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    store.undo()
+    store.redo()
+    const steps = () => {
+      let n = 0
+      while (store.undo()) n++
+      for (let i = 0; i < n; i++) store.redo()
+      return n
+    }
+    const before = steps()
+    store.beginGesture()
+    store.endGesture()
+    expect(steps()).toBe(before)
+
+    store.beginGesture()
+    store.moveClip('a', { start: s(5) })
+    store.cancelGesture()
+    expect(clips(store, 'V1')).toEqual([['a', 0, s(2)]])
+    expect(steps()).toBe(before)
+  })
+
+  it('behält angemeldete Medien über Rückgängig hinweg', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    store.putAsset({ id: 'neu', kind: 'video', name: 'b.mp4', duration: s(5) })
+    store.undo()
+    expect(store.doc.assets.neu).toBeDefined()
+    expect(store.insertClip('V1', video('b', 0, 2, { asset: 'neu' }))).toBe(true)
+    expect(validateDoc(store.doc)).toEqual([])
+  })
+
+  it('wertet das Anmelden eines Mediums während einer Geste nicht als Änderung', () => {
+    const store = setup()
+    store.beginGesture()
+    store.putAsset({ id: 'neu', kind: 'video', name: 'b.mp4', duration: s(5) })
+    store.endGesture()
+    expect(store.canUndo).toBe(true) // nur die beiden Spuren aus setup()
+    store.undo()
+    store.undo()
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('begrenzt den Verlauf', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 1))
+    for (let i = 1; i <= MAX_TIMELINE_HISTORY + 20; i++) store.moveClip('a', { start: s(i) })
+    let n = 0
+    while (store.undo()) n++
+    expect(n).toBe(MAX_TIMELINE_HISTORY)
+  })
+
+  it('hält die Auswahl sauber und teilt/löscht markierte Clips in einem Schritt', () => {
+    const store = setup()
+    store.insertClip('V1', video('v', 0, 4, { linkGroup: 'g' }))
+    store.insertClip('A1', audio('a', 0, 4, { linkGroup: 'g' }))
+    store.insertClip('V1', video('w', 5, 2))
+    store.select(['v', 'a', 'gibt-es-nicht', 'v'])
+    expect(store.selection).toEqual(['v', 'a'])
+    expect(store.selectedClips.map((c) => c.id)).toEqual(['v', 'a'])
+
+    store.seek(s(1))
+    expect(store.splitSelectionAtPlayhead()).toBe(true)
+    expect(clips(store, 'V1').map((c) => c[1])).toEqual([0, s(1), s(5)])
+    expect(clips(store, 'A1').map((c) => c[1])).toEqual([0, s(1)])
+    store.undo()
+    expect(clips(store, 'V1')).toHaveLength(2)
+    expect(clips(store, 'A1')).toHaveLength(1)
+
+    // Abspielkopf außerhalb aller markierten Clips: abgelehnt.
+    store.seek(s(4.5))
+    expect(store.splitSelectionAtPlayhead()).toBe(false)
+    expect(store.lastError).toBe('invalid-time')
+
+    expect(store.removeSelection({ ripple: true })).toBe(true)
+    expect(clips(store, 'V1')).toEqual([['w', s(1), s(2)]])
+    expect(clips(store, 'A1')).toEqual([])
+    expect(store.selection).toEqual([])
+    store.undo()
+    expect(clips(store, 'V1')).toHaveLength(2)
+    expect(store.removeSelection()).toBe(false)
+  })
+
+  it('entfernt gelöschte Clips aus der Auswahl, auch nach Rückgängig', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    store.select(['a'])
+    store.toggleSelected('a')
+    expect(store.selection).toEqual([])
+    store.toggleSelected('a')
+    store.undo()
+    expect(store.selection).toEqual([])
+  })
+
+  it('setzt Abspielkopf (Bildraster, nie negativ) und Zoom in Grenzen', () => {
+    const store = setup()
+    store.seek(s(1.02))
+    expect(store.playhead).toBe(s(1 + 1 / 30))
+    store.seek(-5)
+    expect(store.playhead).toBe(0)
+    store.seek(Number.NaN)
+    expect(store.playhead).toBe(0)
+    store.setZoom(1e9)
+    expect(store.zoom).toBe(MAX_ZOOM)
+    store.setZoom(0)
+    expect(store.zoom).toBe(MIN_ZOOM)
+    store.setZoom(Number.NaN)
+    expect(store.zoom).toBe(MIN_ZOOM)
+  })
+
+  it('rastet abhängig vom Zoom ein und lässt sich abschalten', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 2, 2))
+    store.setZoom(100) // 8 px = 0,08 s
+    expect(store.snap(s(2.05))).toBe(s(2))
+    expect(store.snap(s(2.2))).toBe(s(2.2))
+    // Der gezogene Clip selbst zählt nicht als Ziel.
+    expect(store.snap(s(2.05), { exclude: ['a'] })).toBe(s(2.05))
+    store.seek(s(3))
+    expect(store.snap(s(3.05), { exclude: ['a'] })).toBe(s(3))
+    store.snapping = false
+    expect(store.snap(s(2.05))).toBe(s(2.05))
+  })
+
+  it('lädt nur gültige Dokumente und beginnt den Verlauf neu', () => {
+    const store = setup()
+    store.insertClip('V1', video('a', 0, 2))
+    const good = store.doc
+    const bad = {
+      ...good,
+      tracks: [{ ...good.tracks[0], clips: [video('x', 0, 3), video('y', 1, 3)] }, good.tracks[1]],
+    } as typeof good
+    expect(store.load(bad)).toEqual([{ error: 'overlap', id: 'y' }])
+    expect(store.doc).toBe(good)
+
+    store.select(['a'])
+    store.seek(s(1))
+    expect(store.load(createDoc({ fps: 25 }))).toEqual([])
+    expect(store.doc.settings.fps).toBe(25)
+    expect([store.canUndo, store.canRedo, store.selection, store.playhead]).toEqual([
+      false,
+      false,
+      [],
+      0,
+    ])
+    store.reset()
+    expect(store.doc.settings.fps).toBe(30)
+  })
+})
