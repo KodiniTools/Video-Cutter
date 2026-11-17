@@ -17,6 +17,8 @@ import {
   type PositionPreset,
 } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
+import OverlayKeys from './OverlayKeys.vue'
+import { graphicMotionAt, withGraphicChange } from '@/timeline/graphicKeys'
 
 /**
  * Einstellungen des markierten Text-Clips. Jede Änderung geht ins Dokument,
@@ -53,8 +55,19 @@ const style = computed(() => str('style', DEFAULT_TEXT_STYLE.style))
 const accent = computed(() => str('accent', DEFAULT_TEXT_STYLE.accent))
 const animation = computed(() => str('animation', DEFAULT_TEXT_STYLE.animation))
 const animSpeed = computed(() => num('animSpeed', 1))
-const x = computed(() => num('x', DEFAULT_TEXT_STYLE.x))
-const y = computed(() => num('y', DEFAULT_TEXT_STYLE.y))
+/** Zeit im Clip, an der der Abspielkopf steht (in den Clip geholt). */
+const offset = computed(() => {
+  const c = clip.value
+  return c ? Math.min(c.duration, Math.max(0, store.playhead - c.start)) : 0
+})
+/** Mitte am Abspielkopf (mit Keyframes: der Wert an dieser Stelle). */
+const motion = computed(() =>
+  clip.value
+    ? graphicMotionAt(clip.value, offset.value)
+    : { x: DEFAULT_TEXT_STYLE.x, y: DEFAULT_TEXT_STYLE.y, scale: 1 },
+)
+const x = computed(() => motion.value.x)
+const y = computed(() => motion.value.y)
 const percent = (v: number) => Math.round(v * 1000) / 10
 
 let editing = false
@@ -95,8 +108,12 @@ function onText(e: Event): void {
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
+/** Mitte ändern: mit Keyframes im Keyframe am Abspielkopf. */
+const place = (at: { x?: number; y?: number }) =>
+  clip.value ? withGraphicChange(clip.value, offset.value, at) : {}
+
 function preset(name: PositionPreset): void {
-  set({ x: 0.5, y: POSITION_PRESETS[name] })
+  set(place({ x: 0.5, y: POSITION_PRESETS[name] }))
 }
 
 onBeforeUnmount(commit)
@@ -199,7 +216,7 @@ onBeforeUnmount(commit)
           step="0.005"
           :value="x"
           data-testid="text-x"
-          @input="edit({ x: clamp01(Number(value($event))) })"
+          @input="edit(place({ x: clamp01(Number(value($event))) }))"
           @change="commit"
         />
       </label>
@@ -212,7 +229,7 @@ onBeforeUnmount(commit)
           step="0.005"
           :value="y"
           data-testid="text-y"
-          @input="edit({ y: clamp01(Number(value($event))) })"
+          @input="edit(place({ y: clamp01(Number(value($event))) }))"
           @change="commit"
         />
       </label>
@@ -230,6 +247,7 @@ onBeforeUnmount(commit)
       </button>
     </div>
     <p class="hint">{{ t('timeline.textInspectorHint') }}</p>
+    <OverlayKeys :clip="clip" prefix="text" :hint="t('timeline.textKeys.hint')" />
   </section>
 </template>
 

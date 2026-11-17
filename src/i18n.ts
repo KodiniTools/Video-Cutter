@@ -707,6 +707,9 @@ const messages = {
       graphicInspector: '{kind} bearbeiten',
       graphicInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
+      textKeys: {
+        hint: 'Keyframes bewegen den Text: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Position oder Größe (auch durch Ziehen in der Vorschau), dann entsteht der nächste von selbst. Dazwischen ändern sich Position und Größe gleichmäßig. Hereingleiten und Aufploppen werden mit Keyframes zum Einblenden.',
+      },
       graphicKeys: {
         scale: 'Größe am Abspielkopf',
         hint: 'Keyframes bewegen die Grafik: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Position oder Größe (auch durch Ziehen in der Vorschau), dann entsteht der nächste von selbst. Dazwischen ändern sich Position und Größe gleichmäßig.',
@@ -1699,6 +1702,9 @@ const messages = {
       graphicInspector: 'Edit {kind}',
       graphicInspectorHint:
         'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',
+      textKeys: {
+        hint: 'Keyframes move the text: set one at the playhead, go somewhere else and change position or size there (dragging in the preview works too), and the next one is created automatically. In between, position and size change evenly. With keyframes, slide-in and pop become a fade-in.',
+      },
       graphicKeys: {
         scale: 'Size at the playhead',
         hint: 'Keyframes move the graphic: set one at the playhead, go somewhere else and change position or size there (dragging in the preview works too), and the next one is created automatically. In between, position and size change evenly.',

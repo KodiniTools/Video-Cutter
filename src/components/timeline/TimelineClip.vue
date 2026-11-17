@@ -122,10 +122,10 @@ const envelopePoints = computed(() => {
   }))
 })
 
-/** Keyframes als kleine Rauten am unteren Rand (Video-Clips und Grafiken). */
+/** Keyframes als kleine Rauten am unteren Rand (Video-Clips, Texte und Grafiken). */
 const layoutKeyMarks = computed(() => {
   const clip = props.clip
-  if (clip.kind === 'graphic') {
+  if (clip.kind === 'graphic' || clip.kind === 'text') {
     return visibleGraphicKeys(clip).map((k) => ({
       index: k.index,
       left: `${(k.offset / clip.duration) * 100}%`,

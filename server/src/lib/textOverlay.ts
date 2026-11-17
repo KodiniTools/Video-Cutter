@@ -55,6 +55,27 @@ export interface TextOverlay {
   animation: TextAnimation
   /** Tempo der Animation (Faktor 0,25–4, 1 = normal). */
   animSpeed: number
+  /**
+   * Bewegung über Keyframes (Timeline-Editor): Mitte und Größe ändern sich
+   * über die Zeit. Ersetzt `x`/`y`.
+   */
+  motion?: TextMotion
+}
+
+/** Keyframe eines Textes; `at` in Sekunden ab Beginn der Einblendung. */
+export interface TextKey {
+  at: number
+  x: number
+  y: number
+  /** Größe als Faktor der Schriftgröße. */
+  scale: number
+}
+
+export interface TextMotion {
+  /** Nach Zeit sortiert, mindestens einer. */
+  keys: TextKey[]
+  /** Sanft anlaufen und abbremsen statt gleichmäßig. */
+  smooth: boolean
 }
 
 /** Hoch genug für automatisch erzeugte Untertitel (ca. 30–40 Minuten Sprache). */
@@ -266,32 +287,194 @@ export function escapeAssText(text: string): string {
 
 const r1 = (v: number) => Math.round(v * 10) / 10
 
-/** Alpha-Werte (ASS: 00 = deckend, FF = unsichtbar) je Stil. */
-function styleTags(o: TextOverlay, px: number): { tags: string; alpha: string } {
-  const accent = assColor(o.accent)
+/** Kontur und Schatten zur Schriftgröße `px` (wachsen mit dem Text). */
+function edgeTags(o: Pick<TextOverlay, 'style'>, px: number): string {
   switch (o.style) {
     case 'outline':
-      return {
-        tags: `\\bord${r1(Math.max(1, px * 0.08))}\\shad0\\3c${accent}`,
-        alpha: '\\1a&H00&\\3a&H00&',
-      }
+      return `\\bord${r1(Math.max(1, px * 0.08))}\\shad0`
     case 'box':
-      return {
-        tags: `\\bord${r1(Math.max(2, px * 0.2))}\\shad0\\3c${accent}`,
-        alpha: '\\1a&H00&\\3a&H00&',
-      }
+      return `\\bord${r1(Math.max(2, px * 0.2))}\\shad0`
     case 'shadow':
-      return {
-        tags: `\\bord0\\shad${r1(Math.max(1, px * 0.06))}\\4c${accent}`,
-        alpha: '\\1a&H00&\\4a&H40&',
-      }
+      return `\\bord0\\shad${r1(Math.max(1, px * 0.06))}`
     case 'none':
-      return { tags: '\\bord0\\shad0', alpha: '\\1a&H00&' }
+      return '\\bord0\\shad0'
     default: {
       const never: never = o.style
       throw new Error(`Unbekannter Stil: ${String(never)}`)
     }
   }
+}
+
+/** Alpha-Werte (ASS: 00 = deckend, FF = unsichtbar) je Stil. */
+function styleTags(o: TextOverlay, px: number): { tags: string; alpha: string; edge: string } {
+  const accent = assColor(o.accent)
+  const edge = edgeTags(o, px)
+  switch (o.style) {
+    case 'outline':
+      return { tags: `${edge}\\3c${accent}`, alpha: '\\1a&H00&\\3a&H00&', edge }
+    case 'box':
+      return { tags: `${edge}\\3c${accent}`, alpha: '\\1a&H00&\\3a&H00&', edge }
+    case 'shadow':
+      return { tags: `${edge}\\4c${accent}`, alpha: '\\1a&H00&\\4a&H40&', edge }
+    case 'none':
+      return { tags: edge, alpha: '\\1a&H00&', edge }
+    default: {
+      const never: never = o.style
+      throw new Error(`Unbekannter Stil: ${String(never)}`)
+    }
+  }
+}
+
+/**
+ * Text der Schreibmaschine: Jedes Zeichen erscheint zu seiner Zeit. `offsetMs`
+ * ist die Zeit, die beim Beginn dieser Zeile schon vergangen ist (Texte mit
+ * Keyframes bestehen aus mehreren Zeilen hintereinander).
+ */
+function typewriterBody(o: TextOverlay, dur: number, alpha: string, offsetMs: number): string {
+  const chars = Array.from(o.text)
+  const visible = chars.filter((c) => c !== '\n').length
+  const step = typeStepMs(dur, visible, o.animSpeed)
+  // Box bleibt von Anfang an stehen (sonst stückelt libass sie je Zeichen).
+  const hidden = o.style === 'box' ? '\\1a&HFF&' : '\\1a&HFF&\\3a&HFF&\\4a&HFF&'
+  const shown = o.style === 'box' ? '\\1a&H00&' : alpha
+  let k = 0
+  return chars
+    .map((ch) => {
+      if (ch === '\n') return '\\N'
+      const at = Math.round(k++ * step)
+      const t = at - offsetMs
+      // Zeichen 0 sofort sichtbar; danach jeweils nach `step` ms.
+      if (at === 0 || t <= 0) return escapeChar(ch)
+      return `{${hidden}\\t(${t},${t + 1},${shown})}${escapeChar(ch)}`
+    })
+    .join('')
+}
+
+/** Stand der Bewegung zur Zeit `at` (s ab Beginn): zwischen Keyframes gemischt, außen gehalten. */
+export function textMotionAt(motion: TextMotion, at: number): Omit<TextKey, 'at'> {
+  const keys = motion.keys
+  const pick = ({ x, y, scale }: TextKey) => ({ x, y, scale })
+  if (at <= keys[0].at) return pick(keys[0])
+  for (let i = 1; i < keys.length; i++) {
+    if (at >= keys[i].at) continue
+    const a = keys[i - 1]
+    const b = keys[i]
+    const linear = (at - a.at) / (b.at - a.at)
+    const f = motion.smooth ? linear * linear * (3 - 2 * linear) : linear
+    const mix = (from: number, to: number) => from + (to - from) * f
+    return { x: mix(a.x, b.x), y: mix(a.y, b.y), scale: mix(a.scale, b.scale) }
+  }
+  return pick(keys[keys.length - 1])
+}
+
+/** Kürzestes Teilstück einer bewegten Einblendung (s): ASS zählt in Hundertstel. */
+const MIN_MOTION_STEP = 0.02
+/** Weiche Bewegung: Teilstücke dieser Länge nähern die Kurve an (s). */
+const SMOOTH_STEP = 0.1
+/** Höchstens so viele Teilstücke zwischen zwei Keyframes. */
+const MAX_SMOOTH_STEPS = 40
+
+/** Zeiten (s ab Beginn), an denen eine bewegte Einblendung in Teilstücke zerfällt. */
+function motionBreaks(motion: TextMotion, dur: number): number[] {
+  const inner = motion.keys.map((k) => k.at).filter((at) => at > 0 && at < dur)
+  const marks = [0, ...inner, dur]
+  const out: number[] = [0]
+  for (let i = 1; i < marks.length; i++) {
+    const from = marks[i - 1]
+    const to = marks[i]
+    if (motion.smooth) {
+      const a = textMotionAt(motion, from)
+      const b = textMotionAt(motion, to)
+      if (a.x !== b.x || a.y !== b.y || a.scale !== b.scale) {
+        const n = Math.min(MAX_SMOOTH_STEPS, Math.ceil((to - from) / SMOOTH_STEP))
+        for (let k = 1; k < n; k++) out.push(from + ((to - from) * k) / n)
+      }
+    }
+    out.push(to)
+  }
+  // Zu kurze Teilstücke fallen weg; das Ende bleibt immer.
+  const kept: number[] = [0]
+  for (const at of out.slice(1, -1)) {
+    if (at - kept[kept.length - 1] >= MIN_MOTION_STEP && dur - at >= MIN_MOTION_STEP) kept.push(at)
+  }
+  kept.push(dur)
+  return kept
+}
+
+/**
+ * Dialogue-Zeilen für eine Einblendung. Ohne Keyframes ist es genau eine
+ * (`buildAssEvent`). Mit Keyframes entsteht je Teilstück eine Zeile, die Mitte
+ * (`\\move`) und Größe (`\\fscx`/`\\fscy` mit `\\t`) gleichmäßig ändert; die Zeilen
+ * schließen lückenlos aneinander an. Ein- und Ausblenden bleiben am ersten
+ * und letzten Teilstück, die Schreibmaschine läuft über alle hinweg.
+ * Hereingleiten und Aufploppen werden mit Keyframes zum Einblenden.
+ */
+export function buildAssEvents(o: TextOverlay, width: number, height: number): string[] {
+  const motion = o.motion
+  if (!motion || motion.keys.length === 0) return [buildAssEvent(o, width, height)]
+  const dur = o.end - o.start
+  const px = o.size * height
+  const meta = fontMeta(o.font)
+  const { tags: look, alpha } = styleTags(o, px)
+  const colors = look.slice(edgeTags(o, px).length)
+  const f = fadeMs(dur, o.animSpeed)
+  const m = moveMs(dur, o.animSpeed)
+  let fadeIn = 0
+  switch (o.animation) {
+    case 'none':
+    case 'typewriter':
+      break
+    case 'fade':
+      fadeIn = f
+      break
+    case 'slide':
+      fadeIn = m
+      break
+    case 'pop':
+      fadeIn = Math.round(m / 2)
+      break
+    default: {
+      const never: never = o.animation
+      throw new Error(`Unbekannte Animation: ${String(never)}`)
+    }
+  }
+  const fadeOut = o.animation === 'none' ? 0 : f
+  const style = o.style === 'box' ? 'Box' : 'Text'
+  const breaks = motionBreaks(motion, dur)
+  const scaled = motion.keys.some((k) => k.scale !== 1)
+  const pct = (scale: number) => r1(scale * 100)
+  const lines: string[] = []
+  for (let i = 1; i < breaks.length; i++) {
+    const from = breaks[i - 1]
+    const to = breaks[i]
+    const a = textMotionAt(motion, from)
+    const b = textMotionAt(motion, to)
+    const [x1, y1] = [Math.round(a.x * width), Math.round(a.y * height)]
+    const [x2, y2] = [Math.round(b.x * width), Math.round(b.y * height)]
+    const place = x1 === x2 && y1 === y2 ? `\\pos(${x1},${y1})` : `\\move(${x1},${y1},${x2},${y2})`
+    let size = ''
+    if (scaled) {
+      size = `\\fscx${pct(a.scale)}\\fscy${pct(a.scale)}`
+      if (a.scale !== b.scale)
+        size += `\\t(\\fscx${pct(b.scale)}\\fscy${pct(b.scale)}${edgeTags(o, px * b.scale)})`
+    }
+    const segMs = Math.round((to - from) * 1000)
+    const fin = i === 1 ? Math.min(fadeIn, segMs) : 0
+    const fout = i === breaks.length - 1 ? Math.min(fadeOut, segMs) : 0
+    const fad = fin > 0 || fout > 0 ? `\\fad(${fin},${fout})` : ''
+    const base =
+      `\\an5\\fn${meta.family}\\b${meta.bold ? 1 : 0}\\fs${r1(px * meta.winRatio)}` +
+      `\\c${assColor(o.color)}${edgeTags(o, px * a.scale)}${colors}${alpha}`
+    const body =
+      o.animation === 'typewriter'
+        ? typewriterBody(o, dur, alpha, Math.round(from * 1000))
+        : escapeAssText(o.text)
+    lines.push(
+      `Dialogue: 0,${assTime(o.start + from)},${assTime(o.start + to)},${style},,0,0,0,,` +
+        `{${base}${place}${size}${fad}}${body}`,
+    )
+  }
+  return lines
 }
 
 /** Eine Dialogue-Zeile für eine Einblendung. */
@@ -329,26 +512,10 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
         `\\t(0,${a},\\fscx112\\fscy112)\\t(${a},${m},\\fscx100\\fscy100)`
       break
     }
-    case 'typewriter': {
+    case 'typewriter':
       anim = `\\pos(${x},${y})\\fad(0,${f})`
-      const chars = Array.from(o.text)
-      const visible = chars.filter((c) => c !== '\n').length
-      const step = typeStepMs(dur, visible, o.animSpeed)
-      // Box bleibt von Anfang an stehen (sonst stückelt libass sie je Zeichen).
-      const hidden = o.style === 'box' ? '\\1a&HFF&' : '\\1a&HFF&\\3a&HFF&\\4a&HFF&'
-      const shown = o.style === 'box' ? '\\1a&H00&' : alpha
-      let k = 0
-      body = chars
-        .map((ch) => {
-          if (ch === '\n') return '\\N'
-          const t = Math.round(k++ * step)
-          // Zeichen 0 sofort sichtbar; danach jeweils nach `step` ms.
-          if (t === 0) return escapeChar(ch)
-          return `{${hidden}\\t(${t},${t + 1},${shown})}${escapeChar(ch)}`
-        })
-        .join('')
+      body = typewriterBody(o, dur, alpha, 0)
       break
-    }
     default: {
       const never: never = o.animation
       throw new Error(`Unbekannte Animation: ${String(never)}`)
@@ -386,7 +553,7 @@ export function buildAss(overlays: TextOverlay[], width: number, height: number)
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-    ...overlays.map((o) => buildAssEvent(o, width, height)),
+    ...overlays.flatMap((o) => buildAssEvents(o, width, height)),
     '',
   ].join('\n')
 }

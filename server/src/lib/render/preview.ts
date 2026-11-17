@@ -31,7 +31,7 @@ export const PREVIEW_MAX_HEIGHT = 540
 /** So viele Abschnitte ab dem Abspielkopf werden vorab gerendert; der Rest bei Abruf. */
 export const PREVIEW_AHEAD = 30
 /** Ändert sich das Encoding, werden alte Abschnitte nicht wiederverwendet. */
-const CACHE_VERSION = 6
+const CACHE_VERSION = 7
 const ENCODE = {
   preset: 'veryfast',
   crf: 27,

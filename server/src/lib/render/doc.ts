@@ -325,6 +325,31 @@ function inRange(v: unknown, min: number, max: number): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
 }
 
+/**
+ * Keyframes eines Ebenen-Clips (Grafik oder Text) prüfen: höchstens 32, nach
+ * Zeit aufsteigend, Werte in Grenzen. Fehlen sie, ist die Liste leer;
+ * `null` = ungültig.
+ */
+function parseOverlayKeys(raw: unknown): DocGraphicKey[] | null {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw) || raw.length > MAX_GRAPHIC_KEYS) return null
+  const keys: DocGraphicKey[] = []
+  for (const rk of raw as unknown[]) {
+    const prev = keys[keys.length - 1]
+    if (
+      !isObject(rk) ||
+      !Number.isSafeInteger(rk.at) ||
+      (prev !== undefined && (rk.at as number) <= prev.at) ||
+      !inRange(rk.x, 0, 1) ||
+      !inRange(rk.y, 0, 1) ||
+      !inRange(rk.scale, MIN_GRAPHIC_KEY_SCALE, MAX_GRAPHIC_KEY_SCALE)
+    )
+      return null
+    keys.push({ at: rk.at as number, x: rk.x, y: rk.y, scale: rk.scale })
+  }
+  return keys
+}
+
 export function clipEnd(clip: { start: Time; duration: Time }): Time {
   return clip.start + clip.duration
 }
@@ -497,25 +522,8 @@ export function parseTimelineDoc(
             } catch (e) {
               return fail(`${gp}.animSpeed`, e instanceof Error ? e.message : 'Ungültiges Tempo.')
             }
-            const keys: DocGraphicKey[] = []
-            const rawKeys = data.keys
-            if (rawKeys !== undefined && rawKeys !== null) {
-              if (!Array.isArray(rawKeys) || rawKeys.length > MAX_GRAPHIC_KEYS)
-                return fail(`${gp}.keys`, 'Ungültige Keyframes.')
-              for (const rk of rawKeys as unknown[]) {
-                const prev = keys[keys.length - 1]
-                if (
-                  !isObject(rk) ||
-                  !Number.isSafeInteger(rk.at) ||
-                  (prev !== undefined && (rk.at as number) <= prev.at) ||
-                  !inRange(rk.x, 0, 1) ||
-                  !inRange(rk.y, 0, 1) ||
-                  !inRange(rk.scale, MIN_GRAPHIC_KEY_SCALE, MAX_GRAPHIC_KEY_SCALE)
-                )
-                  return fail(`${gp}.keys`, 'Ungültige Keyframes.')
-                keys.push({ at: rk.at as number, x: rk.x, y: rk.y, scale: rk.scale })
-              }
-            }
+            const keys = parseOverlayKeys(data.keys)
+            if (!keys) return fail(`${gp}.keys`, 'Ungültige Keyframes.')
             if (data.ease !== undefined && data.ease !== null && data.ease !== 'smooth')
               return fail(`${gp}.ease`, 'Ungültige Bewegung.')
             clips.push({
@@ -544,6 +552,10 @@ export function parseTimelineDoc(
             clips.push({ ...base, kind: ck })
             return
           }
+          const textKeys = parseOverlayKeys(data.keys)
+          if (!textKeys) return fail(`${cp}.data.keys`, 'Ungültige Keyframes.')
+          if (data.ease !== undefined && data.ease !== null && data.ease !== 'smooth')
+            return fail(`${cp}.data.ease`, 'Ungültige Bewegung.')
           // Sonst gleiche Regeln wie beim Einbrennen im bisherigen Editor.
           try {
             const seconds = Math.max(MIN_TEXT_DURATION, rc.duration / MICROS_PER_SECOND)
@@ -551,6 +563,12 @@ export function parseTimelineDoc(
             const text: Partial<TextOverlay> = { ...parsed }
             delete text.start
             delete text.end
+            if (textKeys.length > 0) {
+              text.motion = {
+                keys: textKeys.map((k) => ({ ...k, at: k.at / MICROS_PER_SECOND })),
+                smooth: data.ease === 'smooth',
+              }
+            }
             clips.push({ ...base, kind: ck, text: text as DocTextStyle })
           } catch (e) {
             fail(`${cp}.data`, e instanceof Error ? e.message : 'Text ist ungültig.')

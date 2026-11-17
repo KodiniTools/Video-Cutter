@@ -10,6 +10,7 @@ import {
   withGraphicKeyAt,
   withoutGraphicKey,
 } from '@/timeline/graphicKeys'
+import { DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import {
   addTrack,
   createDoc,
@@ -82,6 +83,28 @@ describe('Keyframes für Grafiken', () => {
     const smooth = { ...clip, data: { ...clip.data, ease: 'smooth' } }
     expect(graphicMotionAt(smooth, S).x).toBe(0.5)
     expect(graphicMotionAt(smooth, S / 2).x).toBeLessThan(graphicMotionAt(clip, S / 2).x)
+  })
+
+  it('gilt auch für Texte: ohne Angabe zählt deren Standardlage', () => {
+    const text: OverlayClip = {
+      id: 't',
+      kind: 'text',
+      start: 0,
+      duration: 4 * S,
+      data: { text: 'Hallo' },
+    }
+    const base = graphicMotionAt(text, S)
+    expect(base).toEqual({ x: DEFAULT_TEXT_STYLE.x, y: DEFAULT_TEXT_STYLE.y, scale: 1 })
+    const first = { ...text, data: { ...text.data, ...withGraphicKeyAt(text, 0) } }
+    const moved = {
+      ...first,
+      data: { ...first.data, ...withGraphicChange(first, 2 * S, { x: 0.9, scale: 2 }) },
+    }
+    expect(graphicKeys(moved.data)).toEqual([
+      { at: 0, x: base.x, y: base.y, scale: 1 },
+      { at: 2 * S, x: 0.9, y: base.y, scale: 2 },
+    ])
+    expect(graphicMotionAt(moved, S).scale).toBe(1.5)
   })
 
   it('setzt einen Keyframe mit dem Stand an der Stelle und ändert einen vorhandenen', () => {

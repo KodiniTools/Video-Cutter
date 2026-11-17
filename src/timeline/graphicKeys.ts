@@ -1,9 +1,10 @@
+import { DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { motionAt } from './layoutKeys'
 import type { OverlayClip, Time } from './model'
 
 /**
- * Keyframes für Formen, Symbole, Emojis und Bilder: Mitte und Größe ändern
- * sich über die Zeit. Sie liegen in `data.keys` des Clips; `at` zählt ab
+ * Keyframes für Texte, Formen, Symbole, Emojis und Bilder: Mitte und Größe
+ * ändern sich über die Zeit. Sie liegen in `data.keys` des Clips; `at` zählt ab
  * Clip-Anfang (µs) und darf nach dem Kürzen auch davor oder dahinter liegen.
  * `data.x`/`data.y` spiegeln den ersten Keyframe.
  */
@@ -12,7 +13,7 @@ export interface GraphicKey {
   /** Mitte als Anteil des Projektformats (0…1). */
   x: number
   y: number
-  /** Größe als Faktor der gezeichneten Grafik (1 = wie eingestellt). */
+  /** Größe als Faktor der gezeichneten Grafik bzw. der Schriftgröße (1 = wie eingestellt). */
   scale: number
 }
 export type GraphicMotion = Omit<GraphicKey, 'at'>
@@ -23,7 +24,7 @@ export const MAX_KEY_SCALE = 3
 /** So nah an einem Keyframe gilt der Abspielkopf als „auf dem Keyframe“. */
 export const GRAPHIC_KEY_SNAP: Time = 20_000
 
-type KeyedClip = Pick<OverlayClip, 'duration' | 'data'>
+type KeyedClip = Pick<OverlayClip, 'duration' | 'data'> & { kind?: OverlayClip['kind'] }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 const round4 = (v: number) => Math.round(v * 10000) / 10000
@@ -53,16 +54,25 @@ export function graphicSmooth(data: Record<string, unknown>): boolean {
   return data.ease === 'smooth'
 }
 
-const basePosition = (data: Record<string, unknown>): GraphicMotion => ({
-  x: finite(data.x) ? clamp(data.x, 0, 1) : 0.5,
-  y: finite(data.y) ? clamp(data.y, 0, 1) : 0.5,
+/** Feste Mitte ohne Keyframes; fehlt sie, gilt bei Texten deren Standardlage. */
+const basePosition = (clip: KeyedClip): GraphicMotion => ({
+  x: finite(clip.data.x)
+    ? clamp(clip.data.x, 0, 1)
+    : clip.kind === 'text'
+      ? DEFAULT_TEXT_STYLE.x
+      : 0.5,
+  y: finite(clip.data.y)
+    ? clamp(clip.data.y, 0, 1)
+    : clip.kind === 'text'
+      ? DEFAULT_TEXT_STYLE.y
+      : 0.5,
   scale: 1,
 })
 
 /** Mitte und Größe zur Zeit `offset` (ab Clip-Anfang). */
 export function graphicMotionAt(clip: KeyedClip, offset: Time): GraphicMotion {
   const keys = graphicKeys(clip.data)
-  if (keys.length === 0) return basePosition(clip.data)
+  if (keys.length === 0) return basePosition(clip)
   const { x, y, scale } = motionAt(keys, offset, 1, graphicSmooth(clip.data))
   return { x, y, scale }
 }
