@@ -628,14 +628,37 @@ export function trimClip(
 export const MAX_CLIP_GAIN = 2
 
 /**
+ * Marker beim Nachrücken mitnehmen: Marker ab `from` wandern um `shift` (µs,
+ * negativ = nach vorn). Marker im geschlossenen Bereich davor landen an dessen
+ * Anfang. Treffen dabei zwei Marker dieselbe Zeit, bleibt der mit Namen, sonst
+ * der frühere.
+ */
+function shiftMarkers(doc: TimelineDoc, from: Time, shift: Time): TimelineDoc {
+  if (shift === 0 || doc.markers.length === 0) return doc
+  const floor = Math.max(0, from + shift)
+  const moved = doc.markers.map((m) => {
+    const at = m.at >= from ? m.at + shift : shift < 0 ? Math.min(m.at, floor) : m.at
+    return at === m.at ? m : { ...m, at }
+  })
+  if (moved.every((m, i) => m === doc.markers[i])) return doc
+  const kept: Marker[] = []
+  for (const m of moved) {
+    const last = kept[kept.length - 1]
+    if (!last || last.at !== m.at) kept.push(m)
+    else if (!last.label && m.label) kept[kept.length - 1] = m
+  }
+  return { ...doc, markers: kept }
+}
+
+/**
  * Tempo eines Video- oder Ton-Clips ändern. Der verwendete Bereich der Quelle
  * bleibt gleich, die Länge auf der Timeline ändert sich (schneller = kürzer).
  * Verknüpfte Clips (Bild + Ton) bekommen dasselbe Tempo (abschaltbar).
  *
  * Mit `ripple` rücken alle späteren Clips mit – auf allen nicht gesperrten
  * Spuren um denselben Betrag: nach hinten, wenn der Clip länger wird, nach
- * vorn (so weit frei ist), wenn er kürzer wird. Ohne `ripple` wird abgelehnt,
- * wenn der längere Clip an seinen Nachbarn stößt.
+ * vorn (so weit frei ist), wenn er kürzer wird. Marker dahinter wandern mit.
+ * Ohne `ripple` wird abgelehnt, wenn der längere Clip an seinen Nachbarn stößt.
  */
 export function setClipSpeed(
   doc: TimelineDoc,
@@ -698,7 +721,7 @@ export function setClipSpeed(
     if (sorted.some((c, k) => k > 0 && clipEnd(sorted[k - 1]) > c.start)) return fail('overlap')
     result = withClips(result, i, clips)
   }
-  return ok(result)
+  return ok(shiftMarkers(result, oldEnd, shift))
 }
 
 /** Kleinster Zuschnitt: Anteil der Quelle, der mindestens sichtbar bleibt. */
@@ -1104,6 +1127,8 @@ export function splitClip(
  * späteren Clips nach vorn – auf allen nicht gesperrten Spuren um denselben
  * Betrag, damit Bild und Ton zusammenbleiben. Der Betrag ist die Länge des
  * gelöschten Bereichs, höchstens aber so viel, wie auf jeder Spur frei ist.
+ * Marker dahinter wandern mit, Marker im gelöschten Bereich rücken an dessen
+ * Anfang.
  */
 export function removeClip(
   doc: TimelineDoc,
@@ -1147,7 +1172,7 @@ export function removeClip(
       : lanes[i]
     next = withClips(next, i, clips)
   })
-  return ok(next)
+  return ok(shiftMarkers(next, rangeEnd, -shift))
 }
 
 // --- Zusammengesetzte Befehle ----------------------------------------------

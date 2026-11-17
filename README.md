@@ -374,6 +374,11 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   Marker-Zeile, ⇤/⇥ springen zum vorherigen/nächsten. Clips rasten an Markern
   ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
   Zwischenablage (`src/timeline/markers.ts`).
+  Beim Nachrücken wandern Marker mit (`shiftMarkers` in `ops.ts`): bei
+  „Löschen + Lücke schließen“, beim Herausschneiden von Bereichen (Stille,
+  Schnittvorschläge) und bei Tempoänderungen rücken Marker dahinter um
+  denselben Betrag wie die Clips. Marker im gelöschten Bereich landen an
+  dessen Anfang; treffen zwei dieselbe Zeit, bleibt der mit Namen.
 - **Keyframes für Bild-in-Bild**: `ClipLayout.keys` (`{ at, x, y, scale }`, `at`
   in Quellzeit wie bei der Lautstärke-Kurve, höchstens 32). Zwischen zwei
   Keyframes ändern sich Mitte, Größe und Deckkraft gleichmäßig, davor und
