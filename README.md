@@ -353,6 +353,11 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Regler mit Spinner**: Jeder Regler im neuen Editor hat ein Zahlenfeld mit
+  ▲▼ daneben (`RangeSpinner.vue`, ersetzt `<input type="range">` bei gleichen
+  Attributen und Ereignissen). Das Zahlenfeld stellt den Regler und löst
+  dessen `input`/`change` aus; `scale` rechnet Anteile 0 … 1 in Prozent um.
+  Neue Regler immer damit bauen.
 - **Lautstärke-Kurve** (Feature `timelineEnvelope`): Ein Ton-Clip kann
   `envelope` tragen, bis zu 32 Punkte `{ at, gain }` (Quellzeit in µs, Faktor
   0 … 2), dazwischen linear, außen gehalten; wirkt zusätzlich zu `gain`
@@ -372,7 +377,7 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Zwischenablage (`src/timeline/markers.ts`). Der Server ignoriert Marker.
 - **Automatisches Absenken** (Feature `timelineDuck`): Eine Ton-Spur kann
   `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7, Stärke
-  daneben wählbar: 30, 50, 70, 85 oder 100 %;
+  daneben per Spinner von 5 bis 100 % in 5er-Schritten;
   `updateTrack`). Solange auf den übrigen hörbaren Ton-Spuren etwas zu hören
   ist, wird die Spur um diesen Anteil leiser (`sidechaincompress` in
   `compile.ts`, Steuersignal = Mischung der übrigen Spuren). Der Anfang des

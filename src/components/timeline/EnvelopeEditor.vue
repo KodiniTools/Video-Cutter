@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './RangeSpinner.vue'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipToSource, envelopeAt, visiblePoints } from '@/timeline/envelope'
@@ -112,8 +113,7 @@ function clear(): void {
         >
           {{ row.label }}
         </button>
-        <input
-          type="range"
+        <RangeSpinner
           min="0"
           :max="MAX_CLIP_GAIN * 100"
           step="5"
@@ -123,7 +123,7 @@ function clear(): void {
           @input="onGain(row.index, $event)"
           @change="commit"
         />
-        <span class="value">{{ Math.round(row.gain * 100) }} %</span>
+        <span class="value">%</span>
         <button
           type="button"
           class="remove"
@@ -194,7 +194,7 @@ legend {
 }
 .points li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 3.5rem auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--ds-space-2);
 }

@@ -24,20 +24,18 @@ const editing = ref(false)
 const draft = ref('')
 const input = ref<HTMLInputElement | null>(null)
 
-/** Wählbare Stärken fürs automatische Absenken (Anteil, um den die Spur leiser wird). */
-const DUCK_LEVELS = [0.3, 0.5, 0.7, 0.85, 1]
 const duck = computed(() => (props.track.kind === 'audio' ? props.track.duck : undefined))
-/** Die Stufen, dazu ein abweichender Wert aus einem geöffneten Projekt. */
-const duckLevels = computed(() => {
-  const current = duck.value
-  return current === undefined || DUCK_LEVELS.includes(current)
-    ? DUCK_LEVELS
-    : [...DUCK_LEVELS, current].sort((a, b) => a - b)
-})
+const duckPercent = computed(() => Math.round((duck.value ?? 0) * 100))
 
+/** Stärke des Absenkens aus dem Zahlenfeld (5 … 100 %); Unsinn stellt den alten Wert wieder her. */
 function onDuckLevel(event: Event): void {
-  const value = Number((event.target as HTMLSelectElement).value)
-  if (Number.isFinite(value)) emit('update', { duck: value })
+  const field = event.target as HTMLInputElement
+  const typed = field.value.trim() === '' ? Number.NaN : Number(field.value)
+  if (Number.isFinite(typed)) {
+    const percent = Math.min(100, Math.max(5, Math.round(typed / 5) * 5))
+    if (percent !== duckPercent.value) emit('update', { duck: percent / 100 })
+  }
+  void nextTick(() => (field.value = String(duckPercent.value)))
 }
 
 function startRename(): void {
@@ -87,20 +85,22 @@ function cancelRename(): void {
       >
         {{ track.name }}
       </button>
-      <select
-        v-if="duck !== undefined"
-        class="duck-level"
-        data-action="duck-level"
-        :value="duck"
-        :title="t('timeline.track.duckLevel')"
-        :aria-label="t('timeline.track.duckLevelNamed', { name: track.name })"
-        @change="onDuckLevel"
-        @keydown.stop
-      >
-        <option v-for="level in duckLevels" :key="level" :value="level">
-          −{{ Math.round(level * 100) }} %
-        </option>
-      </select>
+      <label v-if="duck !== undefined" class="duck-level" :title="t('timeline.track.duckLevel')">
+        <span aria-hidden="true">−</span>
+        <input
+          type="number"
+          min="5"
+          max="100"
+          step="5"
+          data-action="duck-level"
+          :value="duckPercent"
+          :aria-label="t('timeline.track.duckLevelNamed', { name: track.name })"
+          @change="onDuckLevel"
+          @keydown.enter.prevent="onDuckLevel"
+          @keydown.stop
+        />
+        <span aria-hidden="true">%</span>
+      </label>
       <span v-else class="track-kind">{{ t(`timeline.kind.${track.kind}`) }}</span>
     </div>
     <div class="line buttons">
@@ -237,15 +237,27 @@ function cancelRename(): void {
 }
 .duck-level {
   flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+}
+.duck-level input {
+  width: 3.4em;
   height: 18px;
-  padding: 0 2px;
+  padding: 0 0 0 3px;
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-sm);
   background: var(--ds-surface-0);
-  color: var(--ds-text-2);
-  font-size: var(--ds-text-xs);
+  color: var(--ds-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
 }
-.duck-level:focus-visible {
+.duck-level input::-webkit-inner-spin-button {
+  opacity: 1;
+}
+.duck-level input:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
 }

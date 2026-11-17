@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import TrackHeader from '@/components/timeline/TrackHeader.vue'
 import { i18n } from '@/i18n'
 import { buildTimelineProject, parseTimelineProject } from '@/timeline/projectFile'
@@ -82,7 +83,7 @@ describe('Automatisches Absenken einer Ton-Spur', () => {
     expect(w.emitted('update')?.[1]).toEqual([{ duck: null }])
   })
 
-  it('Stärke lässt sich im Spurkopf wählen, sobald das Absenken an ist', async () => {
+  it('Stärke lässt sich im Spurkopf per Spinner einstellen, sobald das Absenken an ist', async () => {
     const doc = docWithAudio()
     const w = mount(TrackHeader, {
       props: { track: audio(doc), canMoveUp: false, canMoveDown: false },
@@ -91,21 +92,27 @@ describe('Automatisches Absenken einer Ton-Spur', () => {
     expect(w.find('[data-action="duck-level"]').exists()).toBe(false)
     expect(w.get('.track-kind').text()).toBe('Ton')
     await w.setProps({ track: audio(must(updateTrack(doc, 'A9', { duck: DEFAULT_DUCK }))) })
-    const select = w.get('[data-action="duck-level"]')
-    expect((select.element as HTMLSelectElement).value).toBe('0.7')
-    expect(select.findAll('option').map((o) => o.text())).toEqual([
-      '−30 %',
-      '−50 %',
-      '−70 %',
-      '−85 %',
-      '−100 %',
-    ])
-    await select.setValue('0.3')
+    const field = w.get('[data-action="duck-level"]')
+    const el = field.element as HTMLInputElement
+    expect(el.value).toBe('70')
+    await field.setValue('30')
+    await field.trigger('change')
     expect(w.emitted('update')?.[0]).toEqual([{ duck: 0.3 }])
-    // Ein abweichender Wert aus einem Projekt steht mit in der Liste.
+    // Auf 5er-Schritte gerundet und auf 5 … 100 begrenzt.
+    await field.setValue('250')
+    await field.trigger('change')
+    expect(w.emitted('update')?.[1]).toEqual([{ duck: 1 }])
+    await field.setValue('42')
+    await field.trigger('change')
+    expect(w.emitted('update')?.[2]).toEqual([{ duck: 0.4 }])
+    // Leere Eingabe ändert nichts und zeigt wieder den Wert.
+    await field.setValue('')
+    await field.trigger('change')
+    expect(w.emitted('update')).toHaveLength(3)
+    await nextTick()
+    expect(el.value).toBe('70')
     await w.setProps({ track: audio(must(updateTrack(doc, 'A9', { duck: 0.45 }))) })
-    expect(select.findAll('option').map((o) => o.text())).toContain('−45 %')
-    expect((select.element as HTMLSelectElement).value).toBe('0.45')
+    expect(el.value).toBe('45')
   })
 
   it('Video-Spuren haben keinen Schalter', () => {

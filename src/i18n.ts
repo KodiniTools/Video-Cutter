@@ -831,6 +831,7 @@ const messages = {
         remove: 'Spur samt Clips entfernen',
         removeNamed: '{name} entfernen',
       },
+      exactValue: 'Genauer Wert',
       marker: {
         add: '+ Marker',
         addTitle: 'Marker am Abspielkopf setzen (M)',
@@ -1782,6 +1783,7 @@ const messages = {
         remove: 'Remove track and its clips',
         removeNamed: 'Remove {name}',
       },
+      exactValue: 'Exact value',
       marker: {
         add: '+ Marker',
         addTitle: 'Set a marker at the playhead (M)',

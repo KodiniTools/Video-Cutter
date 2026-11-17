@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './RangeSpinner.vue'
 import {
   ANIM_SPEEDS,
   DEFAULT_TEXT_STYLE,
@@ -124,8 +125,8 @@ onBeforeUnmount(commit)
       </label>
       <label class="field">
         <span>{{ t('text.size') }} {{ percent(size) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           :min="MIN_TEXT_SIZE"
           :max="MAX_TEXT_SIZE"
           step="0.005"
@@ -191,8 +192,8 @@ onBeforeUnmount(commit)
     <div class="row">
       <label class="field">
         <span>{{ t('text.pos.x') }} {{ percent(x) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           min="0"
           max="1"
           step="0.005"
@@ -204,8 +205,8 @@ onBeforeUnmount(commit)
       </label>
       <label class="field">
         <span>{{ t('text.pos.y') }} {{ percent(y) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           min="0"
           max="1"
           step="0.005"
