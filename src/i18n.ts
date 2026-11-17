@@ -707,6 +707,10 @@ const messages = {
       graphicInspector: '{kind} bearbeiten',
       graphicInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
+      graphicKeys: {
+        scale: 'Größe am Abspielkopf',
+        hint: 'Keyframes bewegen die Grafik: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Position oder Größe (auch durch Ziehen in der Vorschau), dann entsteht der nächste von selbst. Dazwischen ändern sich Position und Größe gleichmäßig.',
+      },
       clipInspector: {
         title: 'Clip',
         timing: 'Länge {length} · Quelle {from} bis {to}',
@@ -1695,6 +1699,10 @@ const messages = {
       graphicInspector: 'Edit {kind}',
       graphicInspectorHint:
         'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',
+      graphicKeys: {
+        scale: 'Size at the playhead',
+        hint: 'Keyframes move the graphic: set one at the playhead, go somewhere else and change position or size there (dragging in the preview works too), and the next one is created automatically. In between, position and size change evenly.',
+      },
       clipInspector: {
         title: 'Clip',
         timing: 'Length {length} · source {from} to {to}',

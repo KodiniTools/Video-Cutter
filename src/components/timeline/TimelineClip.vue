@@ -8,6 +8,7 @@ import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 import { envelopeLine, movePoint, visiblePoints } from '@/timeline/envelope'
 import { visibleKeys } from '@/timeline/layoutKeys'
+import { visibleGraphicKeys } from '@/timeline/graphicKeys'
 import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
 import { MAX_CLIP_GAIN, type Clip } from '@/timeline/model'
@@ -121,9 +122,15 @@ const envelopePoints = computed(() => {
   }))
 })
 
-/** Keyframes der Lage als kleine Rauten am unteren Rand des Video-Clips. */
+/** Keyframes als kleine Rauten am unteren Rand (Video-Clips und Grafiken). */
 const layoutKeyMarks = computed(() => {
   const clip = props.clip
+  if (clip.kind === 'graphic') {
+    return visibleGraphicKeys(clip).map((k) => ({
+      index: k.index,
+      left: `${(k.offset / clip.duration) * 100}%`,
+    }))
+  }
   if ((clip.kind !== 'video' && clip.kind !== 'still') || !clip.layout?.keys?.length) return []
   return visibleKeys(clip).map((k) => ({
     index: k.index,

@@ -108,6 +108,78 @@ describe('Grafik-Clips im Dokument', () => {
   })
 })
 
+describe('Keyframes für Grafiken', () => {
+  const keys = [
+    { at: 0, x: 0.25, y: 0.5, scale: 1 },
+    { at: s(2), x: 0.75, y: 0.5, scale: 0.5 },
+  ]
+
+  it('übernimmt Keyframes und weiche Bewegung; ohne Keyframes bleibt alles wie bisher', () => {
+    const doc = parsed(rawDoc(graphicData({ keys, ease: 'smooth' }), 0.5, 2))
+    expect((doc.tracks[0].clips[0] as Loose).graphic).toMatchObject({ keys, ease: 'smooth' })
+    // Zeiten vor dem Clip-Anfang sind erlaubt (nach dem Kürzen vorn).
+    const early = [{ ...keys[0], at: -s(1) }, keys[1]]
+    expect(
+      (parsed(rawDoc(graphicData({ keys: early }))).tracks[0].clips[0] as Loose).graphic.keys,
+    ).toEqual(early)
+    const plain = (
+      parsed(rawDoc(graphicData({ keys: [], ease: 'smooth' }))).tracks[0].clips[0] as Loose
+    ).graphic
+    expect(plain.keys).toBeUndefined()
+    expect(plain.ease).toBeUndefined()
+  })
+
+  it('lehnt kaputte Keyframes ab', () => {
+    const errorPath = (over: Record<string, unknown>) => {
+      const r = parseTimelineDoc(rawDoc(graphicData(over)))
+      return r.ok ? null : r.errors[0].path
+    }
+    const at = 'tracks[0].clips[0].data.keys'
+    expect(errorPath({ keys: 'x' })).toBe(at)
+    expect(errorPath({ keys: [{ at: 0.5, x: 0.5, y: 0.5, scale: 1 }] })).toBe(at)
+    expect(errorPath({ keys: [{ at: 0, x: 2, y: 0.5, scale: 1 }] })).toBe(at)
+    expect(errorPath({ keys: [{ at: 0, x: 0.5, y: 0.5, scale: 9 }] })).toBe(at)
+    expect(errorPath({ keys: [keys[1], keys[0]] })).toBe(at)
+    expect(errorPath({ keys: [keys[0], keys[0]] })).toBe(at)
+    expect(errorPath({ keys: Array.from({ length: 33 }, (_, i) => ({ ...keys[0], at: i })) })).toBe(
+      at,
+    )
+    expect(errorPath({ keys, ease: 'bounce' })).toBe('tracks[0].clips[0].data.ease')
+  })
+
+  it('bewegt Mitte und Größe über Ausdrücke ab Clip-Anfang', () => {
+    const c = compileTimeline(parsed(rawDoc(graphicData({ keys }), 0.5, 2)), {
+      sources,
+      graphics: image,
+    })
+    const chains = c.filter.split(';')
+    const src = chains.find((x) => x.startsWith('[1:v]format=rgba'))!
+    expect(src).toContain(':eval=frame')
+    expect(src).toContain('1+(-0.25)*((t-0.52)-0)')
+    const over = chains.find((x) => x.includes('overlay=x='))!
+    expect(over).toContain(
+      "x='round((if(lt((t-0.52),0),0.25,if(lt((t-0.52),2),0.25+(0.25)*((t-0.52)-0),0.75)))*640-overlay_w/2)'",
+    )
+    expect(over).toContain("y='round((0.5)*360-overlay_h/2)'")
+
+    // Gleiche Größe überall: kein Skalieren je Bild, feste halbe Maße.
+    const fixed = keys.map((k) => ({ ...k, scale: 1 }))
+    const plain = compileTimeline(parsed(rawDoc(graphicData({ keys: fixed }), 0.5, 2)), {
+      sources,
+      graphics: image,
+    }).filter
+    expect(plain).not.toContain('eval=frame')
+    expect(plain).toContain('*640-50)')
+    expect(plain).toContain("y='round((0.5)*360-30)'")
+    // Weich: Glättung im Ausdruck.
+    const smooth = compileTimeline(
+      parsed(rawDoc(graphicData({ keys: fixed, ease: 'smooth' }), 0.5, 2)),
+      { sources, graphics: image },
+    ).filter
+    expect(smooth).toContain('*(3-2*')
+  })
+})
+
 describe('compileTimeline mit Grafiken', () => {
   it('legt die Grafik mit Zeiten der ganzen Timeline über das Bild', () => {
     const c = compileTimeline(parsed(rawDoc(graphicData())), { sources, graphics: image })
@@ -314,6 +386,49 @@ describe('GraphicStore und echtes FFmpeg', () => {
     expect(near(pixel(part, 0.2, 114, 68), green)).toBe(true)
     expect(near(pixel(part, 0.2, 98, 86), red)).toBe(true)
     expect(near(pixel(part, 0.8, 156, 86), red)).toBe(true)
+  }, 120_000)
+
+  it('bewegt und verkleinert die Grafik über Keyframes, auch im Abschnitt', async () => {
+    const store = new GraphicStore({ dir: path.join(dir, 'keys'), maxBytes: 1024 * 1024 })
+    await store.init()
+    const stored = await store.put(png)
+    const keys = [
+      { at: 0, x: 0.25, y: 0.5, scale: 1 },
+      { at: s(2), x: 0.75, y: 0.5, scale: 0.5 },
+    ]
+    const doc = parsed(rawDoc(graphicData({ png: stored.id, keys }), 0.5, 2))
+    const real = { a: { path: path.join(dir, 'a.mp4'), hasAudio: false } }
+    const { graphics } = resolveDocGraphics(doc, (id) => store.get(id))
+    const render = (name: string, opts: Partial<Parameters<typeof compileTimeline>[1]> = {}) => {
+      const out = path.join(dir, `${name}.mp4`)
+      const c = compileTimeline(doc, { sources: real, graphics, ...opts })
+      execFileSync('ffmpeg', buildRenderArgs(c, { output: out, preset: 'ultrafast', crf: 20 }), {
+        stdio: 'ignore',
+      })
+      return out
+    }
+    const green = [0, 255, 0]
+    const red = [255, 0, 0]
+
+    const whole = render('keys-whole')
+    // Kurz nach dem Anfang: links, fast volle Größe (Mitte bei x ≈ 176).
+    expect(near(pixel(whole, 0.6, 172, 176), green)).toBe(true)
+    expect(near(pixel(whole, 0.6, 316, 176), red)).toBe(true)
+    // Mitte des Clips: Bildmitte, drei Viertel der Größe (150×75).
+    expect(near(pixel(whole, 1.5, 316, 176), green)).toBe(true)
+    expect(near(pixel(whole, 1.5, 228, 176), red)).toBe(true)
+    // Kurz vor dem Ende: rechts, etwa halbe Größe (Mitte bei x ≈ 464).
+    expect(near(pixel(whole, 2.4, 460, 176), green)).toBe(true)
+    expect(near(pixel(whole, 2.4, 390, 176), red)).toBe(true)
+    expect(near(pixel(whole, 2.4, 172, 176), red)).toBe(true)
+
+    // Abschnitt 1–2 s in halber Größe: bei 1,5 s in der Mitte, 75×37 groß.
+    const part = render('keys-part', {
+      range: { start: s(1), end: s(2) },
+      size: { width: 320, height: 180 },
+    })
+    expect(near(pixel(part, 0.5, 156, 86), green)).toBe(true)
+    expect(near(pixel(part, 0.5, 108, 86), red)).toBe(true)
   }, 120_000)
 
   it('blendet mit Animation weich ein (Zeit ab Clip-Beginn, auch im Abschnitt)', async () => {
