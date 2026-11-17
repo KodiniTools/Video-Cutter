@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EnvelopeEditor from './EnvelopeEditor.vue'
+import RangeSpinner from './RangeSpinner.vue'
 import { formatSpeedFactor, SPEED_STEPS, speedFactor } from '@/lib/clipSpeed'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
@@ -351,8 +352,7 @@ onBeforeUnmount(commit)
     </p>
     <label v-if="audio" class="field">
       <span>{{ t('timeline.clipInspector.gain') }} {{ gainPercent }} %</span>
-      <input
-        type="range"
+      <RangeSpinner
         min="0"
         :max="MAX_CLIP_GAIN * 100"
         step="5"
@@ -367,8 +367,7 @@ onBeforeUnmount(commit)
       <template v-for="side in FADE_SIDES" :key="side">
         <label class="side">
           <span>{{ t(`timeline.clipInspector.fadeSides.${side}`) }}</span>
-          <input
-            type="range"
+          <RangeSpinner
             min="0"
             :max="maxFadeSeconds(side)"
             step="0.1"
@@ -430,8 +429,7 @@ onBeforeUnmount(commit)
       </label>
       <label v-if="transition" class="side">
         <span>{{ t('timeline.clipInspector.transitionDuration') }}</span>
-        <input
-          type="range"
+        <RangeSpinner
           :min="timeToSeconds(MIN_TRANSITION) * 2"
           :max="timeToSeconds(MAX_TRANSITION)"
           step="0.1"
@@ -458,8 +456,7 @@ onBeforeUnmount(commit)
       <legend>{{ t('timeline.clipInspector.crop') }}</legend>
       <label v-for="side in CROP_SIDES" :key="side" class="side">
         <span>{{ t(`timeline.clipInspector.cropSides.${side}`) }}</span>
-        <input
-          type="range"
+        <RangeSpinner
           min="0"
           :max="Math.round(maxMargin(side) * 100)"
           step="1"
@@ -485,8 +482,7 @@ onBeforeUnmount(commit)
       <legend>{{ t('timeline.clipInspector.color') }}</legend>
       <label v-for="field in COLOR_FIELDS" :key="field" class="side">
         <span>{{ t(`timeline.clipInspector.colorFields.${field}`) }}</span>
-        <input
-          type="range"
+        <RangeSpinner
           min="-100"
           max="100"
           step="1"
@@ -512,8 +508,7 @@ onBeforeUnmount(commit)
       <legend>{{ t('timeline.clipInspector.layout') }}</legend>
       <label v-for="field in LAYOUT_FIELDS" :key="field" class="side">
         <span>{{ t(`timeline.clipInspector.layoutFields.${field}`) }}</span>
-        <input
-          type="range"
+        <RangeSpinner
           :min="layoutMin(field)"
           max="100"
           step="1"

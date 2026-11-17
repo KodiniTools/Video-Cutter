@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './RangeSpinner.vue'
 import {
   EMOJI_PRESETS,
   GRAPHIC_ANIMATIONS,
@@ -153,8 +154,8 @@ onBeforeUnmount(commit)
             · {{ t('graphics.height') }} {{ percent(imageHeight(g)) }} %</template
           >
         </span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           :min="MIN_GRAPHIC_SIZE"
           :max="MAX_GRAPHIC_W"
           step="0.005"
@@ -166,8 +167,8 @@ onBeforeUnmount(commit)
       </label>
       <label v-if="hasHeight(g.kind)" class="field">
         <span>{{ t('graphics.height') }} {{ percent(g.h) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           :min="MIN_GRAPHIC_SIZE"
           :max="MAX_GRAPHIC_H"
           step="0.005"
@@ -180,8 +181,7 @@ onBeforeUnmount(commit)
     </div>
     <label class="field">
       <span>{{ t('graphics.rotation') }} {{ Math.round(g.rotation) }}°</span>
-      <input
-        type="range"
+      <RangeSpinner
         min="-180"
         max="180"
         step="1"
@@ -213,8 +213,8 @@ onBeforeUnmount(commit)
         </label>
         <label class="field">
           <span>{{ t('graphics.strokeWidth') }} {{ percent(g.strokeWidth) }} %</span>
-          <input
-            type="range"
+          <RangeSpinner
+            :scale="100"
             min="0"
             :max="MAX_STROKE"
             step="0.001"
@@ -239,8 +239,8 @@ onBeforeUnmount(commit)
         </label>
         <label class="field">
           <span>{{ t('graphics.fillOpacity') }} {{ Math.round(g.fillOpacity * 100) }} %</span>
-          <input
-            type="range"
+          <RangeSpinner
+            :scale="100"
             min="0"
             max="1"
             step="0.05"
@@ -253,8 +253,8 @@ onBeforeUnmount(commit)
       </div>
       <label v-if="g.kind === 'rect' || isImage" class="field">
         <span>{{ t('graphics.radius') }} {{ Math.round(g.radius * 100) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           min="0"
           max="0.5"
           step="0.01"
@@ -269,8 +269,8 @@ onBeforeUnmount(commit)
     <template v-if="isImage">
       <label class="field">
         <span>{{ t('graphics.image.opacity') }} {{ Math.round(g.opacity * 100) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           :min="MIN_IMAGE_OPACITY"
           max="1"
           step="0.01"
@@ -284,8 +284,8 @@ onBeforeUnmount(commit)
         <span>{{ t('graphics.image.crop') }}</span>
         <label v-for="c in CROP_SIDES" :key="c.key" class="crop-row">
           <span>{{ t(`graphics.image.sides.${c.label}`) }}</span>
-          <input
-            type="range"
+          <RangeSpinner
+            :scale="100"
             min="0"
             :max="MAX_CROP"
             step="0.005"
@@ -366,8 +366,8 @@ onBeforeUnmount(commit)
     <div class="row">
       <label class="field">
         <span>{{ t('text.pos.x') }} {{ percent(g.x) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           min="0"
           max="1"
           step="0.005"
@@ -379,8 +379,8 @@ onBeforeUnmount(commit)
       </label>
       <label class="field">
         <span>{{ t('text.pos.y') }} {{ percent(g.y) }} %</span>
-        <input
-          type="range"
+        <RangeSpinner
+          :scale="100"
           min="0"
           max="1"
           step="0.005"
