@@ -26,6 +26,7 @@ import {
   type TimelineSettings,
   type Track,
   type TrackKind,
+  type VolumePoint,
 } from './types'
 
 export const DEFAULT_SETTINGS: TimelineSettings = {
@@ -224,6 +225,17 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
       if (fade === undefined) continue
       if (!isTime(fade.duration) || fade.duration <= 0 || !isFadeCurve(fade.curve))
         return 'invalid-settings'
+    }
+    if (clip.envelope !== undefined) {
+      const e = clip.envelope
+      if (!Array.isArray(e) || e.length === 0 || e.length > MAX_ENVELOPE_POINTS)
+        return 'invalid-settings'
+      for (let i = 0; i < e.length; i++) {
+        const p = e[i]
+        if (!p || !isTime(p.at) || !(p.gain >= 0 && p.gain <= MAX_CLIP_GAIN))
+          return 'invalid-settings'
+        if (i > 0 && p.at <= e[i - 1].at) return 'invalid-settings'
+      }
     }
   }
   return null
@@ -923,6 +935,50 @@ export function setClipGain(doc: TimelineDoc, clipId: string, gain: number): OpR
   const next = Math.min(MAX_CLIP_GAIN, Math.max(0, gain))
   if (next === clip.gain) return ok(doc)
   const clips = loc.track.clips.map((c) => (c.id === clipId ? { ...clip, gain: next } : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
+/** So viele Punkte kann eine Lautstärke-Kurve höchstens haben. */
+export const MAX_ENVELOPE_POINTS = 32
+
+/**
+ * Punkte einer Lautstärke-Kurve bereinigen: sortiert, Werte begrenzt und auf
+ * ganze Prozent gerundet, je Zeit nur ein Punkt (der letzte gewinnt).
+ * `null`, wenn kein gültiger Punkt übrig bleibt.
+ */
+export function normalizeEnvelope(
+  points: readonly VolumePoint[] | null | undefined,
+): VolumePoint[] | null {
+  if (!points) return null
+  const byTime = new Map<Time, number>()
+  for (const p of points) {
+    if (!p || !Number.isFinite(p.at) || !Number.isFinite(p.gain)) continue
+    const at = Math.max(0, Math.round(p.at))
+    byTime.set(at, Math.round(Math.min(MAX_CLIP_GAIN, Math.max(0, p.gain)) * 100) / 100)
+  }
+  const out = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([at, gain]) => ({ at, gain }))
+  return out.length > 0 ? out.slice(0, MAX_ENVELOPE_POINTS) : null
+}
+
+/** Lautstärke-Kurve eines Ton-Clips setzen; `null` oder keine Punkte hebt sie auf. */
+export function setClipEnvelope(
+  doc: TimelineDoc,
+  clipId: string,
+  points: readonly VolumePoint[] | null,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'audio') return fail('kind-mismatch')
+  if (points && points.length > MAX_ENVELOPE_POINTS) return fail('too-many')
+  const next = normalizeEnvelope(points)
+  const before = clip.envelope ?? null
+  if (JSON.stringify(next) === JSON.stringify(before)) return ok(doc)
+  const changed: Clip = { ...clip }
+  if (next) changed.envelope = next
+  else delete changed.envelope
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
   return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
 }
 

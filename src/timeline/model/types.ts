@@ -148,6 +148,19 @@ export interface AudioClip extends MediaClipBase {
   fadeIn?: ClipFade
   /** Ton am Clip-Ende ausblenden. */
   fadeOut?: ClipFade
+  /**
+   * Lautstärke-Kurve: Punkte nach Quellzeit aufsteigend, dazwischen linear,
+   * davor und dahinter gilt der erste bzw. letzte Wert. Wirkt zusätzlich zu
+   * `gain`. Die Zeiten hängen an der Quelle, damit die Kurve beim Teilen,
+   * Trimmen und bei anderem Tempo an derselben Stelle des Tons bleibt.
+   */
+  envelope?: VolumePoint[]
+}
+
+/** Punkt einer Lautstärke-Kurve: Zeit in der Quelle und Faktor (1 = unverändert). */
+export interface VolumePoint {
+  at: Time
+  gain: number
 }
 
 /**

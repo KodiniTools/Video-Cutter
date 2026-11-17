@@ -353,6 +353,15 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Lautstärke-Kurve** (Feature `timelineEnvelope`): Ein Ton-Clip kann
+  `envelope` tragen, bis zu 32 Punkte `{ at, gain }` (Quellzeit in µs, Faktor
+  0 … 2), dazwischen linear, außen gehalten; wirkt zusätzlich zu `gain`
+  (`setClipEnvelope`, `src/timeline/envelope.ts`, `EnvelopeEditor.vue` im Feld
+  „Clip“, Linie auf dem Clip). Die Zeiten hängen an der Quelle, darum bleibt
+  die Kurve beim Teilen, Trimmen und bei anderem Tempo an derselben Stelle
+  des Tons. Der Compiler setzt `volume` mit einem stückweise linearen
+  Ausdruck vor das Tempo (`envelopeFilter` in `compile.ts`). Verlustfrei ist
+  damit ausgeschlossen.
 - **Marker und Kapitel** (nur Frontend): `addMarker`, `updateMarker`,
   `removeMarker` pflegen `doc.markers` (sortiert, je Zeit nur einer, höchstens
   200). Knopf „+ Marker“ oder Taste M setzt einen am Abspielkopf. Marker
