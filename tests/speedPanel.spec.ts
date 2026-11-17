@@ -27,6 +27,20 @@ describe('SpeedPanel (Tempo eines einzelnen Videos)', () => {
     expect(w.emitted('update:step')).toEqual([[-1]])
   })
 
+  it('Zahlenfeld neben dem Regler stellt die Stufe in halben Schritten und in Grenzen', async () => {
+    const w = mountWith({ step: 1 })
+    const num = w.find('input[type=number]')
+    expect((num.element as HTMLInputElement).value).toBe('1')
+    expect(num.attributes('step')).toBe('0.5')
+    await num.setValue('-1.5')
+    await num.setValue('9')
+    expect(w.emitted('update:step')).toEqual([[-1.5], [2.5]])
+    // Gesperrt wie der Regler.
+    expect(
+      mountWith({ canApply: false }).find('input[type=number]').attributes('disabled'),
+    ).toBeDefined()
+  })
+
   it('zeigt Faktor und neue Länge; ↺ setzt zurück; Anwenden meldet sich', async () => {
     const w = mountWith({ step: 1 })
     expect(w.find('.speed-value').text()).toContain('2×')

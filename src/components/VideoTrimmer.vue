@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './timeline/RangeSpinner.vue'
 import { storeToRefs } from 'pinia'
 import { useVideoEditorStore } from '@/stores/videoEditor'
 import {
@@ -1788,16 +1789,16 @@ async function downloadResult(): Promise<void> {
                 <label for="anim-duration" class="field-label">{{ t('anim.duration') }}</label>
                 <span class="field-value">{{ animDuration }} s</span>
               </div>
-              <input
+              <RangeSpinner
                 id="anim-duration"
-                v-model.number="animDuration"
                 class="range"
-                type="range"
                 :min="MIN_DURATION"
                 :max="MAX_DURATION"
                 step="1"
                 :disabled="animation === 'none'"
                 :aria-label="t('anim.duration')"
+                :value="animDuration"
+                @input="animDuration = Number(($event.target as HTMLInputElement).value)"
               />
               <p class="field-hint">{{ t('anim.durationHint') }}</p>
             </div>
@@ -1931,10 +1932,9 @@ async function downloadResult(): Promise<void> {
                   <label for="music-volume" class="field-label">{{ t('music.volume') }}</label>
                   <span class="field-value">{{ Math.round(music.volume * 100) }} %</span>
                 </div>
-                <input
+                <RangeSpinner
                   id="music-volume"
                   class="range"
-                  type="range"
                   min="0"
                   max="100"
                   step="5"
@@ -1953,10 +1953,9 @@ async function downloadResult(): Promise<void> {
                   <label for="music-original" class="field-label">{{ t('music.original') }}</label>
                   <span class="field-value">{{ Math.round(music.originalVolume * 100) }} %</span>
                 </div>
-                <input
+                <RangeSpinner
                   id="music-original"
                   class="range"
-                  type="range"
                   min="0"
                   max="100"
                   step="5"

@@ -355,7 +355,11 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   ▲▼ daneben (`RangeSpinner.vue`, ersetzt `<input type="range">` bei gleichen
   Attributen und Ereignissen). Das Zahlenfeld stellt den Regler und löst
   dessen `input`/`change` aus; `scale` rechnet Anteile 0 … 1 in Prozent um.
-  Neue Regler immer damit bauen.
+  Neue Regler immer damit bauen. Auch der bisherige Editor (`/classic`) nutzt
+  ihn: Übergangsdauer, Musik-Lautstärken, Ton-Blende, Tempo (Karte und
+  Videoliste), Textgröße sowie Größe, Kontur, Füllung, Ecken, Deckkraft und
+  Zuschnitt der Grafiken. Position und Drehung hatten dort schon ein
+  Zahlenfeld; das Tempo der Animation bleibt ein Regler mit festen Stufen.
 - **Lautstärke-Kurve** (Feature `timelineEnvelope`): Ein Ton-Clip kann
   `envelope` tragen, bis zu 32 Punkte `{ at, gain }` (Quellzeit in µs, Faktor
   0 … 2), dazwischen linear, außen gehalten; wirkt zusätzlich zu `gain`
