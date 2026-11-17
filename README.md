@@ -376,14 +376,17 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   Zwischenablage (`src/timeline/markers.ts`).
 - **Keyframes für Bild-in-Bild**: `ClipLayout.keys` (`{ at, x, y, scale }`, `at`
   in Quellzeit wie bei der Lautstärke-Kurve, höchstens 32). Zwischen zwei
-  Keyframes ändern sich Mitte und Größe gleichmäßig, davor und dahinter gilt
-  der erste bzw. letzte; die Deckkraft gilt für den ganzen Clip. Im Feld „Clip“
+  Keyframes ändern sich Mitte, Größe und Deckkraft gleichmäßig, davor und
+  dahinter gilt der erste bzw. letzte (`opacity` je Keyframe; fehlt sie, gilt
+  die des Clips). Im Feld „Clip“
   setzt „◆ Keyframe am Abspielkopf“ den ersten; danach landet jede Änderung
   von Größe oder Lage (Regler, Ecken, Ziehen in der Vorschau) im Keyframe am
   Abspielkopf, der dabei entsteht (`src/timeline/layoutKeys.ts`). Rauten am
   Clip zeigen die Keyframes. Server: `scale` mit `eval=frame` und `overlay`
   auf einer durchsichtigen Fläche statt `pad` (`piecewiseExpr`, `fitSteps` in
-  `compile.ts`), Feature `timelineLayoutKeys`. Ein älteres Backend zeigt die
+  `compile.ts`). Wechselnde Deckkraft multipliziert die Transparenz je Bild
+  mit einer Maske (`geq` auf 16×16 Punkten, vergrößert, `blend` + `alphamerge`).
+  Features `timelineLayoutKeys`, `timelineLayoutOpacityKeys`. Ein älteres Backend zeigt die
   Lage des ersten Keyframes.
 - **Sprachaufnahme** (nur Frontend): Knopf „🎙 Sprachaufnahme“ in der
   Medienliste (`VoiceRecorder.vue`). Der Browser nimmt mit dem Mikrofon auf

@@ -91,9 +91,9 @@ export interface DocLayout {
   scale: number
   opacity: number
   /**
-   * Keyframes (mindestens zwei, nach Zeit aufsteigend): Mitte und Größe ändern
-   * sich dazwischen gleichmäßig, davor und dahinter gilt der erste bzw. letzte.
-   * `x`, `y` und `scale` oben sind dann die Werte des ersten Keyframes.
+   * Keyframes (mindestens zwei, nach Zeit aufsteigend): Mitte, Größe und
+   * Deckkraft ändern sich dazwischen gleichmäßig, davor und dahinter gilt der
+   * erste bzw. letzte. Die Werte oben sind dann die des ersten Keyframes.
    */
   keys?: DocLayoutKey[]
 }
@@ -104,6 +104,8 @@ export interface DocLayoutKey {
   x: number
   y: number
   scale: number
+  /** Deckkraft; fehlt sie im Dokument, gilt die des Clips. */
+  opacity: number
 }
 
 export const MAX_LAYOUT_KEYS = 32
@@ -640,22 +642,29 @@ export function parseTimelineDoc(
                 !inRange(k.x, 0, 1) ||
                 !inRange(k.y, 0, 1) ||
                 !inRange(k.scale, MIN_LAYOUT_SCALE, 1) ||
+                (k.opacity !== undefined && !inRange(k.opacity, 0, 1)) ||
                 (last !== undefined && k.at <= last.at)
               )
                 return fail(`${cp}.layout.keys`, 'Ungültige Keyframes.')
-              keys.push({ at: k.at, x: k.x, y: k.y, scale: k.scale })
+              keys.push({
+                at: k.at,
+                x: k.x,
+                y: k.y,
+                scale: k.scale,
+                opacity: (k.opacity ?? l.opacity) as number,
+              })
             }
           }
           // Ein einzelner Keyframe bewegt nichts: Er gilt als feste Lage.
-          const fixed = keys.length === 1 ? keys[0] : (l as unknown as DocLayout)
+          const fixed = keys.length > 0 ? keys[0] : (l as unknown as DocLayout)
           if (keys.length < 2) keys = []
           // Volle Größe und Deckkraft ist dasselbe wie keine Lage.
-          if (keys.length > 0 || fixed.scale < 1 || (l.opacity as number) < 1)
+          if (keys.length > 0 || fixed.scale < 1 || fixed.opacity < 1)
             layout = {
               x: fixed.x,
               y: fixed.y,
               scale: fixed.scale,
-              opacity: l.opacity as number,
+              opacity: fixed.opacity,
               ...(keys.length > 0 ? { keys } : {}),
             }
         }

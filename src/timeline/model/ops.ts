@@ -211,6 +211,7 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
         if (!k || !isTime(k.at) || !unit(k.x) || !unit(k.y) || !unit(k.scale))
           return 'invalid-settings'
         if (k.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+        if (k.opacity !== undefined && !unit(k.opacity)) return 'invalid-settings'
         if (i > 0 && k.at <= l.keys[i - 1].at) return 'invalid-settings'
       }
     }
@@ -769,7 +770,8 @@ export const MAX_LAYOUT_KEYS = 32
 /**
  * Lage in gültige Grenzen bringen; volle Größe und Deckkraft ohne Keyframes
  * (oder Ungültiges) ergibt `null`. Keyframes werden sortiert, je Zeit bleibt
- * der letzte; mit Keyframes tragen `x`, `y`, `scale` die Werte des ersten.
+ * der letzte, fehlende Deckkraft kommt vom Clip; mit Keyframes trägt die Lage
+ * die Werte des ersten.
  */
 export function normalizeLayout(layout: ClipLayout | null | undefined): ClipLayout | null {
   if (!layout) return null
@@ -782,12 +784,18 @@ export function normalizeLayout(layout: ClipLayout | null | undefined): ClipLayo
   const byTime = new Map<Time, LayoutKey>()
   for (const k of Array.isArray(layout.keys) ? layout.keys : []) {
     if (!k || !isTime(k.at) || ![k.x, k.y, k.scale].every((v) => Number.isFinite(v))) continue
-    byTime.set(k.at, { at: k.at, x: unit(k.x), y: unit(k.y), scale: size(k.scale) })
+    byTime.set(k.at, {
+      at: k.at,
+      x: unit(k.x),
+      y: unit(k.y),
+      scale: size(k.scale),
+      opacity: typeof k.opacity === 'number' && Number.isFinite(k.opacity) ? unit(k.opacity) : o,
+    })
   }
   const keys = [...byTime.values()].sort((a, b) => a.at - b.at).slice(0, MAX_LAYOUT_KEYS)
   if (keys.length > 0) {
     const first = keys[0]
-    return { x: first.x, y: first.y, scale: first.scale, opacity: o, keys }
+    return { x: first.x, y: first.y, scale: first.scale, opacity: first.opacity ?? o, keys }
   }
   const s = size(scale)
   if (s === 1 && o === 1) return null

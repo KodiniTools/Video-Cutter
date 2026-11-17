@@ -8,8 +8,8 @@ import {
 } from './model'
 
 type KeyedClip = Pick<VideoClip, 'sourceIn' | 'speed' | 'duration' | 'layout'>
-/** Was Keyframes bewegen: Mitte und Größe. */
-export type LayoutMotion = Pick<ClipLayout, 'x' | 'y' | 'scale'>
+/** Was Keyframes ändern: Mitte, Größe und Deckkraft. */
+export type LayoutMotion = Pick<ClipLayout, 'x' | 'y' | 'scale' | 'opacity'>
 
 /** Volle Größe, volle Deckkraft: der Stand ohne Lage. */
 export const FULL_LAYOUT: ClipLayout = { x: 0.5, y: 0.5, scale: 1, opacity: 1 }
@@ -17,17 +17,30 @@ export const FULL_LAYOUT: ClipLayout = { x: 0.5, y: 0.5, scale: 1, opacity: 1 }
 /** So nah an einem Keyframe gilt der Abspielkopf als „auf dem Keyframe“ (Quellzeit). */
 export const KEY_SNAP: Time = 20_000
 
-/** Mitte und Größe an einer Quellzeit: gleichmäßig zwischen den Keyframes, außen gehalten. */
-export function motionAt(keys: readonly LayoutKey[], at: Time): LayoutMotion {
-  const pick = (k: LayoutKey): LayoutMotion => ({ x: k.x, y: k.y, scale: k.scale })
+/**
+ * Lage an einer Quellzeit: gleichmäßig zwischen den Keyframes, außen gehalten.
+ * `opacity` ist die Deckkraft des Clips für Keyframes ohne eigene.
+ */
+export function motionAt(keys: readonly LayoutKey[], at: Time, opacity = 1): LayoutMotion {
+  const pick = (k: LayoutKey): LayoutMotion => ({
+    x: k.x,
+    y: k.y,
+    scale: k.scale,
+    opacity: k.opacity ?? opacity,
+  })
   if (at <= keys[0].at) return pick(keys[0])
   for (let i = 1; i < keys.length; i++) {
-    const a = keys[i - 1]
-    const b = keys[i]
-    if (at < b.at) {
-      const f = (at - a.at) / (b.at - a.at)
+    const a = pick(keys[i - 1])
+    const b = pick(keys[i])
+    if (at < keys[i].at) {
+      const f = (at - keys[i - 1].at) / (keys[i].at - keys[i - 1].at)
       const mix = (from: number, to: number) => Math.round((from + (to - from) * f) * 10000) / 10000
-      return { x: mix(a.x, b.x), y: mix(a.y, b.y), scale: mix(a.scale, b.scale) }
+      return {
+        x: mix(a.x, b.x),
+        y: mix(a.y, b.y),
+        scale: mix(a.scale, b.scale),
+        opacity: mix(a.opacity, b.opacity),
+      }
     }
   }
   return pick(keys[keys.length - 1])
@@ -38,7 +51,7 @@ export function layoutAt(clip: KeyedClip, offset: Time): ClipLayout {
   const layout = clip.layout
   if (!layout) return FULL_LAYOUT
   if (!layout.keys?.length) return layout
-  return { ...motionAt(layout.keys, clipToSource(clip, offset)), opacity: layout.opacity }
+  return motionAt(layout.keys, clipToSource(clip, offset), layout.opacity)
 }
 
 /** Index des Keyframes an dieser Stelle des Clips, sonst −1. */
@@ -78,6 +91,7 @@ export function withKeyAt(
     x: patch.x ?? base.x,
     y: patch.y ?? base.y,
     scale: patch.scale ?? base.scale,
+    opacity: patch.opacity ?? base.opacity ?? now.opacity,
   }
   if (index >= 0) keys[index] = key
   else if (keys.length < MAX_LAYOUT_KEYS) keys.push(key)
@@ -87,20 +101,17 @@ export function withKeyAt(
 
 /**
  * Lage an dieser Stelle ändern. Ohne Keyframes gilt die Änderung für den
- * ganzen Clip. Mit Keyframes landen Mitte und Größe im Keyframe an dieser
- * Stelle (er entsteht, falls dort keiner liegt); die Deckkraft gilt immer für
- * den ganzen Clip.
+ * ganzen Clip. Mit Keyframes landet sie im Keyframe an dieser Stelle (er
+ * entsteht, falls dort keiner liegt).
  */
 export function withLayoutChange(
   clip: KeyedClip,
   offset: Time,
-  patch: Partial<ClipLayout>,
+  patch: Partial<LayoutMotion>,
 ): ClipLayout {
   const layout = clip.layout
   if (!layout?.keys?.length) return { ...(layout ?? FULL_LAYOUT), ...patch }
-  const { opacity, ...motion } = patch
-  const moved = Object.keys(motion).length > 0 ? withKeyAt(clip, offset, motion) : layout
-  return { ...moved, opacity: opacity ?? layout.opacity }
+  return withKeyAt(clip, offset, patch)
 }
 
 /** Keyframe entfernen. Der letzte hinterlässt seine Werte als feste Lage. */
@@ -111,5 +122,5 @@ export function withoutKey(clip: KeyedClip, index: number): ClipLayout | null {
   const rest = keys.filter((_, i) => i !== index)
   if (rest.length > 0) return { ...layout, keys: rest }
   const last = keys[index]
-  return { x: last.x, y: last.y, scale: last.scale, opacity: layout.opacity }
+  return { x: last.x, y: last.y, scale: last.scale, opacity: last.opacity ?? layout.opacity }
 }

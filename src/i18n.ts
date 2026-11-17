@@ -765,7 +765,7 @@ const messages = {
           remove: 'Keyframe bei {time} entfernen',
           hidden:
             'Kein Keyframe liegt außerhalb des Clips. | Ein Keyframe liegt außerhalb des Clips und wirkt weiter. | {n} Keyframes liegen außerhalb des Clips und wirken weiter.',
-          hint: 'Keyframes bewegen den Clip: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Größe oder Lage, dann entsteht der nächste von selbst. Dazwischen ändern sich Größe und Lage gleichmäßig. Die Deckkraft gilt für den ganzen Clip.',
+          hint: 'Keyframes bewegen den Clip: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Größe, Lage oder Deckkraft, dann entsteht der nächste von selbst. Dazwischen ändern sich Größe, Lage und Deckkraft gleichmäßig, so lässt sich ein Clip auch ein- und ausblenden.',
         },
         layoutHint:
           'Verkleinert den Clip und legt ihn an eine Stelle im Bild. Darunter ist zu sehen, was auf den Video-Spuren weiter unten liegt, sonst der Hintergrund. Das Bild bleibt immer ganz im Projektformat. Ein verkleinerter Clip lässt sich auch direkt in der Vorschau ziehen; der Griff unten rechts ändert die Größe.',
@@ -1751,7 +1751,7 @@ const messages = {
           remove: 'Remove the keyframe at {time}',
           hidden:
             'No keyframe lies outside the clip. | One keyframe lies outside the clip and still applies. | {n} keyframes lie outside the clip and still apply.',
-          hint: 'Keyframes move the clip: set one at the playhead, go somewhere else and change size or position there, and the next one is created automatically. In between, size and position change evenly. Opacity applies to the whole clip.',
+          hint: 'Keyframes move the clip: set one at the playhead, go somewhere else and change size, position or opacity there, and the next one is created automatically. In between they change evenly, so a clip can also fade in and out.',
         },
         layoutHint:
           'Scales the clip down and places it somewhere in the frame. Below it you see what lies on the video tracks further down, otherwise the background. The picture always stays fully inside the project format. A scaled-down clip can also be dragged right in the preview; the handle at the bottom right changes its size.',
