@@ -259,6 +259,20 @@ function isFadeCurve(v: unknown): v is FadeCurve {
   return typeof v === 'string' && (FADE_CURVES as readonly string[]).includes(v)
 }
 
+/**
+ * Keyframes eines Ebenen-Clips (`data.keys`, Zeit ab Clip-Anfang) um `delta`
+ * verschieben: Beim Kürzen vorn und beim Teilen bleiben sie so an ihrer Stelle
+ * auf der Timeline.
+ */
+function shiftDataKeys<T extends Clip>(clip: T, delta: Time): T {
+  if (!('data' in clip) || delta === 0 || !Array.isArray(clip.data.keys)) return clip
+  const keys = (clip.data.keys as unknown[]).map((k) => {
+    const at = (k as { at?: unknown } | null)?.at
+    return typeof at === 'number' ? { ...(k as object), at: at + delta } : k
+  })
+  return { ...clip, data: { ...clip.data, keys } }
+}
+
 function byStart(a: Clip, b: Clip): number {
   return a.start - b.start
 }
@@ -606,7 +620,7 @@ export function trimClip(
   if (edge === 'start') {
     const duration = clipEnd(clip) - to
     if (duration < MIN_CLIP_DURATION) return fail('too-short')
-    next = { ...clip, start: to, duration }
+    next = shiftDataKeys({ ...clip, start: to, duration }, clip.start - to)
     if (next.kind === 'video' || next.kind === 'audio') {
       const sourceIn = next.sourceIn + Math.round((to - clip.start) * next.speed)
       if (sourceIn < 0) return fail('out-of-source')
@@ -1106,6 +1120,7 @@ export function splitClip(
     let right = { ...m.clip, id: ids(), start: at, duration: clipEnd(m.clip) - at } as Clip
     if (right.kind === 'video' || right.kind === 'audio')
       right = { ...right, sourceIn: right.sourceIn + sourceSpan(left.duration, right.speed) }
+    right = shiftDataKeys(right, -left.duration)
     // Die Einblendung bleibt am Anfang, die Ausblendung am Ende.
     if (left.kind === 'audio') delete left.fadeOut
     if (right.kind === 'audio') delete right.fadeIn

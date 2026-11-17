@@ -379,6 +379,18 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   Schnittvorschläge) und bei Tempoänderungen rücken Marker dahinter um
   denselben Betrag wie die Clips. Marker im gelöschten Bereich landen an
   dessen Anfang; treffen zwei dieselbe Zeit, bleibt der mit Namen.
+- **Keyframes für Formen, Symbole, Emojis und Bilder**: `data.keys` des
+  Grafik-Clips (`{ at, x, y, scale }`, höchstens 32). `at` zählt ab Clip-Anfang
+  (µs) und darf nach dem Kürzen vorn oder dem Teilen auch davor oder dahinter
+  liegen (`shiftDataKeys` in `ops.ts` hält die Keyframes an ihrer Stelle auf
+  der Timeline). `scale` ist ein Faktor der gezeichneten Grafik (0,1–3), das
+  PNG wird dafür nicht neu gezeichnet. `data.ease: 'smooth'` macht die
+  Bewegung weich. Helfer in `src/timeline/graphicKeys.ts`; Bedienung im Feld
+  der Grafik („◆ Keyframe am Abspielkopf“, Liste, „Größe am Abspielkopf“) und
+  durch Ziehen des Rahmens in der Vorschau. Auf dem Server baut
+  `graphicMotion` (`compile.ts`) Ausdrücke für Mitte und Größe, die
+  `graphicFilter` in `overlay` und `scale` einsetzt (Feature
+  `timelineGraphicKeys`). Texte folgen in einem eigenen Schritt.
 - **Keyframes für Bild-in-Bild**: `ClipLayout.keys` (`{ at, x, y, scale }`, `at`
   in Quellzeit wie bei der Lautstärke-Kurve, höchstens 32). Zwischen zwei
   Keyframes ändern sich Mitte, Größe und Deckkraft gleichmäßig, davor und

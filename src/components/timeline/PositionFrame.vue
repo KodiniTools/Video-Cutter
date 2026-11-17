@@ -6,6 +6,7 @@ import { DEFAULT_TEXT_STYLE, fontPreview, type TextFont } from '@/lib/textOverla
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic, isDrawable } from '@/timeline/graphics'
 import { layoutAt, withLayoutChange } from '@/timeline/layoutKeys'
+import { graphicKeys, graphicMotionAt, withGraphicChange } from '@/timeline/graphicKeys'
 import { clipEnd, MIN_LAYOUT_SCALE, type VideoClip } from '@/timeline/model'
 import {
   containRect,
@@ -84,6 +85,17 @@ const graphic = computed(() =>
   clip.value?.kind === 'graphic' ? clipGraphic(clip.value.data) : null,
 )
 
+/** Zeit im Grafik-Clip, an der der Abspielkopf steht (in den Clip geholt). */
+const graphicOffset = computed(() => {
+  const c = clip.value
+  return c ? Math.min(c.duration, Math.max(0, store.playhead - c.start)) : 0
+})
+/** Mitte und Größe der Grafik am Abspielkopf (mit Keyframes: der Wert dort). */
+const graphicMotion = computed(() => {
+  const c = clip.value
+  return c && c.kind === 'graphic' ? graphicMotionAt(c, graphicOffset.value) : null
+})
+
 /** Größe beim Ziehen am Griff (sonst die des Dokuments). */
 const resize = ref<{ from: number; scale: number } | null>(null)
 
@@ -108,7 +120,7 @@ const saved = computed<Point>(() => {
   // Bild-in-Bild: die Mitte, an der das Bild wirklich liegt (ganz im Format).
   if (videoBox.value) return { x: videoBox.value.x, y: videoBox.value.y }
   if (c.kind !== 'text' && c.kind !== 'graphic') return { x: 0.5, y: 0.5 }
-  if (graphic.value) return { x: graphic.value.x, y: graphic.value.y }
+  if (graphicMotion.value) return { x: graphicMotion.value.x, y: graphicMotion.value.y }
   return { x: num(c.data.x, DEFAULT_TEXT_STYLE.x), y: num(c.data.y, DEFAULT_TEXT_STYLE.y) }
 })
 
@@ -172,8 +184,10 @@ const frameStyle = computed(() => {
       height: `${videoBox.value.height * 100}%`,
     }
   }
+  // Mit Keyframes zählt die Größe am Abspielkopf.
+  const factor = graphicMotion.value?.scale ?? 1
   const size = drawn.value
-    ? { width: `${drawn.value.width}px`, height: `${drawn.value.height}px` }
+    ? { width: `${drawn.value.width * factor}px`, height: `${drawn.value.height * factor}px` }
     : graphic.value
       ? { width: '48px', height: '48px' }
       : {}
@@ -204,6 +218,11 @@ function commit(to: Point): void {
     return
   }
   if (to.x === saved.value.x && to.y === saved.value.y) return
+  // Grafik mit Keyframes: Die neue Mitte landet im Keyframe am Abspielkopf.
+  if (c.kind === 'graphic' && graphicKeys(c.data).length > 0) {
+    store.updateClipData(c.id, withGraphicChange(c, graphicOffset.value, to))
+    return
+  }
   store.updateClipData(c.id, { x: to.x, y: to.y })
 }
 
@@ -408,6 +427,8 @@ onBeforeUnmount(() => observer?.disconnect())
 }
 .ghost {
   display: block;
+  width: 100%;
+  height: 100%;
   opacity: 0.6;
 }
 .text {

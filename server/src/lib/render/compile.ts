@@ -8,6 +8,7 @@ import {
   type DocAudioClip,
   type DocAudioTrack,
   type DocColor,
+  type DocGraphicKey,
   type DocLayoutKey,
   type DocOverlayTrack,
   type DocVideoClip,
@@ -226,6 +227,32 @@ export function piecewiseExpr(
     expr = `if(lt(${T},${num(b.at)}),${part},${expr})`
   }
   return `if(lt(${T},${num(points[0].at)}),${num(points[0].value)},${expr})`
+}
+
+/**
+ * Bewegung einer Grafik aus ihren Keyframes: Ausdrücke in `t` (Zeit der
+ * Timeline) für Mitte und Größe. `start` ist der Clip-Anfang in Sekunden.
+ * Bleibt die Größe überall 1, entfällt das Skalieren je Bild.
+ */
+export function graphicMotion(
+  keys: readonly DocGraphicKey[],
+  start: number,
+  smooth: boolean,
+): { x: string; y: string; scale?: string } {
+  const T = `(t-${num(start)})`
+  const curve = (pick: (k: DocGraphicKey) => number) =>
+    keys.every((k) => pick(k) === pick(keys[0]))
+      ? num(pick(keys[0]))
+      : piecewiseExpr(
+          keys.map((k) => ({ at: k.at / MICROS_PER_SECOND, value: pick(k) })),
+          T,
+          smooth,
+        )
+  return {
+    x: curve((k) => k.x),
+    y: curve((k) => k.y),
+    ...(keys.some((k) => k.scale !== 1) ? { scale: curve((k) => k.scale) } : {}),
+  }
 }
 
 /** Vorlauf des Steuersignals beim automatischen Absenken (Sekunden). */
@@ -631,6 +658,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         animation: g.animation,
         loop: g.loop,
         animSpeed: g.animSpeed,
+        ...(g.keys?.length ? { motion: graphicMotion(g.keys, start, g.ease === 'smooth') } : {}),
       }
       graphics.push({
         index,

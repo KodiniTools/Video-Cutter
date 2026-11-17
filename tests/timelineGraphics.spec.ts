@@ -158,6 +158,27 @@ describe('GraphicImages', () => {
     expect(draw).toHaveBeenCalledTimes(4)
   })
 
+  it('gibt Keyframes und weiche Bewegung an den Server weiter, ohne neu zu zeichnen', async () => {
+    const { images, draw } = setup()
+    const rect = newGraphicData('rect')
+    const keys = [
+      { at: 0, x: 0.2, y: 0.5, scale: 1 },
+      { at: 2_000_000, x: 0.8, y: 0.5, scale: 0.5 },
+    ]
+    const doc = docWith(
+      rect,
+      { ...rect, x: 0.2, keys, ease: 'smooth' },
+      { ...rect, keys: [], ease: 'smooth' },
+    )
+    const sent = await images.prepare(doc)
+    expect(draw).toHaveBeenCalledTimes(1)
+    const datas = sent.tracks[0].clips.map((c) => (c as { data: Record<string, unknown> }).data)
+    expect(datas[0].keys).toBeUndefined()
+    expect(datas[1]).toMatchObject({ x: 0.2, keys, ease: 'smooth', png: 'id1' })
+    expect(datas[2].keys).toBeUndefined()
+    expect(datas[2].ease).toBeUndefined()
+  })
+
   it('lässt Emojis ohne Zeichen aus und lädt Vergessenes neu hoch', async () => {
     const { images, upload } = setup()
     const doc = docWith({ ...newGraphicData('emoji'), emoji: '' }, newGraphicData('ellipse'))

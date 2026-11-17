@@ -180,7 +180,24 @@ export interface DocGraphic {
   animation: GraphicAnimation
   loop: GraphicLoop
   animSpeed: number
+  /** Keyframes (nach Zeit sortiert): Mitte und Größe ändern sich über die Zeit. */
+  keys?: DocGraphicKey[]
+  /** Weiche Bewegung zwischen den Keyframes. */
+  ease?: 'smooth'
 }
+
+/** Keyframe einer Grafik; `at` zählt ab Clip-Anfang (µs, auch davor/dahinter). */
+export interface DocGraphicKey {
+  at: number
+  x: number
+  y: number
+  /** Größe als Faktor der gezeichneten Grafik. */
+  scale: number
+}
+
+export const MAX_GRAPHIC_KEYS = 32
+export const MIN_GRAPHIC_KEY_SCALE = 0.1
+export const MAX_GRAPHIC_KEY_SCALE = 3
 
 /**
  * Text/Grafik/Bild über dem Video. Texte (`text`) und Grafiken (`graphic`)
@@ -480,6 +497,27 @@ export function parseTimelineDoc(
             } catch (e) {
               return fail(`${gp}.animSpeed`, e instanceof Error ? e.message : 'Ungültiges Tempo.')
             }
+            const keys: DocGraphicKey[] = []
+            const rawKeys = data.keys
+            if (rawKeys !== undefined && rawKeys !== null) {
+              if (!Array.isArray(rawKeys) || rawKeys.length > MAX_GRAPHIC_KEYS)
+                return fail(`${gp}.keys`, 'Ungültige Keyframes.')
+              for (const rk of rawKeys as unknown[]) {
+                const prev = keys[keys.length - 1]
+                if (
+                  !isObject(rk) ||
+                  !Number.isSafeInteger(rk.at) ||
+                  (prev !== undefined && (rk.at as number) <= prev.at) ||
+                  !inRange(rk.x, 0, 1) ||
+                  !inRange(rk.y, 0, 1) ||
+                  !inRange(rk.scale, MIN_GRAPHIC_KEY_SCALE, MAX_GRAPHIC_KEY_SCALE)
+                )
+                  return fail(`${gp}.keys`, 'Ungültige Keyframes.')
+                keys.push({ at: rk.at as number, x: rk.x, y: rk.y, scale: rk.scale })
+              }
+            }
+            if (data.ease !== undefined && data.ease !== null && data.ease !== 'smooth')
+              return fail(`${gp}.ease`, 'Ungültige Bewegung.')
             clips.push({
               ...base,
               kind: ck,
@@ -491,6 +529,8 @@ export function parseTimelineDoc(
                 animation: animation as GraphicAnimation,
                 loop: loop as GraphicLoop,
                 animSpeed,
+                ...(keys.length > 0 ? { keys } : {}),
+                ...(keys.length > 0 && data.ease === 'smooth' ? { ease: 'smooth' as const } : {}),
               },
             })
             return

@@ -6,6 +6,7 @@ import {
   type GraphicData,
   type GraphicKind,
 } from '@/lib/graphicOverlay'
+import { graphicKeys, graphicSmooth } from './graphicKeys'
 import { uploadGraphic } from '@/lib/graphicsApi'
 import { hasImageAsset } from '@/lib/imageAssets'
 import type { OverlayClip, TimelineDoc } from '@/timeline/model'
@@ -156,6 +157,7 @@ export class GraphicImages {
             const png = ids.get(clip.id)
             if (png === undefined) return clip
             const g = clipGraphic(clip.data)
+            const keys = graphicKeys(clip.data)
             return {
               ...clip,
               data: {
@@ -167,6 +169,8 @@ export class GraphicImages {
                 animSpeed: g.animSpeed ?? 1,
                 png,
                 renderHeight: height,
+                ...(keys.length > 0 ? { keys } : {}),
+                ...(keys.length > 0 && graphicSmooth(clip.data) ? { ease: 'smooth' } : {}),
               },
             }
           }),

@@ -64,6 +64,12 @@ export interface GraphicOverlay {
   loop: GraphicLoop
   /** Tempo von Ein-/Ausblenden und Dauer-Animation (Faktor 0,25–4). */
   animSpeed: number
+  /**
+   * Bewegung über Keyframes (Timeline-Editor): fertige FFmpeg-Ausdrücke in `t`
+   * für die Mitte (Anteil 0…1 des Bildes) und optional die Größe (Faktor).
+   * Ersetzt `x`/`y`.
+   */
+  motion?: { x: string; y: string; scale?: string }
 }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -307,6 +313,7 @@ export function graphicFilter(
     w = box
     h = box
   }
+  if (g.motion?.scale) scales.push(`(${g.motion.scale})`)
   if (scales.length) {
     const s = `if(${live},${scales.join('*')},1)`
     src.push(`scale=w='max(1,trunc(iw*${s}))':h='max(1,trunc(ih*${s}))':eval=frame`)
@@ -314,7 +321,13 @@ export function graphicFilter(
   const extraY = yParts.map((p) => (p.startsWith('-') ? p : `+${p}`)).join('')
   let x: string
   let y: string
-  if (scales.length) {
+  if (g.motion) {
+    // Mitte je Bild aus den Keyframes; bei wechselnder Größe über overlay_w/h.
+    const halfW = scales.length ? 'overlay_w/2' : f3(w / 2)
+    const halfH = scales.length ? 'overlay_h/2' : f3(h / 2)
+    x = `'round((${g.motion.x})*${frameW}-${halfW})'`
+    y = `'round((${g.motion.y})*${frameH}-${halfH}${extraY})'`
+  } else if (scales.length) {
     // Größe ändert sich je Bild: Mittelpunkt über die aktuelle Grafikgröße.
     x = `'${f3(g.x * frameW)}-overlay_w/2'`
     y = `'${f3(g.y * frameH)}-overlay_h/2${extraY}'`

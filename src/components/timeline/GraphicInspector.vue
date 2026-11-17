@@ -23,6 +23,22 @@ import { hasImageAsset } from '@/lib/imageAssets'
 import { ANIM_SPEEDS, formatAnimSpeed } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic } from '@/timeline/graphics'
+import {
+  canAddGraphicKey,
+  graphicKeyIndexAt,
+  graphicKeys,
+  graphicMotionAt,
+  graphicSmooth,
+  MAX_KEY_SCALE,
+  MIN_KEY_SCALE,
+  visibleGraphicKeys,
+  withGraphicChange,
+  withGraphicKeyAt,
+  withoutGraphicKey,
+  type GraphicMotion,
+} from '@/timeline/graphicKeys'
+import { formatTimeMs } from '@/lib/timeFormat'
+import { timeToSeconds } from '@/timeline/model'
 
 /**
  * Einstellungen des markierten Grafik-Clips (Form, Symbol, Emoji). Jede
@@ -99,6 +115,61 @@ function onEmoji(e: Event): void {
   const text = Array.from(el.value).slice(0, MAX_EMOJI_LENGTH).join('')
   if (text !== el.value) el.value = text
   edit({ emoji: text })
+}
+
+// --- Keyframes: Mitte und Größe über die Zeit ---------------------------------
+
+/** Zeit im Clip, an der der Abspielkopf steht (in den Clip geholt). */
+const offset = computed(() => {
+  const c = clip.value
+  return c ? Math.min(c.duration, Math.max(0, store.playhead - c.start)) : 0
+})
+/** Steht der Abspielkopf auf dem Clip? Nur dort lässt sich ein Keyframe setzen. */
+const playheadOnClip = computed(() => {
+  const c = clip.value
+  return !!c && store.playhead >= c.start && store.playhead <= c.start + c.duration
+})
+const hasKeys = computed(() => !!clip.value && graphicKeys(clip.value.data).length > 0)
+/** Mitte und Größe am Abspielkopf (mit Keyframes: der Wert an dieser Stelle). */
+const motion = computed<GraphicMotion>(() =>
+  clip.value ? graphicMotionAt(clip.value, offset.value) : { x: 0.5, y: 0.5, scale: 1 },
+)
+const keyList = computed(() => {
+  const c = clip.value
+  if (!c) return []
+  const current = graphicKeyIndexAt(c, offset.value)
+  return visibleGraphicKeys(c).map((k) => ({
+    ...k,
+    time: formatTimeMs(timeToSeconds(k.offset)),
+    current: playheadOnClip.value && k.index === current,
+  }))
+})
+const hiddenKeys = computed(() =>
+  clip.value ? graphicKeys(clip.value.data).length - keyList.value.length : 0,
+)
+const canKey = computed(
+  () => !!clip.value && playheadOnClip.value && canAddGraphicKey(clip.value, offset.value),
+)
+const smooth = computed(() => !!clip.value && graphicSmooth(clip.value.data))
+
+/** Mitte oder Größe ändern: mit Keyframes im Keyframe am Abspielkopf. */
+function editMotion(patch: Partial<GraphicMotion>): void {
+  const c = clip.value
+  if (c) edit(withGraphicChange(c, offset.value, patch))
+}
+
+function addKey(): void {
+  const c = clip.value
+  if (c && canKey.value) set(withGraphicKeyAt(c, offset.value))
+}
+
+function seekKey(at: number): void {
+  if (clip.value) store.seek(clip.value.start + at)
+}
+
+function removeKey(index: number): void {
+  const c = clip.value
+  if (c) set(withoutGraphicKey(c, index))
 }
 
 onBeforeUnmount(commit)
@@ -365,33 +436,96 @@ onBeforeUnmount(commit)
 
     <div class="row">
       <label class="field">
-        <span>{{ t('text.pos.x') }} {{ percent(g.x) }} %</span>
+        <span>{{ t('text.pos.x') }} {{ percent(motion.x) }} %</span>
         <RangeSpinner
           :scale="100"
           min="0"
           max="1"
           step="0.005"
-          :value="g.x"
+          :value="motion.x"
           data-testid="graphic-x"
-          @input="edit({ x: clamp01(number($event)) })"
+          @input="editMotion({ x: clamp01(number($event)) })"
           @change="commit"
         />
       </label>
       <label class="field">
-        <span>{{ t('text.pos.y') }} {{ percent(g.y) }} %</span>
+        <span>{{ t('text.pos.y') }} {{ percent(motion.y) }} %</span>
         <RangeSpinner
           :scale="100"
           min="0"
           max="1"
           step="0.005"
-          :value="g.y"
+          :value="motion.y"
           data-testid="graphic-y"
-          @input="edit({ y: clamp01(number($event)) })"
+          @input="editMotion({ y: clamp01(number($event)) })"
           @change="commit"
         />
       </label>
     </div>
     <p class="hint">{{ t('timeline.graphicInspectorHint') }}</p>
+
+    <div class="keys" data-testid="graphic-keys">
+      <label v-if="hasKeys" class="field">
+        <span>{{ t('timeline.graphicKeys.scale') }} {{ Math.round(motion.scale * 100) }} %</span>
+        <RangeSpinner
+          :scale="100"
+          :min="MIN_KEY_SCALE"
+          :max="MAX_KEY_SCALE"
+          step="0.01"
+          :value="motion.scale"
+          data-testid="graphic-key-scale"
+          @input="editMotion({ scale: number($event) })"
+          @change="commit"
+        />
+      </label>
+      <button
+        type="button"
+        class="plain"
+        :disabled="!canKey"
+        :title="playheadOnClip ? undefined : t('timeline.clipInspector.keys.addOutside')"
+        data-testid="graphic-key-add"
+        @click="addKey"
+      >
+        {{ t('timeline.clipInspector.keys.add') }}
+      </button>
+      <ul v-if="keyList.length" class="key-list">
+        <li v-for="key in keyList" :key="key.index" :class="{ current: key.current }">
+          <button
+            type="button"
+            class="key-time"
+            :title="t('timeline.clipInspector.keys.seek', { time: key.time })"
+            :aria-current="key.current ? 'true' : undefined"
+            :data-testid="`graphic-key-${key.index}`"
+            @click="seekKey(key.offset)"
+          >
+            ◆ {{ key.time }}
+          </button>
+          <button
+            type="button"
+            class="key-remove"
+            :aria-label="t('timeline.clipInspector.keys.remove', { time: key.time })"
+            :title="t('timeline.clipInspector.keys.remove', { time: key.time })"
+            :data-testid="`graphic-key-remove-${key.index}`"
+            @click="removeKey(key.index)"
+          >
+            ✕
+          </button>
+        </li>
+      </ul>
+      <label v-if="hasKeys" class="check">
+        <input
+          type="checkbox"
+          :checked="smooth"
+          data-testid="graphic-key-ease"
+          @change="set({ ease: checked($event) ? 'smooth' : null })"
+        />
+        <span>{{ t('timeline.clipInspector.keys.smooth') }}</span>
+      </label>
+      <p v-if="hiddenKeys > 0" class="hint" data-testid="graphic-keys-hidden">
+        {{ t('timeline.clipInspector.keys.hidden', hiddenKeys) }}
+      </p>
+      <p class="hint">{{ t('timeline.graphicKeys.hint') }}</p>
+    </div>
   </section>
 </template>
 
@@ -540,5 +674,56 @@ button:focus-visible {
   margin: 0;
   color: var(--ds-text-2);
   font-size: var(--ds-text-xs, var(--ds-text-sm));
+}
+.keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+}
+.plain:disabled {
+  color: var(--ds-text-2);
+  cursor: default;
+}
+.key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.key-list li {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
+}
+.key-list li.current {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+.key-time,
+.key-remove {
+  height: var(--ds-control-sm);
+  border: 0;
+  background: transparent;
+  color: var(--ds-text);
+  font-size: var(--ds-text-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.key-time {
+  padding: 0 var(--ds-space-1) 0 var(--ds-space-2);
+}
+.key-remove {
+  padding: 0 var(--ds-space-2) 0 var(--ds-space-1);
+  color: var(--ds-text-2);
+}
+.key-time:focus-visible,
+.key-remove:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+  border-radius: var(--ds-radius-full);
 }
 </style>
