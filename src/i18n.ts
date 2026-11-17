@@ -758,6 +758,15 @@ const messages = {
           bottomRight: 'Unten rechts',
         },
         layoutReset: 'Volle Größe und Deckkraft',
+        keys: {
+          add: '◆ Keyframe am Abspielkopf',
+          addOutside: 'Stelle den Abspielkopf auf den Clip, um dort einen Keyframe zu setzen.',
+          seek: 'Zum Keyframe bei {time} springen',
+          remove: 'Keyframe bei {time} entfernen',
+          hidden:
+            'Kein Keyframe liegt außerhalb des Clips. | Ein Keyframe liegt außerhalb des Clips und wirkt weiter. | {n} Keyframes liegen außerhalb des Clips und wirken weiter.',
+          hint: 'Keyframes bewegen den Clip: Setze einen am Abspielkopf, gehe an eine andere Stelle und ändere dort Größe oder Lage, dann entsteht der nächste von selbst. Dazwischen ändern sich Größe und Lage gleichmäßig. Die Deckkraft gilt für den ganzen Clip.',
+        },
         layoutHint:
           'Verkleinert den Clip und legt ihn an eine Stelle im Bild. Darunter ist zu sehen, was auf den Video-Spuren weiter unten liegt, sonst der Hintergrund. Das Bild bleibt immer ganz im Projektformat. Ein verkleinerter Clip lässt sich auch direkt in der Vorschau ziehen; der Griff unten rechts ändert die Größe.',
         hold: 'Letztes Bild halten bis zum nächsten Clip',
@@ -1735,6 +1744,15 @@ const messages = {
           bottomRight: 'Bottom right',
         },
         layoutReset: 'Full size and opacity',
+        keys: {
+          add: '◆ Keyframe at the playhead',
+          addOutside: 'Move the playhead onto the clip to set a keyframe there.',
+          seek: 'Jump to the keyframe at {time}',
+          remove: 'Remove the keyframe at {time}',
+          hidden:
+            'No keyframe lies outside the clip. | One keyframe lies outside the clip and still applies. | {n} keyframes lie outside the clip and still apply.',
+          hint: 'Keyframes move the clip: set one at the playhead, go somewhere else and change size or position there, and the next one is created automatically. In between, size and position change evenly. Opacity applies to the whole clip.',
+        },
         layoutHint:
           'Scales the clip down and places it somewhere in the frame. Below it you see what lies on the video tracks further down, otherwise the background. The picture always stays fully inside the project format. A scaled-down clip can also be dragged right in the preview; the handle at the bottom right changes its size.',
         hold: 'Hold the last frame until the next clip',

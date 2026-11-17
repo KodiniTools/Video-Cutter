@@ -374,6 +374,17 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   Marker-Zeile, ⇤/⇥ springen zum vorherigen/nächsten. Clips rasten an Markern
   ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
   Zwischenablage (`src/timeline/markers.ts`).
+- **Keyframes für Bild-in-Bild**: `ClipLayout.keys` (`{ at, x, y, scale }`, `at`
+  in Quellzeit wie bei der Lautstärke-Kurve, höchstens 32). Zwischen zwei
+  Keyframes ändern sich Mitte und Größe gleichmäßig, davor und dahinter gilt
+  der erste bzw. letzte; die Deckkraft gilt für den ganzen Clip. Im Feld „Clip“
+  setzt „◆ Keyframe am Abspielkopf“ den ersten; danach landet jede Änderung
+  von Größe oder Lage (Regler, Ecken, Ziehen in der Vorschau) im Keyframe am
+  Abspielkopf, der dabei entsteht (`src/timeline/layoutKeys.ts`). Rauten am
+  Clip zeigen die Keyframes. Server: `scale` mit `eval=frame` und `overlay`
+  auf einer durchsichtigen Fläche statt `pad` (`piecewiseExpr`, `fitSteps` in
+  `compile.ts`), Feature `timelineLayoutKeys`. Ein älteres Backend zeigt die
+  Lage des ersten Keyframes.
 - **Sprachaufnahme** (nur Frontend): Knopf „🎙 Sprachaufnahme“ in der
   Medienliste (`VoiceRecorder.vue`). Der Browser nimmt mit dem Mikrofon auf
   (`MediaRecorder`), wandelt die Aufnahme in WAV (`src/lib/voiceRecording.ts`,

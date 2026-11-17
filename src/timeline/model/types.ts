@@ -96,6 +96,23 @@ export interface ClipLayout {
   y: number
   scale: number
   opacity: number
+  /**
+   * Keyframes, nach Zeit aufsteigend: Mitte und Größe ändern sich dazwischen
+   * gleichmäßig, davor und dahinter gilt der erste bzw. letzte. `x`, `y` und
+   * `scale` oben tragen dann die Werte des ersten Keyframes.
+   */
+  keys?: LayoutKey[]
+}
+
+/**
+ * Keyframe der Lage. `at` ist die Zeit in der Quelle (wie bei der
+ * Lautstärke-Kurve), damit Teilen, Trimmen und Tempo nichts verschieben.
+ */
+export interface LayoutKey {
+  at: Time
+  x: number
+  y: number
+  scale: number
 }
 
 /**
