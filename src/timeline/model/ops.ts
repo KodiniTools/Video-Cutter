@@ -323,6 +323,18 @@ export interface TrackPatch {
   muted?: boolean
   solo?: boolean
   volume?: number
+  /** Automatisches Absenken einer Ton-Spur (0 … 1); 0 oder `null` schaltet es aus. */
+  duck?: number | null
+}
+
+/** Voreinstellung fürs automatische Absenken: die Spur wird um 70 % leiser. */
+export const DEFAULT_DUCK = 0.7
+
+/** Gültige Stärke des Absenkens (auf 0,05 gerundet) oder `undefined` für „aus“. */
+export function normalizeDuck(duck: number | null | undefined): number | undefined {
+  if (duck === null || duck === undefined || !Number.isFinite(duck)) return undefined
+  const value = Math.round(Math.min(1, Math.max(0, duck)) * 20) / 20
+  return value > 0 ? value : undefined
 }
 
 /** Spur-Eigenschaften ändern; Felder, die die Spur-Art nicht kennt, werden ignoriert. */
@@ -332,8 +344,16 @@ export function updateTrack(doc: TimelineDoc, trackId: string, patch: TrackPatch
   const track = doc.tracks[index]
   const next: Record<string, unknown> = { ...track }
   let changed = false
+  if (patch.duck !== undefined && track.kind === 'audio') {
+    const duck = normalizeDuck(patch.duck)
+    if (duck !== track.duck) {
+      if (duck === undefined) delete next.duck
+      else next.duck = duck
+      changed = true
+    }
+  }
   for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined || !(key in track)) continue
+    if (key === 'duck' || value === undefined || !(key in track)) continue
     if ((track as unknown as Record<string, unknown>)[key] === value) continue
     next[key] = value
     changed = true

@@ -171,6 +171,11 @@ export interface DocAudioTrack {
   muted: boolean
   solo: boolean
   volume: number
+  /**
+   * Automatisches Absenken (0 < duck ≤ 1): Anteil, um den die Spur leiser wird,
+   * solange auf den übrigen Ton-Spuren etwas zu hören ist.
+   */
+  duck?: number
   clips: DocAudioClip[]
 }
 
@@ -351,6 +356,8 @@ export function parseTimelineDoc(
       if (!Array.isArray(raw.clips)) return fail(`${tp}.clips`, 'Clips fehlen.')
       if (kind === 'audio' && !inRange(raw.volume, 0, MAX_GAIN))
         return fail(`${tp}.volume`, `Lautstärke muss zwischen 0 und ${MAX_GAIN} liegen.`)
+      if (kind === 'audio' && raw.duck !== undefined && !inRange(raw.duck, 0, 1))
+        return fail(`${tp}.duck`, 'Absenken muss zwischen 0 und 1 liegen.')
 
       const clips: Array<DocVideoClip | DocAudioClip | DocOverlayClip> = []
       raw.clips.forEach((rc: unknown, ci: number) => {
@@ -592,6 +599,7 @@ export function parseTimelineDoc(
           muted: raw.muted === true,
           solo: raw.solo === true,
           volume: raw.volume as number,
+          ...((raw.duck as number | undefined) ? { duck: raw.duck as number } : {}),
           clips: clips as DocAudioClip[],
         })
       else

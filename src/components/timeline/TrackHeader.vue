@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Track, TrackPatch } from '@/timeline/model'
+import { DEFAULT_DUCK, type Track, type TrackPatch } from '@/timeline/model'
 
 /** Kopf einer Spur: Name (Doppelklick zum Umbenennen) und Schalter der Spur. */
 const props = defineProps<{
@@ -116,6 +116,18 @@ function cancelRename(): void {
         @click="emit('update', { muted: !track.muted })"
       >
         🔇
+      </button>
+      <button
+        v-if="track.kind === 'audio'"
+        type="button"
+        class="mini"
+        data-action="duck"
+        :aria-pressed="track.duck !== undefined"
+        :title="t(track.duck !== undefined ? 'timeline.track.unduck' : 'timeline.track.duck')"
+        :aria-label="t('timeline.track.duckNamed', { name: track.name })"
+        @click="emit('update', { duck: track.duck !== undefined ? null : DEFAULT_DUCK })"
+      >
+        🔉
       </button>
       <button
         v-else

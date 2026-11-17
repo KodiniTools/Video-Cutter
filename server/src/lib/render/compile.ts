@@ -173,6 +173,11 @@ function pieces<C extends { start: Time; duration: Time }>(
 /** Kürzeste Blende, die noch gerendert wird. */
 const MIN_FADE: Time = 20_000
 
+/** Vorlauf des Steuersignals beim automatischen Absenken (Sekunden). */
+const DUCK_PRIME_SEC = 0.3
+/** Kompressor fürs Absenken: spricht ab etwa −34 dB an, lässt über 0,6 s los. */
+const DUCK_COMPRESSOR = 'threshold=0.02:ratio=20:attack=20:release=600'
+
 /**
  * `afade` für das Stück eines Ton-Clips, das bei `offset` (Zeit im Clip)
  * beginnt und `length` lang ist. Die Zeitstempel werden dafür auf die Zeit im
@@ -550,7 +555,9 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
   const audioAll = doc.tracks.filter((t): t is DocAudioTrack => t.kind === 'audio')
   const anySolo = audioAll.some((t) => t.solo)
   const audible = audioAll.filter((t) => (anySolo ? t.solo : !t.muted) && t.volume > 0)
-  const mixes: string[] = []
+  let mixes: string[] = []
+  /** Spur-Mischungen, die bei Ton auf den übrigen Spuren leiser werden. */
+  const ducked = new Map<string, number>()
   for (const track of audible) {
     // Clips ohne Tonspur in der Quelle zählen als Stille.
     const withSound = track.clips.filter((c) => source(c.asset).hasAudio && c.gain > 0)
@@ -588,6 +595,55 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         : `${labels.map((l) => `[${l}]`).join('')}concat=n=${labels.length}:v=0:a=1[${mix}]`,
     )
     mixes.push(mix)
+    if (track.duck) ducked.set(mix, track.duck)
+  }
+
+  // Automatisches Absenken: Die übrigen Spuren steuern einen Kompressor auf der
+  // abgesenkten Spur. Der Anfang des Steuersignals läuft einmal vorweg, damit
+  // der Kompressor an jeder Segmentgrenze der Vorschau schon eingeschwungen ist.
+  const keys = mixes.filter((m) => !ducked.has(m))
+  if (ducked.size > 0 && keys.length > 0) {
+    const prime = num(DUCK_PRIME_SEC)
+    const forKey: string[] = []
+    const forMix = new Map<string, string>()
+    for (const key of keys) {
+      const a = label('keymix')
+      const b = label('keyside')
+      chains.push(`[${key}]asplit=2[${a}][${b}]`)
+      forMix.set(key, a)
+      forKey.push(b)
+    }
+    const bus = label('keybus')
+    chains.push(
+      forKey.length === 1
+        ? `[${forKey[0]}]anull[${bus}]`
+        : `${forKey.map((l) => `[${l}]`).join('')}amix=inputs=${forKey.length}:duration=longest:normalize=0[${bus}]`,
+    )
+    const body = label('keybody')
+    const head = label('keyhead')
+    const primed = label('keyprimed')
+    chains.push(`[${bus}]asplit=2[${body}][${head}]`)
+    chains.push(
+      `[${head}]apad,atrim=duration=${prime},asetpts=PTS-STARTPTS[${head}t]`,
+      `[${head}t][${body}]concat=n=2:v=0:a=1[${primed}]`,
+    )
+    const sides = [...ducked.keys()].map(() => label('side'))
+    chains.push(
+      sides.length === 1
+        ? `[${primed}]anull[${sides[0]}]`
+        : `[${primed}]asplit=${sides.length}${sides.map((l) => `[${l}]`).join('')}`,
+    )
+    let i = 0
+    for (const [mix, amount] of ducked) {
+      const out = label('duck')
+      chains.push(
+        `[${mix}]adelay=${Math.round(DUCK_PRIME_SEC * 1000)}:all=1[${out}in]`,
+        `[${out}in][${sides[i++]}]sidechaincompress=${DUCK_COMPRESSOR}:mix=${num(amount)},` +
+          `atrim=start=${prime},asetpts=PTS-STARTPTS[${out}]`,
+      )
+      forMix.set(mix, out)
+    }
+    mixes = mixes.map((m) => forMix.get(m) ?? m)
   }
 
   if (mixes.length === 0) {
