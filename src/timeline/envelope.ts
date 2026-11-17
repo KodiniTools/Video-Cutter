@@ -1,4 +1,4 @@
-import type { AudioClip, Time, VolumePoint } from './model'
+import { MAX_CLIP_GAIN, type AudioClip, type Time, type VolumePoint } from './model'
 
 /** Faktor der Kurve an einer Quellzeit: linear zwischen den Punkten, außen gehalten. */
 export function envelopeAt(points: readonly VolumePoint[] | undefined, at: Time): number {
@@ -45,4 +45,35 @@ export function envelopeLine(
   }
   line.push([1, envelopeAt(clip.envelope, clipToSource(clip, clip.duration))])
   return line
+}
+
+/** Kleinster Abstand zweier Punkte beim Ziehen (Quellzeit). */
+export const MIN_POINT_GAP: Time = 10_000
+/** Nahe an 100 % rastet ein gezogener Punkt dort ein. */
+const UNITY_SNAP = 0.04
+
+/**
+ * Punkt `index` auf eine neue Stelle im Clip ziehen: `offset` ist die Zeit ab
+ * Clip-Anfang, `gain` der Faktor. Der Punkt bleibt im Clip und zwischen
+ * seinen Nachbarn; nahe 100 % rastet er ein. Liefert die neuen Punkte.
+ */
+export function movePoint(
+  clip: Pick<AudioClip, 'sourceIn' | 'speed' | 'duration' | 'envelope'>,
+  index: number,
+  to: { offset: Time; gain: number },
+): VolumePoint[] {
+  const points = clip.envelope ?? []
+  if (index < 0 || index >= points.length) return points.slice()
+  const offset = Math.min(clip.duration, Math.max(0, to.offset))
+  let at = clipToSource(clip, offset)
+  const prev = points[index - 1]
+  const next = points[index + 1]
+  if (prev) at = Math.max(at, prev.at + MIN_POINT_GAP)
+  if (next) at = Math.min(at, next.at - MIN_POINT_GAP)
+  // Liegen die Nachbarn enger als der Mindestabstand, bleibt die Zeit stehen.
+  if ((prev && at <= prev.at) || (next && at >= next.at)) at = points[index].at
+  let gain = Math.min(MAX_CLIP_GAIN, Math.max(0, to.gain))
+  if (Math.abs(gain - 1) < UNITY_SNAP) gain = 1
+  gain = Math.round(gain * 100) / 100
+  return points.map((p, i) => (i === index ? { at, gain } : p))
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ClipInspector from '@/components/timeline/ClipInspector.vue'
@@ -9,6 +9,8 @@ import {
   clipToSource,
   envelopeAt,
   envelopeLine,
+  MIN_POINT_GAP,
+  movePoint,
   sourceToClip,
   visiblePoints,
 } from '@/timeline/envelope'
@@ -151,6 +153,33 @@ describe('Lautstärke-Kurve: Rechnen', () => {
   })
 })
 
+describe('Lautstärke-Kurve: Punkt ziehen', () => {
+  const clip = {
+    sourceIn: 0,
+    speed: 1,
+    duration: 10 * S,
+    envelope: [...DIP, { at: 6 * S, gain: 1 }],
+  }
+
+  it('setzt Zeit und Wert, 100 % rastet ein', () => {
+    expect(movePoint(clip, 1, { offset: 3 * S, gain: 0.537 })[1]).toEqual({ at: 3 * S, gain: 0.54 })
+    expect(movePoint(clip, 1, { offset: 3 * S, gain: 1.03 })[1].gain).toBe(1)
+    expect(movePoint(clip, 1, { offset: 3 * S, gain: 9 })[1].gain).toBe(2)
+    expect(movePoint(clip, 1, { offset: 3 * S, gain: -1 })[1].gain).toBe(0)
+  })
+
+  it('bleibt zwischen den Nachbarn und im Clip', () => {
+    expect(movePoint(clip, 1, { offset: 0, gain: 0.5 })[1].at).toBe(2 * S + MIN_POINT_GAP)
+    expect(movePoint(clip, 1, { offset: 9 * S, gain: 0.5 })[1].at).toBe(6 * S - MIN_POINT_GAP)
+    expect(movePoint(clip, 2, { offset: 99 * S, gain: 1 })[2].at).toBe(10 * S)
+    expect(movePoint(clip, 0, { offset: -5 * S, gain: 1 })[0].at).toBe(0)
+    // Getrimmter Clip mit Tempo 2: Clip-Zeit 1 s liegt bei 4 s der Quelle.
+    const fast = { sourceIn: 2 * S, speed: 2, duration: 3 * S, envelope: [{ at: 3 * S, gain: 1 }] }
+    expect(movePoint(fast, 0, { offset: S, gain: 0.5 })).toEqual([{ at: 4 * S, gain: 0.5 }])
+    expect(movePoint(clip, 7, { offset: 0, gain: 1 })).toEqual(clip.envelope)
+  })
+})
+
 describe('Lautstärke-Kurve im Editor', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
@@ -212,6 +241,60 @@ describe('Lautstärke-Kurve im Editor', () => {
     const wrapper = mount(ClipInspector, { global: { plugins: [i18n] } })
     expect(wrapper.findAll('[data-testid=clip-envelope-points] li')).toHaveLength(1)
     expect(wrapper.get('[data-testid=clip-envelope-hidden]').text()).toContain('Ein Punkt')
+  })
+
+  it('Punkte auf dem markierten Clip ziehen: ein Rückgängig-Schritt, Doppelklick entfernt', async () => {
+    const store = useTimelineStore()
+    store.load(oneClip())
+    const clip = () => sounds(store.doc)[0]
+    store.setClipEnvelope(clip().id, DIP)
+    const mountClip = (selected: boolean) =>
+      mount(TimelineClip, {
+        props: { clip: clip(), zoom: 100, height: 48, selected },
+        global: { plugins: [i18n] },
+        attachTo: document.body,
+      })
+    const plain = mountClip(false)
+    expect(plain.findAll('.env-point')).toHaveLength(0)
+    plain.unmount()
+
+    const w = mountClip(true)
+    vi.spyOn(w.element, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      top: 200,
+      width: 1000,
+      height: 40,
+      right: 1100,
+      bottom: 240,
+      x: 100,
+      y: 200,
+      toJSON: () => ({}),
+    })
+    const dots = w.findAll('.env-point')
+    expect(dots.map((d) => d.attributes('style'))).toEqual([
+      expect.stringContaining('left: 20%'),
+      expect.stringContaining('left: 40%'),
+    ])
+    const ev = (type: string, x: number, y: number) =>
+      new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y })
+    const dot = dots[1].element
+    dot.dispatchEvent(ev('pointerdown', 500, 236))
+    // 5 s im Clip, Höhe 25 % von oben = Faktor 1,5
+    dot.dispatchEvent(ev('pointermove', 550, 205))
+    dot.dispatchEvent(ev('pointermove', 600, 210))
+    dot.dispatchEvent(ev('pointerup', 600, 210))
+    expect(clip().envelope).toEqual([
+      { at: 2 * S, gain: 1 },
+      { at: 5 * S, gain: 1.5 },
+    ])
+    store.undo()
+    expect(clip().envelope).toEqual(DIP)
+    store.redo()
+
+    await w.setProps({ clip: clip() })
+    await w.findAll('.env-point')[0].trigger('dblclick')
+    expect(clip().envelope).toEqual([{ at: 5 * S, gain: 1.5 }])
+    w.unmount()
   })
 
   it('zeichnet die Linie auf dem Ton-Clip', () => {

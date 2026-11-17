@@ -362,7 +362,8 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   `envelope` tragen, bis zu 32 Punkte `{ at, gain }` (Quellzeit in µs, Faktor
   0 … 2), dazwischen linear, außen gehalten; wirkt zusätzlich zu `gain`
   (`setClipEnvelope`, `src/timeline/envelope.ts`, `EnvelopeEditor.vue` im Feld
-  „Clip“, Linie auf dem Clip). Die Zeiten hängen an der Quelle, darum bleibt
+  „Clip“, Linie auf dem Clip; am markierten Clip lassen sich die Punkte
+  ziehen, `movePoint`, Doppelklick entfernt). Die Zeiten hängen an der Quelle, darum bleibt
   die Kurve beim Teilen, Trimmen und bei anderem Tempo an derselben Stelle
   des Tons. Der Compiler setzt `volume` mit einem stückweise linearen
   Ausdruck vor das Tempo (`envelopeFilter` in `compile.ts`). Verlustfrei ist
