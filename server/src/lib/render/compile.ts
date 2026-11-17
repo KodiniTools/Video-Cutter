@@ -198,11 +198,13 @@ export function envelopeFilter(points: readonly DocVolumePoint[], from: number):
 /**
  * Ausdruck für einen Wert, der sich zwischen Stützpunkten gleichmäßig ändert;
  * davor und dahinter gilt der erste bzw. letzte Wert. `T` ist der Ausdruck für
- * die Zeit in Sekunden, `points` sind nach Zeit aufsteigend.
+ * die Zeit in Sekunden, `points` sind nach Zeit aufsteigend. Mit `smooth`
+ * läuft jeder Abschnitt sanft an und bremst ab (3f² − 2f³).
  */
 export function piecewiseExpr(
   points: ReadonlyArray<{ at: number; value: number }>,
   T: string,
+  smooth = false,
 ): string {
   if (points.length === 0) return '0'
   let expr = num(points[points.length - 1].value)
@@ -213,8 +215,15 @@ export function piecewiseExpr(
       expr = `if(lt(${T},${num(b.at)}),${num(a.value)},${expr})`
       continue
     }
-    const slope = num((b.value - a.value) / (b.at - a.at))
-    expr = `if(lt(${T},${num(b.at)}),${num(a.value)}+(${slope})*(${T}-${num(a.at)}),${expr})`
+    let part: string
+    if (smooth) {
+      const f = `((${T}-${num(a.at)})/${num(b.at - a.at)})`
+      part = `${num(a.value)}+(${num(b.value - a.value)})*${f}*${f}*(3-2*${f})`
+    } else {
+      const slope = num((b.value - a.value) / (b.at - a.at))
+      part = `${num(a.value)}+(${slope})*(${T}-${num(a.at)})`
+    }
+    expr = `if(lt(${T},${num(b.at)}),${part},${expr})`
   }
   return `if(lt(${T},${num(points[0].at)}),${num(points[0].value)},${expr})`
 }
@@ -388,6 +397,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           piecewiseExpr(
             keys.map((k) => ({ at: k.at / MICROS_PER_SECOND, value: pick(k) })),
             sourceTime(t),
+            l.ease === 'smooth',
           )
         const S = curve((k) => k.scale)
         const pip = label('pip')

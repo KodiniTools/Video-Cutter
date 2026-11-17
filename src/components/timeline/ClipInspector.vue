@@ -316,6 +316,18 @@ const canKey = computed(
   () => !!video.value && playheadOnClip.value && canAddKey(video.value, layoutOffset.value),
 )
 
+const layoutSmooth = computed(() => video.value?.layout?.ease === 'smooth')
+
+/** Bewegung zwischen den Keyframes: weich oder gleichmäßig. */
+function setLayoutSmooth(e: Event): void {
+  commit()
+  const clip = video.value
+  if (!clip?.layout?.keys?.length) return
+  const { ease: _ease, ...rest } = clip.layout
+  const smooth = (e.target as HTMLInputElement).checked
+  store.setClipLayout(clip.id, smooth ? { ...rest, ease: 'smooth' } : rest)
+}
+
 function addLayoutKey(): void {
   commit()
   const clip = video.value
@@ -629,6 +641,15 @@ onBeforeUnmount(commit)
             </button>
           </li>
         </ul>
+        <label v-if="video.layout?.keys?.length" class="check">
+          <input
+            type="checkbox"
+            :checked="layoutSmooth"
+            data-testid="clip-layout-ease"
+            @change="setLayoutSmooth"
+          />
+          <span>{{ t('timeline.clipInspector.keys.smooth') }}</span>
+        </label>
         <p v-if="hiddenKeys > 0" class="hint" data-testid="clip-layout-keys-hidden">
           {{ t('timeline.clipInspector.keys.hidden', hiddenKeys) }}
         </p>

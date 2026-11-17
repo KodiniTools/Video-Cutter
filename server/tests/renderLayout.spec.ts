@@ -140,6 +140,32 @@ describe('Keyframes der Lage: Prüfung und Filter', () => {
     expect(steady.filter).not.toContain('geq=')
   })
 
+  it('weiche Bewegung: nur mit Keyframes, Ausdruck läuft sanft an und bremst ab', () => {
+    const smooth = parsed(rawDoc({ layout: { ...keyed(LEFT_TO_RIGHT).layout, ease: 'smooth' } }))
+    expect(smooth.tracks[0].clips[0]).toMatchObject({ layout: { ease: 'smooth' } })
+    const fixed = parsed(
+      rawDoc({ layout: { x: 0.5, y: 0.5, scale: 0.5, opacity: 1, ease: 'smooth' } }),
+    )
+    expect(fixed.tracks[0].clips[0]).not.toHaveProperty('layout.ease')
+    const bad = parseTimelineDoc(
+      rawDoc({ layout: { ...keyed(LEFT_TO_RIGHT).layout, ease: 'bounce' } }),
+    )
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.errors[0].path).toBe('tracks[0].clips[0].layout.ease')
+    const points = [
+      { at: 1, value: 0 },
+      { at: 3, value: 1 },
+    ]
+    expect(piecewiseExpr(points, 'T', true)).toBe(
+      'if(lt(T,1),0,if(lt(T,3),0+(1)*((T-1)/2)*((T-1)/2)*(3-2*((T-1)/2)),1))',
+    )
+    const c = compileTimeline(smooth, { sources })
+    expect(c.filter).toContain('*(3-2*((')
+    expect(compileTimeline(parsed(rawDoc(keyed(LEFT_TO_RIGHT))), { sources }).filter).not.toContain(
+      '*(3-2*((',
+    )
+  })
+
   it('lehnt ungültige Keyframes ab', () => {
     const bad = [
       'x',
@@ -310,6 +336,27 @@ describe('Bild-in-Bild mit echtem FFmpeg', () => {
     })
     expect(near(pixelAt(part, 0, 316, 176), [128, 0, 128], 50)).toBe(true)
     expect(near(pixelAt(part, 24, 316, 176), BLUE, 60)).toBe(true)
+  })
+
+  it('weiche Bewegung ist nach einem Viertel der Zeit noch nicht so weit wie die gleichmäßige', () => {
+    // Kleines Bild (64×36) wandert in 2 s von ganz links nach ganz rechts.
+    const keys = [
+      { at: 0, x: 0, y: 0.5, scale: 0.1 },
+      { at: s(2), x: 1, y: 0.5, scale: 0.1 },
+    ]
+    const linear = render(parsed(rawDoc(keyed(keys))), 'ease-linear.mp4')
+    const smooth = render(
+      parsed(rawDoc({ layout: { ...keyed(keys).layout, ease: 'smooth' } })),
+      'ease-smooth.mp4',
+    )
+    // Nach 0,5 s: gleichmäßig bei 144…208, weich erst bei 90…154.
+    expect(near(pixelAt(linear, 12, 172, 176), BLUE)).toBe(true)
+    expect(near(pixelAt(linear, 12, 100, 176), RED)).toBe(true)
+    expect(near(pixelAt(smooth, 12, 110, 176), BLUE)).toBe(true)
+    expect(near(pixelAt(smooth, 12, 180, 176), RED)).toBe(true)
+    // In der Mitte der Zeit liegen beide gleich.
+    expect(near(pixelAt(linear, 25, 316, 176), BLUE)).toBe(true)
+    expect(near(pixelAt(smooth, 25, 316, 176), BLUE)).toBe(true)
   })
 
   it('ein Abschnitt der Vorschau zeigt dieselbe Lage wie der ganze Film', () => {

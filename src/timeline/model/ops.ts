@@ -203,6 +203,7 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
       return 'invalid-settings'
     }
     if (l.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+    if (l.ease !== undefined && l.ease !== 'smooth') return 'invalid-settings'
     if (l.keys !== undefined) {
       if (!Array.isArray(l.keys) || l.keys.length === 0 || l.keys.length > MAX_LAYOUT_KEYS)
         return 'invalid-settings'
@@ -795,7 +796,14 @@ export function normalizeLayout(layout: ClipLayout | null | undefined): ClipLayo
   const keys = [...byTime.values()].sort((a, b) => a.at - b.at).slice(0, MAX_LAYOUT_KEYS)
   if (keys.length > 0) {
     const first = keys[0]
-    return { x: first.x, y: first.y, scale: first.scale, opacity: first.opacity ?? o, keys }
+    return {
+      x: first.x,
+      y: first.y,
+      scale: first.scale,
+      opacity: first.opacity ?? o,
+      keys,
+      ...(layout.ease === 'smooth' ? { ease: 'smooth' as const } : {}),
+    }
   }
   const s = size(scale)
   if (s === 1 && o === 1) return null
