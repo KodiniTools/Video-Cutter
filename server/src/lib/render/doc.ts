@@ -96,6 +96,8 @@ export interface DocLayout {
    * erste bzw. letzte. Die Werte oben sind dann die des ersten Keyframes.
    */
   keys?: DocLayoutKey[]
+  /** `smooth`: Zwischen den Keyframes sanft anlaufen und abbremsen statt gleichmäßig. */
+  ease?: 'smooth'
 }
 
 /** Keyframe der Lage: `at` ist die Zeit in der Quelle. */
@@ -656,6 +658,8 @@ export function parseTimelineDoc(
             }
           }
           // Ein einzelner Keyframe bewegt nichts: Er gilt als feste Lage.
+          if (l.ease !== undefined && l.ease !== null && l.ease !== 'smooth')
+            return fail(`${cp}.layout.ease`, 'Ungültige Bewegung.')
           const fixed = keys.length > 0 ? keys[0] : (l as unknown as DocLayout)
           if (keys.length < 2) keys = []
           // Volle Größe und Deckkraft ist dasselbe wie keine Lage.
@@ -666,6 +670,7 @@ export function parseTimelineDoc(
               scale: fixed.scale,
               opacity: fixed.opacity,
               ...(keys.length > 0 ? { keys } : {}),
+              ...(keys.length > 0 && l.ease === 'smooth' ? { ease: 'smooth' as const } : {}),
             }
         }
         if (rc.hold !== undefined && typeof rc.hold !== 'boolean')

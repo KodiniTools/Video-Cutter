@@ -386,7 +386,9 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   auf einer durchsichtigen Fläche statt `pad` (`piecewiseExpr`, `fitSteps` in
   `compile.ts`). Wechselnde Deckkraft multipliziert die Transparenz je Bild
   mit einer Maske (`geq` auf 16×16 Punkten, vergrößert, `blend` + `alphamerge`).
-  Features `timelineLayoutKeys`, `timelineLayoutOpacityKeys`. Ein älteres Backend zeigt die
+  `ClipLayout.ease: 'smooth'` (Schalter „Weiche Bewegung“) lässt jeden Abschnitt
+  sanft anlaufen und abbremsen (3f² − 2f³, im Editor und auf dem Server gleich).
+  Features `timelineLayoutKeys`, `timelineLayoutOpacityKeys`, `timelineLayoutEase`. Ein älteres Backend zeigt die
   Lage des ersten Keyframes.
 - **Sprachaufnahme** (nur Frontend): Knopf „🎙 Sprachaufnahme“ in der
   Medienliste (`VoiceRecorder.vue`). Der Browser nimmt mit dem Mikrofon auf

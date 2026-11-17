@@ -102,6 +102,8 @@ export interface ClipLayout {
    * Die Werte oben sind dann die des ersten Keyframes.
    */
   keys?: LayoutKey[]
+  /** `smooth`: Zwischen den Keyframes sanft anlaufen und abbremsen statt gleichmäßig. */
+  ease?: 'smooth'
 }
 
 /**

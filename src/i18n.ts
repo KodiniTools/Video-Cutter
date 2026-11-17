@@ -762,6 +762,7 @@ const messages = {
           add: '◆ Keyframe am Abspielkopf',
           addOutside: 'Stelle den Abspielkopf auf den Clip, um dort einen Keyframe zu setzen.',
           seek: 'Zum Keyframe bei {time} springen',
+          smooth: 'Weiche Bewegung (sanft anlaufen und abbremsen)',
           remove: 'Keyframe bei {time} entfernen',
           hidden:
             'Kein Keyframe liegt außerhalb des Clips. | Ein Keyframe liegt außerhalb des Clips und wirkt weiter. | {n} Keyframes liegen außerhalb des Clips und wirken weiter.',
@@ -1748,6 +1749,7 @@ const messages = {
           add: '◆ Keyframe at the playhead',
           addOutside: 'Move the playhead onto the clip to set a keyframe there.',
           seek: 'Jump to the keyframe at {time}',
+          smooth: 'Smooth motion (ease in and out)',
           remove: 'Remove the keyframe at {time}',
           hidden:
             'No keyframe lies outside the clip. | One keyframe lies outside the clip and still applies. | {n} keyframes lie outside the clip and still apply.',

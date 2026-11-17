@@ -19,9 +19,15 @@ export const KEY_SNAP: Time = 20_000
 
 /**
  * Lage an einer Quellzeit: gleichmäßig zwischen den Keyframes, außen gehalten.
- * `opacity` ist die Deckkraft des Clips für Keyframes ohne eigene.
+ * `opacity` ist die Deckkraft des Clips für Keyframes ohne eigene; `smooth`
+ * lässt jeden Abschnitt sanft anlaufen und abbremsen.
  */
-export function motionAt(keys: readonly LayoutKey[], at: Time, opacity = 1): LayoutMotion {
+export function motionAt(
+  keys: readonly LayoutKey[],
+  at: Time,
+  opacity = 1,
+  smooth = false,
+): LayoutMotion {
   const pick = (k: LayoutKey): LayoutMotion => ({
     x: k.x,
     y: k.y,
@@ -33,7 +39,9 @@ export function motionAt(keys: readonly LayoutKey[], at: Time, opacity = 1): Lay
     const a = pick(keys[i - 1])
     const b = pick(keys[i])
     if (at < keys[i].at) {
-      const f = (at - keys[i - 1].at) / (keys[i].at - keys[i - 1].at)
+      const linear = (at - keys[i - 1].at) / (keys[i].at - keys[i - 1].at)
+      // Weich: sanft anlaufen und abbremsen (3f² − 2f³), wie auf dem Server.
+      const f = smooth ? linear * linear * (3 - 2 * linear) : linear
       const mix = (from: number, to: number) => Math.round((from + (to - from) * f) * 10000) / 10000
       return {
         x: mix(a.x, b.x),
@@ -51,7 +59,7 @@ export function layoutAt(clip: KeyedClip, offset: Time): ClipLayout {
   const layout = clip.layout
   if (!layout) return FULL_LAYOUT
   if (!layout.keys?.length) return layout
-  return motionAt(layout.keys, clipToSource(clip, offset), layout.opacity)
+  return motionAt(layout.keys, clipToSource(clip, offset), layout.opacity, layout.ease === 'smooth')
 }
 
 /** Index des Keyframes an dieser Stelle des Clips, sonst −1. */
@@ -96,7 +104,7 @@ export function withKeyAt(
   if (index >= 0) keys[index] = key
   else if (keys.length < MAX_LAYOUT_KEYS) keys.push(key)
   keys.sort((a, b) => a.at - b.at)
-  return { ...now, keys }
+  return { ...now, keys, ...(clip.layout?.ease ? { ease: clip.layout.ease } : {}) }
 }
 
 /**

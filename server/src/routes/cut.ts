@@ -129,6 +129,7 @@ export const SERVER_FEATURES = [
   'timelineChapters',
   'timelineLayoutKeys',
   'timelineLayoutOpacityKeys',
+  'timelineLayoutEase',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

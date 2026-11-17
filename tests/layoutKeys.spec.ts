@@ -165,6 +165,25 @@ describe('layoutKeys', () => {
     expect(motionAt(old, 3 * S, 0.6).opacity).toBe(0.6)
   })
 
+  it('weiche Bewegung: langsamer Anfang und Schluss, Mitte gleich', () => {
+    expect(motionAt([A, B], 3 * S, 1, true).x).toBe(0.2938)
+    expect(motionAt([A, B], 4 * S, 1, true).x).toBe(0.5)
+    expect(motionAt([A, B], 5 * S, 1, true).x).toBe(0.7063)
+    const clip = clipWith([A, B])
+    const smooth = { ...clip, layout: { ...clip.layout!, ease: 'smooth' as const } }
+    expect(layoutAt(smooth, 3 * S).x).toBe(0.2938)
+    // Die Einstellung bleibt beim Setzen und Entfernen von Keyframes erhalten.
+    expect(withKeyAt(smooth, 8 * S).ease).toBe('smooth')
+    expect(withLayoutChange(smooth, 8 * S, { x: 0 }).ease).toBe('smooth')
+    expect(withoutKey(smooth, 0)?.ease).toBe('smooth')
+    expect(withKeyAt(clip, 8 * S)).not.toHaveProperty('ease')
+    expect(normalizeLayout(smooth.layout)?.ease).toBe('smooth')
+    // Ohne Keyframes gibt es nichts zu glätten.
+    expect(
+      normalizeLayout({ x: 0.5, y: 0.5, scale: 0.5, opacity: 1, ease: 'smooth' }),
+    ).not.toHaveProperty('ease')
+  })
+
   it('layoutAt: ohne Lage voll, ohne Keyframes fest, sonst Wert an der Stelle samt Deckkraft', () => {
     expect(layoutAt({ sourceIn: 0, speed: 1, duration: S }, 0)).toBe(FULL_LAYOUT)
     const fixed = { x: 0.1, y: 0.2, scale: 0.3, opacity: 0.4 }
@@ -255,6 +274,18 @@ describe('ClipInspector: Keyframes', () => {
     expect(layout()?.keys).toEqual([key(2, 0.2, 0.5, 0.25), key(6, 0.2, 0.5, 0.75, 0)])
     await opacity.setValue('100')
     await opacity.trigger('change')
+
+    // Weiche Bewegung ein und wieder aus.
+    const ease = wrapper.get('[data-testid=clip-layout-ease]')
+    await ease.setValue(true)
+    expect(layout()?.ease).toBe('smooth')
+    store.seek(3 * S)
+    await wrapper.vm.$nextTick()
+    expect(
+      (wrapper.get('[data-testid=clip-layout-scale-num]').element as HTMLInputElement).value,
+    ).toBe('33')
+    await ease.setValue(false)
+    expect(layout()).not.toHaveProperty('ease')
 
     await wrapper.get('[data-testid=clip-layout-key-1]').trigger('click')
     expect(store.playhead).toBe(6 * S)
