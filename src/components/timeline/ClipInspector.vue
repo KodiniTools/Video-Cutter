@@ -25,6 +25,16 @@ import {
   type FadeCurve,
   type VideoClip,
 } from '@/timeline/model'
+import {
+  canAddKey,
+  FULL_LAYOUT,
+  keyIndexAt,
+  layoutAt,
+  visibleKeys,
+  withKeyAt,
+  withLayoutChange,
+  withoutKey,
+} from '@/timeline/layoutKeys'
 
 /**
  * Einstellungen des markierten Video- bzw. Ton-Clips: Tempo (gilt für Bild
@@ -229,8 +239,15 @@ function resetColor(): void {
 
 const LAYOUT_FIELDS = ['scale', 'opacity', 'x', 'y'] as const
 type LayoutField = (typeof LAYOUT_FIELDS)[number]
-const FULL_LAYOUT: ClipLayout = { x: 0.5, y: 0.5, scale: 1, opacity: 1 }
-const layout = computed<ClipLayout>(() => video.value?.layout ?? FULL_LAYOUT)
+/** Zeit im Clip, an der der Abspielkopf steht (in den Clip geholt). */
+const layoutOffset = computed(() => {
+  const clip = video.value
+  return clip ? Math.min(clip.duration, Math.max(0, store.playhead - clip.start)) : 0
+})
+/** Lage am Abspielkopf (mit Keyframes: der Wert an dieser Stelle). */
+const layout = computed<ClipLayout>(() =>
+  video.value ? layoutAt(video.value, layoutOffset.value) : FULL_LAYOUT,
+)
 const hasLayout = computed(() => video.value?.layout !== undefined)
 const layoutMin = (field: LayoutField) => (field === 'scale' ? MIN_LAYOUT_SCALE * 100 : 0)
 /** In voller Größe gibt es nichts zu verschieben. */
@@ -245,7 +262,7 @@ function onLayout(field: LayoutField, e: Event): void {
     editing = true
   }
   const value = Number((e.target as HTMLInputElement).value) / 100
-  store.setClipLayout(clip.id, { ...layout.value, [field]: value })
+  store.setClipLayout(clip.id, withLayoutChange(clip, layoutOffset.value, { [field]: value }))
 }
 
 /** Abstand zum Bildrand beim Legen in eine Ecke (Anteil des Projektformats). */
@@ -260,17 +277,59 @@ function toCorner(corner: Corner): void {
   if (!clip) return
   const scale = layout.value.scale >= 1 ? 0.33 : layout.value.scale
   const near = CORNER_MARGIN + scale / 2
-  store.setClipLayout(clip.id, {
-    ...layout.value,
-    scale,
-    x: corner === 'topLeft' || corner === 'bottomLeft' ? near : 1 - near,
-    y: corner === 'topLeft' || corner === 'topRight' ? near : 1 - near,
-  })
+  store.setClipLayout(
+    clip.id,
+    withLayoutChange(clip, layoutOffset.value, {
+      scale,
+      x: corner === 'topLeft' || corner === 'bottomLeft' ? near : 1 - near,
+      y: corner === 'topLeft' || corner === 'topRight' ? near : 1 - near,
+    }),
+  )
 }
 
 function resetLayout(): void {
   commit()
   if (video.value) store.setClipLayout(video.value.id, null)
+}
+
+// --- Keyframes der Lage ---------------------------------------------------------
+
+/** Steht der Abspielkopf auf dem Clip? Nur dort lässt sich ein Keyframe setzen. */
+const playheadOnClip = computed(() => {
+  const clip = video.value
+  return !!clip && store.playhead >= clip.start && store.playhead <= clip.start + clip.duration
+})
+const layoutKeys = computed(() => {
+  const clip = video.value
+  if (!clip) return []
+  const current = keyIndexAt(clip, layoutOffset.value)
+  return visibleKeys(clip).map((k) => ({
+    ...k,
+    time: formatTimeMs(timeToSeconds(k.offset)),
+    current: playheadOnClip.value && k.index === current,
+  }))
+})
+const hiddenKeys = computed(
+  () => (video.value?.layout?.keys?.length ?? 0) - layoutKeys.value.length,
+)
+const canKey = computed(
+  () => !!video.value && playheadOnClip.value && canAddKey(video.value, layoutOffset.value),
+)
+
+function addLayoutKey(): void {
+  commit()
+  const clip = video.value
+  if (clip && canKey.value) store.setClipLayout(clip.id, withKeyAt(clip, layoutOffset.value))
+}
+
+function seekLayoutKey(offset: number): void {
+  if (video.value) store.seek(video.value.start + offset)
+}
+
+function removeLayoutKey(index: number): void {
+  commit()
+  const clip = video.value
+  if (clip) store.setClipLayout(clip.id, withoutKey(clip, index))
 }
 
 // --- Übergang am Anfang ------------------------------------------------------
@@ -535,6 +594,46 @@ onBeforeUnmount(commit)
           <span :class="['dot', corner]" aria-hidden="true"></span>
         </button>
       </div>
+      <div class="keys" data-testid="clip-layout-keys">
+        <button
+          type="button"
+          class="plain"
+          :disabled="!canKey"
+          :title="playheadOnClip ? undefined : t('timeline.clipInspector.keys.addOutside')"
+          data-testid="clip-layout-key-add"
+          @click="addLayoutKey"
+        >
+          {{ t('timeline.clipInspector.keys.add') }}
+        </button>
+        <ul v-if="layoutKeys.length" class="key-list">
+          <li v-for="key in layoutKeys" :key="key.index" :class="{ current: key.current }">
+            <button
+              type="button"
+              class="key-time"
+              :title="t('timeline.clipInspector.keys.seek', { time: key.time })"
+              :aria-current="key.current ? 'true' : undefined"
+              :data-testid="`clip-layout-key-${key.index}`"
+              @click="seekLayoutKey(key.offset)"
+            >
+              ◆ {{ key.time }}
+            </button>
+            <button
+              type="button"
+              class="key-remove"
+              :aria-label="t('timeline.clipInspector.keys.remove', { time: key.time })"
+              :title="t('timeline.clipInspector.keys.remove', { time: key.time })"
+              :data-testid="`clip-layout-key-remove-${key.index}`"
+              @click="removeLayoutKey(key.index)"
+            >
+              ✕
+            </button>
+          </li>
+        </ul>
+        <p v-if="hiddenKeys > 0" class="hint" data-testid="clip-layout-keys-hidden">
+          {{ t('timeline.clipInspector.keys.hidden', hiddenKeys) }}
+        </p>
+        <p class="hint">{{ t('timeline.clipInspector.keys.hint') }}</p>
+      </div>
       <button
         v-if="hasLayout"
         type="button"
@@ -700,5 +799,52 @@ input:focus-visible {
 }
 .hint.warn {
   color: var(--ds-danger);
+}
+.keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+}
+.key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.key-list li {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-surface-1);
+}
+.key-list li.current {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+.key-time,
+.key-remove {
+  height: var(--ds-control-sm);
+  border: 0;
+  background: transparent;
+  color: var(--ds-text);
+  font-size: var(--ds-text-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.key-time {
+  padding: 0 var(--ds-space-1) 0 var(--ds-space-2);
+}
+.key-remove {
+  padding: 0 var(--ds-space-2) 0 var(--ds-space-1);
+  color: var(--ds-text-2);
+}
+.key-time:focus-visible,
+.key-remove:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+  border-radius: var(--ds-radius-full);
 }
 </style>

@@ -8,6 +8,7 @@ import {
   FADE_CURVES,
   type ClipColor,
   type ClipLayout,
+  type LayoutKey,
   type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
   type AssetRef,
@@ -202,6 +203,17 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
       return 'invalid-settings'
     }
     if (l.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+    if (l.keys !== undefined) {
+      if (!Array.isArray(l.keys) || l.keys.length === 0 || l.keys.length > MAX_LAYOUT_KEYS)
+        return 'invalid-settings'
+      for (let i = 0; i < l.keys.length; i++) {
+        const k = l.keys[i]
+        if (!k || !isTime(k.at) || !unit(k.x) || !unit(k.y) || !unit(k.scale))
+          return 'invalid-settings'
+        if (k.scale < MIN_LAYOUT_SCALE) return 'invalid-settings'
+        if (i > 0 && k.at <= l.keys[i - 1].at) return 'invalid-settings'
+      }
+    }
   }
   if ((clip.kind === 'video' || clip.kind === 'still') && clip.color !== undefined) {
     const c = clip.color
@@ -751,15 +763,33 @@ export function setClipColor(doc: TimelineDoc, clipId: string, color: ClipColor 
 /** Kleinste Größe eines Clips im Bild (Anteil des Projektformats). */
 export const MIN_LAYOUT_SCALE = 0.05
 
-/** Lage in gültige Grenzen bringen; volle Größe und Deckkraft (oder Ungültiges) ergibt `null`. */
+/** Höchstzahl der Keyframes einer Lage. */
+export const MAX_LAYOUT_KEYS = 32
+
+/**
+ * Lage in gültige Grenzen bringen; volle Größe und Deckkraft ohne Keyframes
+ * (oder Ungültiges) ergibt `null`. Keyframes werden sortiert, je Zeit bleibt
+ * der letzte; mit Keyframes tragen `x`, `y`, `scale` die Werte des ersten.
+ */
 export function normalizeLayout(layout: ClipLayout | null | undefined): ClipLayout | null {
   if (!layout) return null
   const { x, y, scale, opacity } = layout
   if (![x, y, scale, opacity].every((v) => Number.isFinite(v))) return null
   const round = (v: number) => Math.round(v * 10000) / 10000
   const unit = (v: number) => round(Math.min(1, Math.max(0, v)))
-  const s = round(Math.min(1, Math.max(MIN_LAYOUT_SCALE, scale)))
+  const size = (v: number) => round(Math.min(1, Math.max(MIN_LAYOUT_SCALE, v)))
   const o = unit(opacity)
+  const byTime = new Map<Time, LayoutKey>()
+  for (const k of Array.isArray(layout.keys) ? layout.keys : []) {
+    if (!k || !isTime(k.at) || ![k.x, k.y, k.scale].every((v) => Number.isFinite(v))) continue
+    byTime.set(k.at, { at: k.at, x: unit(k.x), y: unit(k.y), scale: size(k.scale) })
+  }
+  const keys = [...byTime.values()].sort((a, b) => a.at - b.at).slice(0, MAX_LAYOUT_KEYS)
+  if (keys.length > 0) {
+    const first = keys[0]
+    return { x: first.x, y: first.y, scale: first.scale, opacity: o, keys }
+  }
+  const s = size(scale)
   if (s === 1 && o === 1) return null
   return { x: unit(x), y: unit(y), scale: s, opacity: o }
 }
@@ -780,17 +810,8 @@ export function setClipLayout(
   if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
   const next = normalizeLayout(layout)
   const before = normalizeLayout(clip.layout)
-  if (
-    (next === null && before === null) ||
-    (next !== null &&
-      before !== null &&
-      next.x === before.x &&
-      next.y === before.y &&
-      next.scale === before.scale &&
-      next.opacity === before.opacity)
-  ) {
-    return ok(doc)
-  }
+  // Normalisiert haben beide dieselbe Feldfolge: Textvergleich genügt.
+  if (JSON.stringify(next) === JSON.stringify(before)) return ok(doc)
   const changed: Clip = { ...clip }
   if (next) changed.layout = next
   else delete changed.layout

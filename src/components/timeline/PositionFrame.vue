@@ -5,6 +5,7 @@ import { renderGraphic } from '@/lib/graphicOverlay'
 import { DEFAULT_TEXT_STYLE, fontPreview, type TextFont } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic, isDrawable } from '@/timeline/graphics'
+import { layoutAt, withLayoutChange } from '@/timeline/layoutKeys'
 import { clipEnd, MIN_LAYOUT_SCALE, type VideoClip } from '@/timeline/model'
 import {
   containRect,
@@ -44,8 +45,19 @@ const video = computed<VideoClip | null>(() => {
   if (other && (other.kind !== 'audio' || !v.linkGroup || other.linkGroup !== v.linkGroup)) {
     return null
   }
-  return v.layout && v.layout.scale < 1 ? v : null
+  if (!v.layout) return null
+  // Mit Keyframes zählt die Größe am Abspielkopf; der Rahmen bleibt dann auch
+  // bei voller Größe, damit sich jeder Keyframe wieder verkleinern lässt.
+  return v.layout.keys?.length || v.layout.scale < 1 ? v : null
 })
+
+/** Zeit im Clip, an der der Abspielkopf steht (in den Clip geholt). */
+const videoOffset = computed(() => {
+  const v = video.value
+  return v ? Math.min(v.duration, Math.max(0, store.playhead - v.start)) : 0
+})
+/** Lage des verkleinerten Clips am Abspielkopf. */
+const videoLayout = computed(() => (video.value ? layoutAt(video.value, videoOffset.value) : null))
 
 /** Der Clip auf einer Ebenen-Spur, wenn genau einer markiert ist; sonst der verkleinerte Video-Clip. */
 const clip = computed(() => {
@@ -83,7 +95,8 @@ const videoBox = computed(() => {
   const { width, height } = store.doc.settings
   const srcW = (asset?.width ?? 0) * (v.crop?.width ?? 1)
   const srcH = (asset?.height ?? 0) * (v.crop?.height ?? 1)
-  const layout = { ...v.layout, scale: resize.value?.scale ?? v.layout.scale }
+  const at = videoLayout.value ?? v.layout
+  const layout = { ...at, scale: resize.value?.scale ?? at.scale }
   // Ohne bekannte Größe der Quelle: wie das Projektformat.
   return layoutBox(layout, srcW || width, srcH || height, width, height)
 })
@@ -184,10 +197,10 @@ watch([drawn, ghost, () => !!drag.value], () => {
 function commit(to: Point): void {
   const c = clip.value
   if (!c) return
-  if (video.value?.layout) {
+  if (video.value && videoLayout.value) {
     const at = tidyPoint(inside(to))
-    if (at.x === video.value.layout.x && at.y === video.value.layout.y) return
-    store.setClipLayout(video.value.id, { ...video.value.layout, ...at })
+    if (at.x === videoLayout.value.x && at.y === videoLayout.value.y) return
+    store.setClipLayout(video.value.id, withLayoutChange(video.value, videoOffset.value, at))
     return
   }
   if (to.x === saved.value.x && to.y === saved.value.y) return
@@ -209,13 +222,14 @@ function distance(event: PointerEvent): number {
 
 function onResizeDown(event: PointerEvent): void {
   const v = video.value
-  if (event.button !== 0 || !v?.layout) return
+  const now = videoLayout.value
+  if (event.button !== 0 || !v || !now) return
   event.preventDefault()
   event.stopPropagation()
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
   store.playing = false
   const from = distance(event)
-  if (from > 0) resize.value = { from: from / v.layout.scale, scale: v.layout.scale }
+  if (from > 0) resize.value = { from: from / now.scale, scale: now.scale }
 }
 
 function onResizeMove(event: PointerEvent): void {
@@ -232,8 +246,8 @@ function onResizeUp(event: PointerEvent): void {
   if (!r) return
   event.stopPropagation()
   resize.value = null
-  if (v?.layout && r.scale !== v.layout.scale) {
-    store.setClipLayout(v.id, { ...v.layout, scale: r.scale })
+  if (v && videoLayout.value && r.scale !== videoLayout.value.scale) {
+    store.setClipLayout(v.id, withLayoutChange(v, videoOffset.value, { scale: r.scale }))
   }
 }
 

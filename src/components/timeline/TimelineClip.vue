@@ -7,6 +7,7 @@ import { getImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 import { envelopeLine, movePoint, visiblePoints } from '@/timeline/envelope'
+import { visibleKeys } from '@/timeline/layoutKeys'
 import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
 import { MAX_CLIP_GAIN, type Clip } from '@/timeline/model'
@@ -120,6 +121,16 @@ const envelopePoints = computed(() => {
   }))
 })
 
+/** Keyframes der Lage als kleine Rauten am unteren Rand des Video-Clips. */
+const layoutKeyMarks = computed(() => {
+  const clip = props.clip
+  if ((clip.kind !== 'video' && clip.kind !== 'still') || !clip.layout?.keys?.length) return []
+  return visibleKeys(clip).map((k) => ({
+    index: k.index,
+    left: `${(k.offset / clip.duration) * 100}%`,
+  }))
+})
+
 let pointDrag: { index: number; pointerId: number; active: boolean } | null = null
 
 function onPointDown(index: number, event: PointerEvent): void {
@@ -226,6 +237,13 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       @pointerup="onPointUp"
       @pointercancel="onPointUp"
       @dblclick.stop="removePoint(point.index)"
+    ></span>
+    <span
+      v-for="key in layoutKeyMarks"
+      :key="`key-${key.index}`"
+      class="layout-key"
+      :style="{ left: key.left }"
+      aria-hidden="true"
     ></span>
     <span
       v-if="transition"
@@ -356,6 +374,18 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   background: var(--ds-surface-0);
   cursor: move;
   touch-action: none;
+}
+.layout-key {
+  position: absolute;
+  bottom: 3px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border: 1px solid var(--ds-surface-0);
+  background: var(--vc-playhead);
+  transform: rotate(45deg);
+  pointer-events: none;
 }
 .envelope polyline {
   fill: none;

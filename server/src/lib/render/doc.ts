@@ -90,7 +90,23 @@ export interface DocLayout {
   y: number
   scale: number
   opacity: number
+  /**
+   * Keyframes (mindestens zwei, nach Zeit aufsteigend): Mitte und Größe ändern
+   * sich dazwischen gleichmäßig, davor und dahinter gilt der erste bzw. letzte.
+   * `x`, `y` und `scale` oben sind dann die Werte des ersten Keyframes.
+   */
+  keys?: DocLayoutKey[]
 }
+
+/** Keyframe der Lage: `at` ist die Zeit in der Quelle. */
+export interface DocLayoutKey {
+  at: Time
+  x: number
+  y: number
+  scale: number
+}
+
+export const MAX_LAYOUT_KEYS = 32
 
 /** Kleinste Größe eines Clips im Bild (wie im Editor). */
 export const MIN_LAYOUT_SCALE = 0.05
@@ -611,9 +627,37 @@ export function parseTimelineDoc(
             !inRange(l.opacity, 0, 1)
           )
             return fail(`${cp}.layout`, 'Ungültige Lage im Bild.')
+          let keys: DocLayoutKey[] = []
+          if (l.keys !== undefined && l.keys !== null) {
+            const raw = l.keys
+            if (!Array.isArray(raw) || raw.length > MAX_LAYOUT_KEYS)
+              return fail(`${cp}.layout.keys`, 'Ungültige Keyframes.')
+            for (const k of raw as unknown[]) {
+              const last = keys[keys.length - 1]
+              if (
+                !isObject(k) ||
+                !isTime(k.at) ||
+                !inRange(k.x, 0, 1) ||
+                !inRange(k.y, 0, 1) ||
+                !inRange(k.scale, MIN_LAYOUT_SCALE, 1) ||
+                (last !== undefined && k.at <= last.at)
+              )
+                return fail(`${cp}.layout.keys`, 'Ungültige Keyframes.')
+              keys.push({ at: k.at, x: k.x, y: k.y, scale: k.scale })
+            }
+          }
+          // Ein einzelner Keyframe bewegt nichts: Er gilt als feste Lage.
+          const fixed = keys.length === 1 ? keys[0] : (l as unknown as DocLayout)
+          if (keys.length < 2) keys = []
           // Volle Größe und Deckkraft ist dasselbe wie keine Lage.
-          if (l.scale < 1 || l.opacity < 1)
-            layout = { x: l.x, y: l.y, scale: l.scale, opacity: l.opacity }
+          if (keys.length > 0 || fixed.scale < 1 || (l.opacity as number) < 1)
+            layout = {
+              x: fixed.x,
+              y: fixed.y,
+              scale: fixed.scale,
+              opacity: l.opacity as number,
+              ...(keys.length > 0 ? { keys } : {}),
+            }
         }
         if (rc.hold !== undefined && typeof rc.hold !== 'boolean')
           return fail(`${cp}.hold`, 'Ungültige Angabe zum Standbild.')

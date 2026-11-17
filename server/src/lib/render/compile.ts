@@ -8,6 +8,7 @@ import {
   type DocAudioClip,
   type DocAudioTrack,
   type DocColor,
+  type DocLayoutKey,
   type DocOverlayTrack,
   type DocVideoClip,
   type DocVolumePoint,
@@ -194,6 +195,30 @@ export function envelopeFilter(points: readonly DocVolumePoint[], from: number):
   return [`volume='${expr}':eval=frame`]
 }
 
+/**
+ * Ausdruck für einen Wert, der sich zwischen Stützpunkten gleichmäßig ändert;
+ * davor und dahinter gilt der erste bzw. letzte Wert. `T` ist der Ausdruck für
+ * die Zeit in Sekunden, `points` sind nach Zeit aufsteigend.
+ */
+export function piecewiseExpr(
+  points: ReadonlyArray<{ at: number; value: number }>,
+  T: string,
+): string {
+  if (points.length === 0) return '0'
+  let expr = num(points[points.length - 1].value)
+  for (let i = points.length - 2; i >= 0; i--) {
+    const a = points[i]
+    const b = points[i + 1]
+    if (a.value === b.value) {
+      expr = `if(lt(${T},${num(b.at)}),${num(a.value)},${expr})`
+      continue
+    }
+    const slope = num((b.value - a.value) / (b.at - a.at))
+    expr = `if(lt(${T},${num(b.at)}),${num(a.value)}+(${slope})*(${T}-${num(a.at)}),${expr})`
+  }
+  return `if(lt(${T},${num(points[0].at)}),${num(points[0].value)},${expr})`
+}
+
 /** Vorlauf des Steuersignals beim automatischen Absenken (Sekunden). */
 const DUCK_PRIME_SEC = 0.3
 /** Kompressor fürs Absenken: spricht ab etwa −34 dB an, lässt über 0,6 s los. */
@@ -328,8 +353,11 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     const format = opaque ? 'yuv420p' : 'yuva420p'
     const fill = opaque ? background : 'black@0'
     const labels: string[] = []
-    /** Clip ins Projektformat bringen (ohne Längenschnitt). */
-    const fitSteps = (clip: DocVideoClip): string[] => {
+    /**
+     * Clip ins Projektformat bringen (ohne Längenschnitt). `offset` ist die
+     * Zeit im Clip, bei der das erste Bild der Eingabe liegt (für Keyframes).
+     */
+    const fitSteps = (clip: DocVideoClip, offset: Time): string[] => {
       const head = [
         clip.kind === 'still' || clip.speed === 1
           ? 'setpts=PTS-STARTPTS'
@@ -345,6 +373,38 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
           `format=${format}`,
           `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${fill}`,
+          'setsar=1',
+        ]
+      }
+      if (l.keys) {
+        // Keyframes: Größe und Mitte je Bild berechnen. `t` beginnt beim
+        // ersten Bild der Eingabe; die Keyframes stehen in Quellzeit.
+        const speed = clip.kind === 'still' ? 1 : clip.speed
+        const T =
+          `(${num(clip.sourceIn / MICROS_PER_SECOND)}` +
+          `+(t+${num(offset / MICROS_PER_SECOND)})*${num(speed)})`
+        const curve = (pick: (k: DocLayoutKey) => number) =>
+          piecewiseExpr(
+            l.keys!.map((k) => ({ at: k.at / MICROS_PER_SECOND, value: pick(k) })),
+            T,
+          )
+        const S = curve((k) => k.scale)
+        const pip = label('pip')
+        const canvas = label('cv')
+        return [
+          ...head,
+          `scale=w='2*round(${width}*(${S})/2)':h='2*round(${height}*(${S})/2)'` +
+            ':force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame',
+          'format=yuva420p',
+          ...(l.opacity < 1 ? [`lut=a=val*${num(l.opacity)}`] : []),
+          // Das wechselnd große Bild liegt auf einer durchsichtigen Fläche im
+          // Projektformat; dieser Schritt schließt die Kette und öffnet die nächste.
+          `setsar=1[${pip}];` +
+            `color=c=black@0:s=${size}:r=${fps},format=yuva420p[${canvas}];` +
+            `[${canvas}][${pip}]overlay=` +
+            `x='max(0,min(W-w,(${curve((k) => k.x)})*W-w/2))':` +
+            `y='max(0,min(H-h,(${curve((k) => k.y)})*H-h/2))':` +
+            'format=auto:shortest=1:eval=frame',
           'setsar=1',
         ]
       }
@@ -388,7 +448,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
       const offset = Math.max(0, timeOf(frameOf(clip.start) + total - tail) - clip.start)
       const index = addInput(clip, { frames: tail, clip, offset }, 'v')
       return `[${index}:v:0]${[
-        ...fitSteps(clip),
+        ...fitSteps(clip, offset),
         `trim=end_frame=${tail}`,
         // Letztes vorhandenes Bild, auch wenn die Quelle etwas früher endet.
         'reverse',
@@ -456,7 +516,9 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           const to = label('xb')
           const span = local + piece.frames
           const index = addInput(clip, { frames: span, clip, offset: 0 }, 'v')
-          chains.push(`[${index}:v:0]${[...fitSteps(clip), ...lengthSteps(span)].join(',')}[${to}]`)
+          chains.push(
+            `[${index}:v:0]${[...fitSteps(clip, 0), ...lengthSteps(span)].join(',')}[${to}]`,
+          )
           chains.push(
             `[${from}][${to}]${[
               `xfade=transition=${XFADE_TYPES[preset]}:duration=${sec(secondsOf(nIn))}:offset=0`,
@@ -467,7 +529,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           )
         } else {
           const index = addInput(clip, piece, 'v')
-          const steps = [...fitSteps(clip), ...lengthSteps(piece.frames), ...fades]
+          const steps = [...fitSteps(clip, piece.offset), ...lengthSteps(piece.frames), ...fades]
           chains.push(`[${index}:v:0]${steps.join(',')}[${out}]`)
         }
       }
