@@ -5,24 +5,24 @@ import {
   type Router,
   type RouterHistory,
 } from 'vue-router'
-import ClassicEditorPage from '@/pages/ClassicEditorPage.vue'
-import { isTimelineEditorEnabled } from '@/lib/featureFlags'
+import TimelineEditorPage from '@/pages/TimelineEditorPage.vue'
 
 /**
  * Routen der App.
- *  - `/`       bisheriger Editor (unverändert, bleibt Standard bis zur Gleichwertigkeit)
- *  - `/editor` neuer Timeline-Editor (Beta) – nur erreichbar, wenn freigeschaltet
- * Unbekannte Adressen führen zum bisherigen Editor.
+ *  - `/`        Editor mit Timeline (Standard)
+ *  - `/classic` bisheriger Editor (bleibt erreichbar, eigener Chunk)
+ *  - `/editor`  frühere Adresse des Timeline-Editors, leitet auf `/` um
+ * Unbekannte Adressen führen zum Editor.
  */
 export const routes: RouteRecordRaw[] = [
-  { path: '/', name: 'classic', component: ClassicEditorPage },
+  { path: '/', name: 'timeline', component: TimelineEditorPage },
   {
-    path: '/editor',
-    name: 'timeline',
-    // Eigener Chunk: belastet den bisherigen Editor nicht.
-    component: () => import('@/pages/TimelineEditorPage.vue'),
-    beforeEnter: () => (isTimelineEditorEnabled() ? true : { name: 'classic' }),
+    path: '/classic',
+    name: 'classic',
+    // Eigener Chunk: belastet den Editor nicht.
+    component: () => import('@/pages/ClassicEditorPage.vue'),
   },
+  { path: '/editor', redirect: '/' },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
