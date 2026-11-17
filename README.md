@@ -390,7 +390,16 @@ Kopfzeile des Editors, zurück über „Zum neuen Editor“).
   durch Ziehen des Rahmens in der Vorschau. Auf dem Server baut
   `graphicMotion` (`compile.ts`) Ausdrücke für Mitte und Größe, die
   `graphicFilter` in `overlay` und `scale` einsetzt (Feature
-  `timelineGraphicKeys`). Texte folgen in einem eigenen Schritt.
+  `timelineGraphicKeys`).
+- **Keyframes für Texte**: dieselben `data.keys`/`data.ease` am Text-Clip
+  (`scale` = Faktor der Schriftgröße), dieselben Helfer und dieselbe
+  Bedienung (`OverlayKeys.vue`, von Text- und Grafik-Feld genutzt). Der
+  Server zerlegt die Einblendung in Teilstücke (`buildAssEvents` in
+  `textOverlay.ts`): je Teilstück eine ASS-Zeile mit `\move` und
+  `\fscx`/`\fscy` samt `\t`, bei weicher Bewegung alle 0,1 s eine. Ein- und
+  Ausblenden bleiben am ersten und letzten Teilstück, die Schreibmaschine
+  läuft über alle hinweg; Hereingleiten und Aufploppen werden mit Keyframes
+  zum Einblenden (Feature `timelineTextKeys`).
 - **Keyframes für Bild-in-Bild**: `ClipLayout.keys` (`{ at, x, y, scale }`, `at`
   in Quellzeit wie bei der Lautstärke-Kurve, höchstens 32). Zwischen zwei
   Keyframes ändern sich Mitte, Größe und Deckkraft gleichmäßig, davor und

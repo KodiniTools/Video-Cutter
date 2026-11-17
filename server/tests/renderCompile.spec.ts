@@ -462,6 +462,75 @@ describe('Texte auf Ebenen-Spuren', () => {
     expect(compileTimeline(parsed(hidden), { sources }).filter).not.toContain('ass=')
   })
 
+  it('nimmt Keyframes für Texte an und zerlegt die Einblendung in bewegte Teilstücke', () => {
+    const keys = [
+      { at: 0, x: 0.25, y: 0.5, scale: 1 },
+      { at: s(1), x: 0.75, y: 0.5, scale: 2 },
+    ]
+    const doc = parsed(withText(0.5, 2, { keys, animation: 'fade' }))
+    expect((doc.tracks[0].clips[0] as Loose).text.motion).toEqual({
+      keys: [
+        { at: 0, x: 0.25, y: 0.5, scale: 1 },
+        { at: 1, x: 0.75, y: 0.5, scale: 2 },
+      ],
+      smooth: false,
+    })
+    const lines = (compileTimeline(doc, { sources }).ass ?? '')
+      .split('\n')
+      .filter((l) => l.startsWith('Dialogue:'))
+    // Zwei Teilstücke: 0,52–1,52 s bewegt, 1,52–2,52 s am letzten Keyframe.
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('Dialogue: 0,0:00:00.51,0:00:01.51,')
+    expect(lines[0]).toContain('\\move(160,180,480,180)')
+    expect(lines[0]).toMatch(/\\fscx100\\fscy100\\t\(\\fscx200\\fscy200\\bord[\d.]+\\shad0\)/)
+    expect(lines[0]).toContain('\\fad(400,0)')
+    expect(lines[1]).toContain('Dialogue: 0,0:00:01.51,0:00:02.51,')
+    expect(lines[1]).toContain('\\pos(480,180)')
+    expect(lines[1]).toContain('\\fscx200\\fscy200')
+    expect(lines[1]).not.toContain('\\t(')
+    expect(lines[1]).toContain('\\fad(0,400)')
+
+    // Weich: viele kurze Teilstücke nähern die Kurve an; ohne Größenänderung kein \fscx.
+    const flat = keys.map((k) => ({ ...k, scale: 1 }))
+    const smooth = (
+      compileTimeline(parsed(withText(0.5, 2, { keys: flat, ease: 'smooth' })), { sources }).ass ??
+      ''
+    )
+      .split('\n')
+      .filter((l) => l.startsWith('Dialogue:'))
+    expect(smooth).toHaveLength(11)
+    expect(smooth.join('\n')).not.toContain('\\fscx')
+    // Sanfter Anlauf: Das erste Zehntel legt weniger als ein Zehntel des Wegs zurück.
+    expect(smooth[0]).toContain('\\move(160,180,169,180)')
+
+    // Ohne Keyframes: eine Zeile wie bisher.
+    const plain = compileTimeline(parsed(withText(0.5, 2, { keys: [] })), { sources }).ass ?? ''
+    expect(plain.split('\n').filter((l) => l.startsWith('Dialogue:'))).toHaveLength(1)
+    expect(plain).toContain('\\pos(320,180)')
+
+    const bad = parseTimelineDoc(withText(0.5, 2, { keys: [keys[1], keys[0]] }))
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.errors[0].path).toBe('tracks[0].clips[0].data.keys')
+    const ease = parseTimelineDoc(withText(0.5, 2, { keys, ease: 'bounce' }))
+    expect(!ease.ok && ease.errors[0].path).toBe('tracks[0].clips[0].data.ease')
+  })
+
+  it('lässt die Schreibmaschine über die Teilstücke hinweg weiterlaufen', () => {
+    const keys = [
+      { at: 0, x: 0.25, y: 0.5, scale: 1 },
+      { at: s(1), x: 0.75, y: 0.5, scale: 1 },
+    ]
+    const doc = parsed(withText(0, 2, { keys, animation: 'typewriter', style: 'none' }))
+    const lines = (compileTimeline(doc, { sources }).ass ?? '')
+      .split('\n')
+      .filter((l) => l.startsWith('Dialogue:'))
+    expect(lines).toHaveLength(2)
+    const hidden = (l: string) => (l.match(/\\t\(\d+,\d+,/g) ?? []).length
+    // Erst sind drei der vier Zeichen noch verborgen, im zweiten Teilstück weniger.
+    expect(hidden(lines[0])).toBe(3)
+    expect(hidden(lines[1])).toBeLessThan(3)
+  })
+
   it('setzt die Pfade ein und verlangt sie, wenn Texte da sind', () => {
     const c = compileTimeline(parsed(withText(0.5, 1)), { sources })
     const enc = { output: '/o.mp4', preset: 'veryfast', crf: 28 }
@@ -616,6 +685,56 @@ describe('compileTimeline mit echtem FFmpeg', () => {
     expect(probe(part, 'stream=nb_read_frames', 'v:0')).toEqual(['25'])
     expect(near(pixel(part, 0.2, 316, 176), [255, 0, 0])).toBe(false)
     expect(near(pixel(part, 0.8, 316, 176), [255, 0, 0])).toBe(true)
+  }, 120_000)
+
+  it('bewegt und vergrößert Texte über Keyframes, auch in einem Abschnitt', async () => {
+    const raw = rawDoc()
+    const tracks = raw.tracks as Loose[]
+    tracks[0].clips = [tracks[0].clips[0]]
+    tracks[0].clips[0].duration = s(3)
+    const keys = [
+      { at: 0, x: 0.25, y: 0.5, scale: 1 },
+      { at: s(2), x: 0.75, y: 0.5, scale: 2 },
+    ]
+    tracks.unshift(textTrack(0.5, 2, { size: 0.1, keys }))
+    const real = { a: { path: path.join(dir, 'a.mp4'), hasAudio: true } }
+    const red = (rgb: number[]) => [255, 0, 0].every((v, i) => Math.abs(rgb[i] - v) <= 40)
+    const render = async (name: string, range?: { start: number; end: number }) => {
+      const out = path.join(dir, `${name}.mp4`)
+      const assPath = path.join(dir, `${name}.ass`)
+      const c = compileTimeline(parsed(raw), { sources: real, range })
+      await writeFile(assPath, c.ass ?? '', 'utf8')
+      execFileSync(
+        'ffmpeg',
+        buildRenderArgs(c, {
+          output: out,
+          preset: 'ultrafast',
+          crf: 20,
+          assPath,
+          fontsDir: config.fontsDir,
+        }),
+        { stdio: 'ignore' },
+      )
+      return out
+    }
+
+    const whole = await render('text-keys')
+    // Kurz nach dem Anfang: links (Mitte bei x ≈ 168), normale Größe.
+    expect(red(pixel(whole, 0.6, 164, 176))).toBe(false)
+    expect(red(pixel(whole, 0.6, 164, 140))).toBe(true)
+    expect(red(pixel(whole, 0.6, 468, 176))).toBe(true)
+    // Mitte des Clips: in der Bildmitte.
+    expect(red(pixel(whole, 1.5, 316, 176))).toBe(false)
+    // Kurz vor dem Ende: rechts (Mitte bei x ≈ 472), fast doppelt so groß.
+    expect(red(pixel(whole, 2.4, 468, 176))).toBe(false)
+    expect(red(pixel(whole, 2.4, 468, 140))).toBe(false)
+    expect(red(pixel(whole, 2.4, 100, 176))).toBe(true)
+    expect(red(pixel(whole, 2.8, 468, 176))).toBe(true)
+
+    // Abschnitt 1–2 s: bei 1,5 s in der Bildmitte.
+    const part = await render('text-keys-part', { start: s(1), end: s(2) })
+    expect(red(pixel(part, 0.5, 316, 176))).toBe(false)
+    expect(red(pixel(part, 0.5, 100, 176))).toBe(true)
   }, 120_000)
 })
 

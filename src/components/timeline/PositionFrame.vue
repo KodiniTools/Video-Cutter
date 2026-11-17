@@ -85,15 +85,17 @@ const graphic = computed(() =>
   clip.value?.kind === 'graphic' ? clipGraphic(clip.value.data) : null,
 )
 
-/** Zeit im Grafik-Clip, an der der Abspielkopf steht (in den Clip geholt). */
+/** Zeit im Text- oder Grafik-Clip, an der der Abspielkopf steht (in den Clip geholt). */
 const graphicOffset = computed(() => {
   const c = clip.value
   return c ? Math.min(c.duration, Math.max(0, store.playhead - c.start)) : 0
 })
-/** Mitte und Größe der Grafik am Abspielkopf (mit Keyframes: der Wert dort). */
+/** Mitte und Größe von Text oder Grafik am Abspielkopf (mit Keyframes: der Wert dort). */
 const graphicMotion = computed(() => {
   const c = clip.value
-  return c && c.kind === 'graphic' ? graphicMotionAt(c, graphicOffset.value) : null
+  return c && (c.kind === 'graphic' || c.kind === 'text')
+    ? graphicMotionAt(c, graphicOffset.value)
+    : null
 })
 
 /** Größe beim Ziehen am Griff (sonst die des Dokuments). */
@@ -121,7 +123,7 @@ const saved = computed<Point>(() => {
   if (videoBox.value) return { x: videoBox.value.x, y: videoBox.value.y }
   if (c.kind !== 'text' && c.kind !== 'graphic') return { x: 0.5, y: 0.5 }
   if (graphicMotion.value) return { x: graphicMotion.value.x, y: graphicMotion.value.y }
-  return { x: num(c.data.x, DEFAULT_TEXT_STYLE.x), y: num(c.data.y, DEFAULT_TEXT_STYLE.y) }
+  return { x: 0.5, y: 0.5 }
 })
 
 /** Laufendes Ziehen: Start des Zeigers und bisher erreichte Position. */
@@ -150,7 +152,11 @@ const drawn = computed(() => {
 const text = computed(() => {
   const c = clip.value
   if (!c || c.kind !== 'text') return null
-  const px = num(c.data.size, DEFAULT_TEXT_STYLE.size) * picture.value.height
+  // Mit Keyframes zählt die Größe am Abspielkopf.
+  const px =
+    num(c.data.size, DEFAULT_TEXT_STYLE.size) *
+    picture.value.height *
+    (graphicMotion.value?.scale ?? 1)
   const font = fontPreview(
     (typeof c.data.font === 'string' ? c.data.font : DEFAULT_TEXT_STYLE.font) as TextFont,
   )
@@ -218,8 +224,8 @@ function commit(to: Point): void {
     return
   }
   if (to.x === saved.value.x && to.y === saved.value.y) return
-  // Grafik mit Keyframes: Die neue Mitte landet im Keyframe am Abspielkopf.
-  if (c.kind === 'graphic' && graphicKeys(c.data).length > 0) {
+  // Mit Keyframes: Die neue Mitte landet im Keyframe am Abspielkopf.
+  if ((c.kind === 'graphic' || c.kind === 'text') && graphicKeys(c.data).length > 0) {
     store.updateClipData(c.id, withGraphicChange(c, graphicOffset.value, to))
     return
   }
