@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './timeline/RangeSpinner.vue'
 import { storeToRefs } from 'pinia'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import {
@@ -65,10 +66,9 @@ function formatSec(s: number): string {
           </label>
           <span class="field-value">{{ formatSec(settings[side.key].duration) }}</span>
         </div>
-        <input
+        <RangeSpinner
           :id="`${side.key}-duration`"
           class="range"
-          type="range"
           :min="MIN_FADE_SEC"
           :max="MAX_FADE_SEC"
           :step="FADE_STEP_SEC"

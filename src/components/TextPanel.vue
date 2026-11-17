@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './timeline/RangeSpinner.vue'
 import { storeToRefs } from 'pinia'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
@@ -482,9 +483,9 @@ function preview(text: string): string {
           <span class="field-label">{{ t('text.size') }}</span>
           <span class="field-value">{{ sizePercent }} %</span>
         </div>
-        <input
+        <RangeSpinner
+          :scale="0.1"
           class="range"
-          type="range"
           :min="MIN_TEXT_SIZE * 1000"
           :max="MAX_TEXT_SIZE * 1000"
           step="5"

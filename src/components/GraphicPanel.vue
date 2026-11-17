@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './timeline/RangeSpinner.vue'
 import { storeToRefs } from 'pinia'
 import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
@@ -552,9 +553,9 @@ function symbolPath(s: GraphicSymbol): string {
             >
           </span>
         </div>
-        <input
+        <RangeSpinner
+          :scale="0.1"
           class="range"
-          type="range"
           :min="MIN_GRAPHIC_SIZE * 1000"
           :max="MAX_GRAPHIC_W * 1000"
           step="5"
@@ -569,9 +570,9 @@ function symbolPath(s: GraphicSymbol): string {
           <span class="field-label">{{ t('graphics.height') }}</span>
           <span class="field-value">{{ pct(selected.h) }} %</span>
         </div>
-        <input
+        <RangeSpinner
+          :scale="0.1"
           class="range"
-          type="range"
           :min="MIN_GRAPHIC_SIZE * 1000"
           :max="MAX_GRAPHIC_H * 1000"
           step="5"
@@ -645,9 +646,9 @@ function symbolPath(s: GraphicSymbol): string {
             }}</span>
             <span class="field-value">{{ pct(selected.strokeWidth) }} %</span>
           </label>
-          <input
+          <RangeSpinner
+            :scale="0.1"
             class="range"
-            type="range"
             min="0"
             :max="MAX_STROKE * 1000"
             step="1"
@@ -674,9 +675,8 @@ function symbolPath(s: GraphicSymbol): string {
             }}</span>
             <span class="field-value">{{ Math.round(selected.fillOpacity * 100) }} %</span>
           </label>
-          <input
+          <RangeSpinner
             class="range"
-            type="range"
             min="0"
             max="100"
             step="5"
@@ -691,9 +691,9 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-label">{{ t('graphics.radius') }}</span>
             <span class="field-value">{{ Math.round(selected.radius * 200) }} %</span>
           </div>
-          <input
+          <RangeSpinner
+            :scale="2"
             class="range"
-            type="range"
             min="0"
             max="50"
             step="1"
@@ -711,9 +711,8 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-label">{{ t('graphics.image.opacity') }}</span>
             <span class="field-value">{{ Math.round(selected.opacity * 100) }} %</span>
           </div>
-          <input
+          <RangeSpinner
             class="range"
-            type="range"
             min="5"
             max="100"
             step="1"
@@ -727,17 +726,18 @@ function symbolPath(s: GraphicSymbol): string {
           <span class="field-label">{{ t('graphics.image.crop') }}</span>
           <div v-for="c in CROP_SIDES" :key="c.key" class="pos-row">
             <span class="pos-axis crop-side">{{ t(`graphics.image.sides.${c.label}`) }}</span>
-            <input
-              class="range"
-              type="range"
-              min="0"
-              :max="MAX_CROP * 100"
-              step="0.5"
-              :value="pct(selected[c.key])"
-              :disabled="busy"
-              :aria-label="`${t('graphics.image.crop')} ${t(`graphics.image.sides.${c.label}`)}`"
-              @input="patch({ [c.key]: Number(($event.target as HTMLInputElement).value) / 100 })"
-            />
+            <span class="grow spin">
+              <RangeSpinner
+                class="range"
+                min="0"
+                :max="MAX_CROP * 100"
+                step="0.5"
+                :value="pct(selected[c.key])"
+                :disabled="busy"
+                :aria-label="`${t('graphics.image.crop')} ${t(`graphics.image.sides.${c.label}`)}`"
+                @input="patch({ [c.key]: Number(($event.target as HTMLInputElement).value) / 100 })"
+              />
+            </span>
             <span class="field-value crop-val">{{ pct(selected[c.key]) }} %</span>
           </div>
           <button
@@ -1191,5 +1191,8 @@ function symbolPath(s: GraphicSymbol): string {
 }
 .grow {
   flex: 1;
+}
+.spin {
+  min-width: 0;
 }
 </style>

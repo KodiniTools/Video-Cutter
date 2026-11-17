@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import RangeSpinner from './timeline/RangeSpinner.vue'
 import {
   MAX_SPEED_STEP,
   SPEED_STEP,
@@ -72,10 +73,9 @@ function onInput(ev: Event): void {
         ↺
       </button>
     </div>
-    <input
+    <RangeSpinner
       id="video-speed"
       class="speed-range"
-      type="range"
       :min="-MAX_SPEED_STEP"
       :max="MAX_SPEED_STEP"
       :step="SPEED_STEP"
@@ -213,6 +213,8 @@ function onInput(ev: Event): void {
 .speed-scale {
   display: flex;
   justify-content: space-between;
+  /* Die Skala endet am Regler, nicht unter dem Zahlenfeld daneben. */
+  padding-right: 65px;
   font-family: var(--ds-font-mono);
   font-size: 10px;
   color: var(--ds-text-2);
