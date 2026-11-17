@@ -117,6 +117,29 @@ describe('Keyframes der Lage: Prüfung und Filter', () => {
     expect(parsed(rawDoc(keyed([]))).tracks[0].clips[0]).not.toHaveProperty('layout.keys')
   })
 
+  it('Deckkraft je Keyframe: fehlt sie, gilt die des Clips; die Lage trägt die des ersten', () => {
+    const fade = [{ ...LEFT_TO_RIGHT[0], opacity: 0 }, { ...LEFT_TO_RIGHT[1] }]
+    const c = parsed(rawDoc({ layout: { x: 0, y: 0, scale: 0.5, opacity: 0.8, keys: fade } }))
+      .tracks[0].clips[0] as { layout: { opacity: number; keys: Array<{ opacity: number }> } }
+    expect(c.layout.keys.map((k) => k.opacity)).toEqual([0, 0.8])
+    expect(c.layout.opacity).toBe(0)
+    const r = parseTimelineDoc(rawDoc(keyed([{ ...LEFT_TO_RIGHT[0], opacity: 1.5 }])))
+    expect(r.ok).toBe(false)
+  })
+
+  it('wechselnde Deckkraft läuft über eine Maske, gleiche Deckkraft bleibt beim einfachen Weg', () => {
+    const fade = LEFT_TO_RIGHT.map((k, i) => ({ ...k, opacity: i }))
+    const moving = compileTimeline(parsed(rawDoc(keyed(fade))), { sources })
+    expect(moving.filter).toContain("geq=lum='255*(if(lt((0+(T+0)*1),0),0,")
+    expect(moving.filter).toContain('blend=all_mode=multiply:shortest=1')
+    expect(moving.filter).toContain('alphamerge')
+    expect(moving.filter).not.toContain('lut=a=')
+    const same = LEFT_TO_RIGHT.map((k) => ({ ...k, opacity: 0.4 }))
+    const steady = compileTimeline(parsed(rawDoc(keyed(same))), { sources })
+    expect(steady.filter).toContain('lut=a=val*0.4')
+    expect(steady.filter).not.toContain('geq=')
+  })
+
   it('lehnt ungültige Keyframes ab', () => {
     const bad = [
       'x',
@@ -264,6 +287,29 @@ describe('Bild-in-Bild mit echtem FFmpeg', () => {
     expect(near(pixelAt(out, 49, 560, 176), BLUE)).toBe(true)
     expect(near(pixelAt(out, 49, 340, 100), BLUE)).toBe(true)
     expect(near(pixelAt(out, 49, 200, 176), RED)).toBe(true)
+  })
+
+  it('Deckkraft als Keyframe blendet das Bild über die Zeit ein', () => {
+    const still = { x: 0.5, y: 0.5, scale: 0.5 }
+    const keys = [
+      { at: 0, ...still, opacity: 0 },
+      { at: s(2), ...still, opacity: 1 },
+    ]
+    const doc = parsed(rawDoc(keyed(keys)))
+    const out = render(doc, 'keys-fade.mp4')
+    expect(near(pixelAt(out, 0, 316, 176), RED)).toBe(true)
+    expect(near(pixelAt(out, 25, 316, 176), [128, 0, 128], 50)).toBe(true)
+    expect(near(pixelAt(out, 49, 316, 176), BLUE, 60)).toBe(true)
+    // Außerhalb des kleinen Bildes bleibt die untere Spur unverändert.
+    expect(near(pixelAt(out, 25, 40, 40), RED)).toBe(true)
+    // Abschnitt ab 1 s: beginnt halb durchscheinend.
+    const part = path.join(dir, 'keys-fade-part.mp4')
+    const c = compileTimeline(doc, { sources: real, range: { start: s(1), end: s(2) } })
+    execFileSync('ffmpeg', buildRenderArgs(c, { output: part, preset: 'ultrafast', crf: 16 }), {
+      stdio: 'ignore',
+    })
+    expect(near(pixelAt(part, 0, 316, 176), [128, 0, 128], 50)).toBe(true)
+    expect(near(pixelAt(part, 24, 316, 176), BLUE, 60)).toBe(true)
   })
 
   it('ein Abschnitt der Vorschau zeigt dieselbe Lage wie der ganze Film', () => {

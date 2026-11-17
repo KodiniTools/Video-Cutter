@@ -50,11 +50,12 @@ const must = (r: OpResult): TimelineDoc => {
 const videos = (doc: TimelineDoc): VideoClip[] =>
   (doc.tracks.find((t) => t.kind === 'video')?.clips ?? []) as VideoClip[]
 const oneClip = (): TimelineDoc => must(appendMedia(putAsset(createDoc(), asset('a')), 'a'))
-const key = (at: number, x: number, y: number, scale: number): LayoutKey => ({
+const key = (at: number, x: number, y: number, scale: number, opacity = 1): LayoutKey => ({
   at: at * S,
   x,
   y,
   scale,
+  opacity,
 })
 const A = key(2, 0.2, 0.5, 0.25)
 const B = key(6, 0.8, 0.5, 0.75)
@@ -76,7 +77,11 @@ describe('normalizeLayout mit Keyframes', () => {
       opacity: 1,
       keys: [B, { ...A, x: 0.1 }, { at: 2 * S, x: -1, y: 2, scale: 0.001 }, key(1.5, 0, 0, 0.5)],
     })
-    expect(out?.keys).toEqual([key(1.5, 0, 0, 0.5), { at: 2 * S, x: 0, y: 1, scale: 0.05 }, B])
+    expect(out?.keys).toEqual([
+      key(1.5, 0, 0, 0.5),
+      { at: 2 * S, x: 0, y: 1, scale: 0.05, opacity: 1 },
+      B,
+    ])
     expect(out).toMatchObject({ x: 0, y: 0, scale: 0.5, opacity: 1 })
   })
 
@@ -150,17 +155,21 @@ describe('Keyframes im Dokument', () => {
 
 describe('layoutKeys', () => {
   it('motionAt: gleichmäßig dazwischen, außen gehalten', () => {
-    expect(motionAt([A, B], 0)).toEqual({ x: 0.2, y: 0.5, scale: 0.25 })
-    expect(motionAt([A, B], 4 * S)).toEqual({ x: 0.5, y: 0.5, scale: 0.5 })
-    expect(motionAt([A, B], 3 * S)).toEqual({ x: 0.35, y: 0.5, scale: 0.375 })
-    expect(motionAt([A, B], 9 * S)).toEqual({ x: 0.8, y: 0.5, scale: 0.75 })
+    expect(motionAt([A, B], 0)).toEqual({ x: 0.2, y: 0.5, scale: 0.25, opacity: 1 })
+    expect(motionAt([A, B], 4 * S)).toEqual({ x: 0.5, y: 0.5, scale: 0.5, opacity: 1 })
+    expect(motionAt([A, B], 3 * S)).toEqual({ x: 0.35, y: 0.5, scale: 0.375, opacity: 1 })
+    expect(motionAt([A, B], 9 * S)).toEqual({ x: 0.8, y: 0.5, scale: 0.75, opacity: 1 })
+    // Deckkraft läuft mit; fehlt sie im Keyframe (ältere Projekte), gilt die des Clips.
+    expect(motionAt([key(0, 0, 0, 1, 0), key(4, 0, 0, 1, 1)], S).opacity).toBe(0.25)
+    const old = [A, B].map(({ opacity: _unused, ...k }) => k)
+    expect(motionAt(old, 3 * S, 0.6).opacity).toBe(0.6)
   })
 
   it('layoutAt: ohne Lage voll, ohne Keyframes fest, sonst Wert an der Stelle samt Deckkraft', () => {
     expect(layoutAt({ sourceIn: 0, speed: 1, duration: S }, 0)).toBe(FULL_LAYOUT)
     const fixed = { x: 0.1, y: 0.2, scale: 0.3, opacity: 0.4 }
     expect(layoutAt({ sourceIn: 0, speed: 1, duration: S, layout: fixed }, 0)).toBe(fixed)
-    expect(layoutAt(clipWith([A, B]), 4 * S)).toEqual({ x: 0.5, y: 0.5, scale: 0.5, opacity: 0.9 })
+    expect(layoutAt(clipWith([A, B]), 4 * S)).toEqual({ x: 0.5, y: 0.5, scale: 0.5, opacity: 1 })
     // Getrimmter Anfang: Zeit im Clip 2 s ist Quellzeit 4 s.
     expect(layoutAt(clipWith([A, B], { sourceIn: 2 * S }), 2 * S).x).toBe(0.5)
   })
@@ -191,16 +200,16 @@ describe('layoutKeys', () => {
     const clip = clipWith([A, B])
     const moved = withLayoutChange(clip, 8 * S, { x: 0.1 })
     expect(moved.keys).toEqual([A, B, key(8, 0.1, 0.5, 0.75)])
-    expect(moved.opacity).toBe(0.9)
+    // Auch die Deckkraft landet im Keyframe an der Stelle.
     const dim = withLayoutChange(clip, 8 * S, { opacity: 0.3 })
-    expect(dim.keys).toEqual([A, B])
-    expect(dim.opacity).toBe(0.3)
+    expect(dim.keys).toEqual([A, B, key(8, 0.8, 0.5, 0.75, 0.3)])
+    expect(withLayoutChange(clip, 2 * S, { opacity: 0 }).keys).toEqual([{ ...A, opacity: 0 }, B])
   })
 
   it('withoutKey entfernt; der letzte hinterlässt eine feste Lage', () => {
     const clip = clipWith([A, B])
     expect(withoutKey(clip, 0)?.keys).toEqual([B])
-    expect(withoutKey(clipWith([A]), 0)).toEqual({ x: 0.2, y: 0.5, scale: 0.25, opacity: 0.9 })
+    expect(withoutKey(clipWith([A]), 0)).toEqual({ x: 0.2, y: 0.5, scale: 0.25, opacity: 1 })
     expect(withoutKey(clip, 5)).toBe(clip.layout)
   })
 })
@@ -236,6 +245,16 @@ describe('ClipInspector: Keyframes', () => {
     expect(
       (wrapper.get('[data-testid=clip-layout-scale-num]').element as HTMLInputElement).value,
     ).toBe('50')
+
+    // Deckkraft am Ende auf 0: Der Clip blendet aus.
+    store.seek(6 * S)
+    await wrapper.vm.$nextTick()
+    const opacity = wrapper.get('[data-testid=clip-layout-opacity-num]')
+    await opacity.setValue('0')
+    await opacity.trigger('change')
+    expect(layout()?.keys).toEqual([key(2, 0.2, 0.5, 0.25), key(6, 0.2, 0.5, 0.75, 0)])
+    await opacity.setValue('100')
+    await opacity.trigger('change')
 
     await wrapper.get('[data-testid=clip-layout-key-1]').trigger('click')
     expect(store.playhead).toBe(6 * S)

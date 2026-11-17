@@ -377,26 +377,28 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         ]
       }
       if (l.keys) {
-        // Keyframes: Größe und Mitte je Bild berechnen. `t` beginnt beim
+        // Keyframes: Größe und Mitte je Bild berechnen. Die Zeit beginnt beim
         // ersten Bild der Eingabe; die Keyframes stehen in Quellzeit.
+        const keys = l.keys
         const speed = clip.kind === 'still' ? 1 : clip.speed
-        const T =
+        const sourceTime = (t: string) =>
           `(${num(clip.sourceIn / MICROS_PER_SECOND)}` +
-          `+(t+${num(offset / MICROS_PER_SECOND)})*${num(speed)})`
-        const curve = (pick: (k: DocLayoutKey) => number) =>
+          `+(${t}+${num(offset / MICROS_PER_SECOND)})*${num(speed)})`
+        const curve = (pick: (k: DocLayoutKey) => number, t = 't') =>
           piecewiseExpr(
-            l.keys!.map((k) => ({ at: k.at / MICROS_PER_SECOND, value: pick(k) })),
-            T,
+            keys.map((k) => ({ at: k.at / MICROS_PER_SECOND, value: pick(k) })),
+            sourceTime(t),
           )
         const S = curve((k) => k.scale)
         const pip = label('pip')
         const canvas = label('cv')
-        return [
+        const fixedOpacity = keys.every((k) => k.opacity === keys[0].opacity)
+        const steps = [
           ...head,
           `scale=w='2*round(${width}*(${S})/2)':h='2*round(${height}*(${S})/2)'` +
             ':force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame',
           'format=yuva420p',
-          ...(l.opacity < 1 ? [`lut=a=val*${num(l.opacity)}`] : []),
+          ...(fixedOpacity && keys[0].opacity < 1 ? [`lut=a=val*${num(keys[0].opacity)}`] : []),
           // Das wechselnd große Bild liegt auf einer durchsichtigen Fläche im
           // Projektformat; dieser Schritt schließt die Kette und öffnet die nächste.
           `setsar=1[${pip}];` +
@@ -406,6 +408,24 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
             `y='max(0,min(H-h,(${curve((k) => k.y)})*H-h/2))':` +
             'format=auto:shortest=1:eval=frame',
           'setsar=1',
+        ]
+        if (fixedOpacity) return steps
+        // Wechselnde Deckkraft: Die Transparenz der Fläche wird je Bild mit
+        // einer einfarbigen Maske multipliziert. Die Maske entsteht winzig
+        // (dort rechnet `geq` je Bild nur 16×16 Punkte) und wird vergrößert.
+        const color = label('kc')
+        const alpha = label('ka')
+        const mask = label('km')
+        const dimmed = label('kd')
+        return [
+          ...steps,
+          `split[${color}][${alpha}];` +
+            `color=c=black:s=16x16:r=${fps},format=gray,` +
+            `geq=lum='255*(${curve((k) => k.opacity, 'T')})',` +
+            `scale=${width}:${height}:flags=neighbor[${mask}];` +
+            `[${alpha}]alphaextract[${alpha}x];` +
+            `[${alpha}x][${mask}]blend=all_mode=multiply:shortest=1[${dimmed}];` +
+            `[${color}][${dimmed}]alphamerge`,
         ]
       }
       // Bild-in-Bild: in den verkleinerten Rahmen einpassen, um die Mitte

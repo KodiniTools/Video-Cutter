@@ -97,9 +97,9 @@ export interface ClipLayout {
   scale: number
   opacity: number
   /**
-   * Keyframes, nach Zeit aufsteigend: Mitte und Größe ändern sich dazwischen
-   * gleichmäßig, davor und dahinter gilt der erste bzw. letzte. `x`, `y` und
-   * `scale` oben tragen dann die Werte des ersten Keyframes.
+   * Keyframes, nach Zeit aufsteigend: Mitte, Größe und Deckkraft ändern sich
+   * dazwischen gleichmäßig, davor und dahinter gilt der erste bzw. letzte.
+   * Die Werte oben sind dann die des ersten Keyframes.
    */
   keys?: LayoutKey[]
 }
@@ -113,6 +113,8 @@ export interface LayoutKey {
   x: number
   y: number
   scale: number
+  /** Deckkraft; fehlt sie (ältere Projekte), gilt die des Clips. */
+  opacity?: number
 }
 
 /**
