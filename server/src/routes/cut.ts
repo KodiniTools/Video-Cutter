@@ -126,6 +126,7 @@ export const SERVER_FEATURES = [
   'timelineColor',
   'timelineDuck',
   'timelineEnvelope',
+  'timelineChapters',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

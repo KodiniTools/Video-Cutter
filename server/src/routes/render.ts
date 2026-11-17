@@ -6,6 +6,7 @@ import { config } from '../config'
 import { customFontsEnv } from '../lib/customFonts'
 import { jobManager } from '../lib/jobs'
 import { mediaStore } from '../lib/media'
+import { chapterMetadata } from '../lib/render/chapters'
 import { buildRenderArgs, compileTimeline } from '../lib/render/compile'
 import { MICROS_PER_SECOND, docDuration, parseTimelineDoc } from '../lib/render/doc'
 import { graphicStore, resolveDocGraphics } from '../lib/render/graphics'
@@ -110,6 +111,12 @@ renderRouter.post(
     }
 
     const id = randomUUID()
+    // Marker als Kapitel: Die Datei gehört dem Auftrag und wird danach gelöscht.
+    const chapters = chapterMetadata(parsed.doc.markers, compiled.duration)
+    const chaptersPath = chapters === null ? null : path.join(config.tmpDir, `${id}-chapters.txt`)
+    const writeChapters = async () => {
+      if (chaptersPath) await writeFile(chaptersPath, chapters ?? '', 'utf8')
+    }
     if (settings.lossless) {
       // Sonderfall: ein unveränderter Clip wird kopiert statt neu kodiert.
       const plan = checkLossless(parsed.doc, (assetId) => mediaStore.get(assetId)?.info)
@@ -127,17 +134,22 @@ renderRouter.post(
       const ext = losslessExt(item.path)
       const outputPath = path.join(config.tmpDir, `${id}-out.${ext}`)
       const duration = plan.duration / MICROS_PER_SECOND
+      await writeChapters()
       mediaStore.acquire([item.id])
       const job = jobManager.create({
         id,
         inputPath: '',
         ownsInput: false,
-        extraInputPaths: [],
+        extraInputPaths: chaptersPath ? [chaptersPath] : [],
         mediaRefs: [item.id],
         outputPath,
         outputName: settings.outputName.replace(/\.mp4$/, `.${ext}`),
       })
-      void jobManager.run(job, buildLosslessArgs(item.path, outputPath, plan), duration)
+      void jobManager.run(
+        job,
+        buildLosslessArgs(item.path, outputPath, plan, chaptersPath ?? undefined),
+        duration,
+      )
       res.status(202).json({
         jobId: id,
         width: parsed.doc.settings.width,
@@ -152,6 +164,7 @@ renderRouter.post(
     const assPath = compiled.ass === undefined ? null : path.join(config.tmpDir, `${id}-text.ass`)
     const args = buildRenderArgs(compiled, {
       ...(assPath ? { assPath, fontsDir: config.fontsDir } : {}),
+      ...(chaptersPath ? { chaptersPath } : {}),
       output: outputPath,
       preset: 'medium',
       crf: RENDER_QUALITIES[settings.quality],
@@ -159,13 +172,14 @@ renderRouter.post(
     })
     // Verwendete Videos für die Dauer des Exports gegen Löschen sperren.
     if (assPath) await writeFile(assPath, compiled.ass ?? '', 'utf8')
+    await writeChapters()
     const refs = Object.keys(sources)
     mediaStore.acquire(refs)
     const job = jobManager.create({
       id,
       inputPath: '',
       ownsInput: false,
-      extraInputPaths: assPath ? [assPath] : [],
+      extraInputPaths: [assPath, chaptersPath].filter((p): p is string => p !== null),
       mediaRefs: refs,
       outputPath,
       outputName: settings.outputName,

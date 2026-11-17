@@ -209,6 +209,38 @@ export interface RenderDoc {
   assets: Record<string, DocAsset>
   /** Reihenfolge = Stapel: Index 0 liegt oben (vorne). */
   tracks: DocTrack[]
+  /** Marker nach Zeit aufsteigend; der Export schreibt sie als Kapitel. */
+  markers: DocMarker[]
+}
+
+/** Marker der Timeline: Zeit und Name (kann leer sein). */
+export interface DocMarker {
+  at: Time
+  label: string
+}
+
+export const MAX_MARKERS = 200
+export const MAX_MARKER_LABEL = 60
+
+/**
+ * Liest die Marker nachsichtig: Sie beeinflussen das Bild nicht, darum fällt
+ * Ungültiges still weg, statt das ganze Dokument abzulehnen.
+ */
+export function parseMarkers(raw: unknown): DocMarker[] {
+  if (!Array.isArray(raw)) return []
+  const byTime = new Map<Time, string>()
+  for (const m of raw as unknown[]) {
+    if (!isObject(m) || !isTime(m.at) || byTime.has(m.at)) continue
+    const label = typeof m.label === 'string' ? m.label : ''
+    // Steuerzeichen und Zeilenumbrüche haben in einem Kapitelnamen nichts verloren.
+    const clean = label
+      .replace(/\p{Cc}+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    byTime.set(m.at, clean.slice(0, MAX_MARKER_LABEL))
+    if (byTime.size >= MAX_MARKERS) break
+  }
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([at, label]) => ({ at, label }))
 }
 
 /** Grenzen gegen übergroße Dokumente (schützen CPU und FFmpeg-Graph). */
@@ -646,5 +678,14 @@ export function parseTimelineDoc(
     })
 
   if (errors.length > 0 || settings === null) return done()
-  return { ok: true, doc: { version: TIMELINE_DOC_VERSION, settings, assets, tracks } }
+  return {
+    ok: true,
+    doc: {
+      version: TIMELINE_DOC_VERSION,
+      settings,
+      assets,
+      tracks,
+      markers: parseMarkers(input.markers),
+    },
+  }
 }
