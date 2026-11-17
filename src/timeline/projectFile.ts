@@ -117,6 +117,7 @@ function parseTrack(v: unknown): Track {
   if (typeof v.locked !== 'boolean' || !Array.isArray(v.clips)) invalid()
   if (v.kind === 'audio') {
     if (typeof v.muted !== 'boolean' || typeof v.solo !== 'boolean' || !isNum(v.volume)) invalid()
+    if (v.duck !== undefined && !(isNum(v.duck) && v.duck > 0 && v.duck <= 1)) invalid()
   } else if (v.kind === 'video' || v.kind === 'overlay') {
     if (typeof v.hidden !== 'boolean') invalid()
   } else invalid()

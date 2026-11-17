@@ -353,6 +353,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Automatisches Absenken** (Feature `timelineDuck`): Eine Ton-Spur kann
+  `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7;
+  `updateTrack`). Solange auf den übrigen hörbaren Ton-Spuren etwas zu hören
+  ist, wird die Spur um diesen Anteil leiser (`sidechaincompress` in
+  `compile.ts`, Steuersignal = Mischung der übrigen Spuren). Der Anfang des
+  Steuersignals läuft 0,3 s vorweg, damit die Vorschau an Abschnittsgrenzen
+  nicht kurz laut wird. Ohne steuernde Spur bleibt alles unverändert.
 - **Farbkorrektur** (Feature `timelineColor`): Ein Video-Clip kann Helligkeit,
   Kontrast und Sättigung tragen (`color: { brightness, contrast, saturation }`,
   je −1 … 1, 0 = unverändert; `setClipColor`, Feld „Clip“). Der Compiler setzt

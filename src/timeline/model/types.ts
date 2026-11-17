@@ -181,6 +181,11 @@ export interface AudioTrack extends TrackBase {
   muted: boolean
   solo: boolean
   volume: number
+  /**
+   * Automatisches Absenken (0 < duck ≤ 1): Anteil, um den die Spur leiser wird,
+   * solange auf den übrigen Ton-Spuren etwas zu hören ist. Fehlt = aus.
+   */
+  duck?: number
   clips: AudioClip[]
 }
 
