@@ -284,4 +284,56 @@ describe('POST /api/render', () => {
     expect(codec(out!.path)).toBe(codec(source))
     await fetch(`${base}/cut/${jobId}`, { method: 'DELETE' })
   }, 30_000)
+
+  /** Kapitel der Datei als `[Beginn, Ende, Titel]`. */
+  const chaptersOf = (file: string) => {
+    const raw = execFileSync('ffprobe', [
+      ...['-v', 'error', '-show_chapters', '-of', 'json', file],
+    ]).toString()
+    const { chapters } = JSON.parse(raw) as {
+      chapters: Array<{ start_time: string; end_time: string; tags?: { title?: string } }>
+    }
+    return chapters.map((c) => [
+      Math.round(Number(c.start_time) * 10) / 10,
+      Math.round(Number(c.end_time) * 10) / 10,
+      c.tags?.title ?? '',
+    ])
+  }
+  const finish = async (res: Response) => {
+    expect(res.status).toBe(202)
+    const { jobId } = (await res.json()) as { jobId: string }
+    for (let i = 0; i < 200 && jobManager.getSnapshot(jobId)?.state === 'processing'; i++)
+      await new Promise((r) => setTimeout(r, 50))
+    expect(jobManager.getSnapshot(jobId)).toMatchObject({ state: 'done' })
+    return { jobId, path: jobManager.getOutput(jobId)!.path }
+  }
+  const markers = [
+    { id: 'm1', at: s(0.8), label: 'Teil = 1; #a' },
+    { id: 'm2', at: s(1.4), label: '' },
+    { id: 'm3', at: s(7), label: 'hinter dem Ende' },
+  ]
+  const expected = [
+    [0, 0.8, 'Anfang'],
+    [0.8, 1.4, 'Teil = 1; #a'],
+    [1.4, 2, 'Kapitel 3'],
+  ]
+
+  it('schreibt Marker als Kapitel in die Exportdatei', async () => {
+    const out = await finish(await post({ doc: { ...doc([clip()]), markers }, quality: 'small' }))
+    expect(chaptersOf(out.path)).toEqual(expected)
+    await fetch(`${base}/cut/${out.jobId}`, { method: 'DELETE' })
+    // Die Kapiteldatei gehört dem Auftrag und verschwindet mit ihm.
+    await new Promise((r) => setTimeout(r, 100))
+    await expect(stat(path.join(config.tmpDir, `${out.jobId}-chapters.txt`))).rejects.toThrow()
+
+    const plain = await finish(await post({ doc: doc([clip()]), quality: 'small' }))
+    expect(chaptersOf(plain.path)).toEqual([])
+    await fetch(`${base}/cut/${plain.jobId}`, { method: 'DELETE' })
+  }, 30_000)
+
+  it('schreibt Kapitel auch beim verlustfreien Export', async () => {
+    const out = await finish(await post({ doc: { ...doc([clip()]), markers }, lossless: true }))
+    expect(chaptersOf(out.path)).toEqual(expected)
+    await fetch(`${base}/cut/${out.jobId}`, { method: 'DELETE' })
+  }, 30_000)
 })

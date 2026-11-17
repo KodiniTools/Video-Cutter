@@ -96,6 +96,8 @@ export function buildLosslessArgs(
   input: string,
   output: string,
   plan: Extract<LosslessCheck, { ok: true }>,
+  /** FFMETADATA-Datei mit Kapiteln (siehe `chapterMetadata`). */
+  chaptersPath?: string,
 ): string[] {
   return [
     ...PROGRESS,
@@ -103,6 +105,7 @@ export function buildLosslessArgs(
     formatFfmpegTime(plan.sourceIn / MICROS_PER_SECOND),
     '-i',
     input,
+    ...(chaptersPath ? ['-f', 'ffmetadata', '-i', chaptersPath, '-map_chapters', '1'] : []),
     '-t',
     formatFfmpegTime(plan.duration / MICROS_PER_SECOND),
     ...(plan.audio ? [] : ['-an']),

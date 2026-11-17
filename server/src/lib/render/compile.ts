@@ -722,6 +722,8 @@ export interface EncodeOptions {
   /** Pfad der geschriebenen ASS-Datei und Schriftordner (nötig, wenn `compiled.ass` gesetzt ist). */
   assPath?: string
   fontsDir?: string
+  /** Pfad einer FFMETADATA-Datei mit Kapiteln (siehe `chapterMetadata`). */
+  chaptersPath?: string
 }
 
 /** Setzt die Pfade für die Text-Datei in den Filter ein. */
@@ -739,6 +741,13 @@ export function buildRenderArgs(compiled: CompiledTimeline, enc: EncodeOptions):
   return [
     ...PROGRESS,
     ...compiled.inputs,
+    // Kapitel kommen als letzte Eingabe dazu; sie hat keine Bild- oder Tonspur.
+    ...(enc.chaptersPath
+      ? [
+          ...['-f', 'ffmetadata', '-i', enc.chaptersPath],
+          ...['-map_chapters', String(compiled.inputs.filter((a) => a === '-i').length)],
+        ]
+      : []),
     '-filter_complex',
     resolveFilter(compiled, enc),
     '-map',

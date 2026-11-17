@@ -375,7 +375,13 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   verschiebt (aufs Bildraster, mit Einrasten), Name und Löschen in der
   Marker-Zeile, ⇤/⇥ springen zum vorherigen/nächsten. Clips rasten an Markern
   ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
-  Zwischenablage (`src/timeline/markers.ts`). Der Server ignoriert Marker.
+  Zwischenablage (`src/timeline/markers.ts`).
+- **Kapitel in der Exportdatei**: Der Export schreibt die Marker als Kapitel in
+  die Datei (`server/src/lib/render/chapters.ts`, FFMETADATA-Datei als
+  zusätzliche Eingabe mit `-map_chapters`), auch beim verlustfreien Export. Vor
+  dem ersten Marker steht das Kapitel „Anfang“, Marker ohne Namen heißen
+  „Kapitel N“, Marker hinter dem Ende entfallen. Die Vorschau bleibt
+  unverändert. Feature `timelineChapters`; der Export-Dialog nennt die Anzahl.
 - **Automatisches Absenken** (Feature `timelineDuck`): Eine Ton-Spur kann
   `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7, Stärke
   daneben per Spinner von 5 bis 100 % in 5er-Schritten;

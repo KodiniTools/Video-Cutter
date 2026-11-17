@@ -63,6 +63,8 @@ const summary = computed(() =>
     duration: formatTimeMs(timeToSeconds(store.duration)),
   }),
 )
+/** Marker innerhalb des Films: Der Server schreibt sie als Kapitel in die Datei. */
+const chapterCount = computed(() => store.doc.markers.filter((m) => m.at < store.duration).length)
 const downloadUrl = computed(() =>
   phase.value === 'done' && jobId ? renderDownloadUrl(jobId) : '',
 )
@@ -221,6 +223,9 @@ onBeforeUnmount(discard)
             <small>{{ t('timelineExport.normalizeHint') }}</small>
           </span>
         </label>
+        <p v-if="chapterCount > 0" class="summary" data-testid="export-chapters">
+          {{ t('timelineExport.chapters', chapterCount) }}
+        </p>
         <p v-if="phase === 'error'" class="error" role="alert" data-testid="export-error">
           {{ error }}
         </p>

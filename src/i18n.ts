@@ -875,6 +875,8 @@ const messages = {
       speed: 'Server: {sec} s je Abschnitt ({speed}× Echtzeit)',
     },
     timelineExport: {
+      chapters:
+        'Ein Marker wird als Kapitel in die Datei geschrieben. | {n} Marker werden als Kapitel in die Datei geschrieben.',
       open: 'Exportieren',
       empty: 'Lege zuerst einen Clip auf die Timeline.',
       title: 'Video exportieren',
@@ -1827,6 +1829,8 @@ const messages = {
       speed: 'Server: {sec} s per segment ({speed}× real time)',
     },
     timelineExport: {
+      chapters:
+        'One marker is written into the file as a chapter. | {n} markers are written into the file as chapters.',
       open: 'Export',
       empty: 'Put a clip on the timeline first.',
       title: 'Export video',
