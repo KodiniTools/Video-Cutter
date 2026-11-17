@@ -385,7 +385,12 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   ein Klick springt zur Stelle. „Herausschneiden und Lücken schließen“
   (`cutClipRanges`) teilt den Clip an den Rändern der angehakten Bereiche,
   löscht sie samt verknüpftem Ton und rückt alles Spätere nach, in einem
-  Rückgängig-Schritt. Nur Frontend.
+  Rückgängig-Schritt. „Stille finden“ (`src/timeline/silence.ts`,
+  `suggestSilence`) trägt Pausen in dieselbe Liste ein, ohne KI und ohne
+  Server: aus der Wellenform des Mediums (50 Werte je Sekunde), mit einer
+  Schwelle im Verhältnis zur Lautstärke der Aufnahme (drei Stufen), ab der
+  Mindestlänge „Pausen ab“; 0,15 s bleiben vor und nach dem Gesprochenen
+  stehen. Nur Frontend.
 - **Projekte** (Feature `timelineProjects`, `ProjectDialog.vue`,
   `src/stores/timelineProjects.ts`, `src/timeline/projectFile.ts`): Der Knopf
   „Projekt“ speichert das Dokument über die bestehenden Endpunkte
