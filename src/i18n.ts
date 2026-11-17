@@ -991,9 +991,9 @@ const messages = {
       },
     },
     timelineEditor: {
-      title: 'Neuer Editor (Beta)',
-      back: 'Zurück zum bisherigen Editor',
-      open: 'Neuer Editor (Beta)',
+      title: 'Video-Editor',
+      back: 'Zum bisherigen Editor',
+      open: 'Zum neuen Editor',
     },
   },
   en: {
@@ -1963,9 +1963,9 @@ const messages = {
       },
     },
     timelineEditor: {
-      title: 'New editor (beta)',
-      back: 'Back to the classic editor',
-      open: 'New editor (beta)',
+      title: 'Video editor',
+      back: 'Open the classic editor',
+      open: 'Open the new editor',
     },
   },
 } as const

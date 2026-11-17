@@ -215,17 +215,15 @@ Job-basiert mit SSE-Fortschritt).
   Hinweis ab. Prüfen: `curl https://kodinitools.com/video-cutter/api/health`
   → `"features":["crop"]`.
 
-## Neuer Timeline-Editor (in Arbeit)
+## Editor mit Timeline
 
-Die App wird schrittweise zu einem Video-Editor mit Mehrspur-Timeline umgebaut.
-Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
+Der Editor mit Mehrspur-Timeline ist der Standard der App. Der bisherige Editor
+bleibt unter `/classic` erreichbar (Link „Zum bisherigen Editor“ in der
+Kopfzeile des Editors, zurück über „Zum neuen Editor“).
 
-- **Routen** (`src/router/`): `/` bisheriger Editor, `/editor` neuer Editor (Beta).
-  Unbekannte Adressen führen zu `/`.
-- **Freischalten** von `/editor`: Knopf „Neuer Editor (Beta)“ in der Kopfzeile
-  (merkt sich die Freischaltung im Browser unter `videoCutter.timelineEditor`)
-  oder Build-Variable `VITE_TIMELINE_EDITOR=1`. Ohne Freischaltung leitet
-  `/editor` auf `/` um.
+- **Routen** (`src/router/`): `/` Editor mit Timeline, `/classic` bisheriger
+  Editor (eigener Chunk). Die frühere Adresse `/editor` und unbekannte Adressen
+  führen zu `/`.
 - **Timeline-Ansicht** (`src/components/timeline/TimelineView.vue`): „+ Timeline“
   in der Medienliste hängt ein Video hinten an (Bild auf V1, Ton verknüpft auf
   A1). Lineal-Klick setzt den Abspielkopf, Zoom per Knopf oder Strg+Mausrad.

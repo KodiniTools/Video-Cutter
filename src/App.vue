@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
-import { enableTimelineEditor } from '@/lib/featureFlags'
+import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
 
 // Settings-Store früh initialisieren: Theme-Watcher und Listener der globalen
@@ -10,13 +9,6 @@ useSettingsStore()
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
-
-/** Neuen Editor freischalten und öffnen (bisheriger Editor bleibt unter `/`). */
-async function openTimelineEditor(): Promise<void> {
-  if (!enableTimelineEditor()) return
-  await router.push({ name: 'timeline' })
-}
 </script>
 
 <template>
@@ -29,15 +21,14 @@ async function openTimelineEditor(): Promise<void> {
           <p data-slot="app.subtitle">{{ t('app.subtitle') }}</p>
         </div>
       </div>
-      <button
+      <RouterLink
         v-if="route.name === 'classic'"
-        type="button"
         class="beta-link"
+        :to="{ name: 'timeline' }"
         data-testid="open-timeline-editor"
-        @click="openTimelineEditor"
       >
         {{ t('timelineEditor.open') }}
-      </button>
+      </RouterLink>
     </header>
 
     <main class="content">
@@ -112,6 +103,7 @@ async function openTimelineEditor(): Promise<void> {
   font-size: var(--ds-text-sm);
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
 }
 .beta-link:hover {
   border-color: var(--ds-link);
