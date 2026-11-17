@@ -119,7 +119,22 @@ export interface DocAudioClip extends DocClipBase {
   /** Ton am Clip-Anfang ein- bzw. am Clip-Ende ausblenden (`null` = aus). */
   fadeIn: DocFade | null
   fadeOut: DocFade | null
+  /**
+   * Lautstärke-Kurve (`null` = keine): Punkte nach Quellzeit aufsteigend,
+   * dazwischen linear, außen gilt der erste bzw. letzte Wert.
+   */
+  envelope: DocVolumePoint[] | null
 }
+
+/** Punkt einer Lautstärke-Kurve: Zeit in der Quelle und Faktor. */
+export interface DocVolumePoint {
+  at: Time
+  gain: number
+}
+
+export const MAX_ENVELOPE_POINTS = 32
+/** Höchster Faktor eines Kurvenpunkts. */
+export const MAX_ENVELOPE_GAIN = 2
 
 /** Blende eines Ton-Clips: Dauer auf der Timeline und Kurvenform (`afade`). */
 export interface DocFade {
@@ -493,6 +508,24 @@ export function parseTimelineDoc(
               f.duration > 0 ? { duration: f.duration, curve: f.curve as AudioFadeCurve } : null,
             )
           }
+          let envelope: DocVolumePoint[] | null = null
+          if (rc.envelope !== undefined && rc.envelope !== null) {
+            const list: unknown = rc.envelope
+            if (!Array.isArray(list) || list.length > MAX_ENVELOPE_POINTS)
+              return fail(`${cp}.envelope`, 'Ungültige Lautstärke-Kurve.')
+            const points: DocVolumePoint[] = []
+            for (const p of list as unknown[]) {
+              if (
+                !isObject(p) ||
+                !isTime(p.at) ||
+                !inRange(p.gain, 0, MAX_ENVELOPE_GAIN) ||
+                (points.length > 0 && p.at <= points[points.length - 1].at)
+              )
+                return fail(`${cp}.envelope`, 'Ungültige Lautstärke-Kurve.')
+              points.push({ at: p.at, gain: p.gain })
+            }
+            if (points.length > 0) envelope = points
+          }
           clips.push({
             ...base,
             kind: 'audio',
@@ -502,6 +535,7 @@ export function parseTimelineDoc(
             gain: rc.gain,
             fadeIn: fades[0],
             fadeOut: fades[1],
+            envelope,
           })
           return
         }

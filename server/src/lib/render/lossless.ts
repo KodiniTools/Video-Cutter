@@ -82,7 +82,8 @@ export function checkLossless(
     a.speed === 1 &&
     Math.abs(sound[0].volume - 1) < 1e-6 &&
     !a.fadeIn &&
-    !a.fadeOut
+    !a.fadeOut &&
+    !a.envelope
   return same ? { ...base, audio: true } : no('audio')
 }
 

@@ -28,6 +28,7 @@ import {
   removeTrack as removeTrackOp,
   setClipColor as setClipColorOp,
   setClipCrop as setClipCropOp,
+  setClipEnvelope as setClipEnvelopeOp,
   setClipLayout as setClipLayoutOp,
   setClipFade as setClipFadeOp,
   setClipHold as setClipHoldOp,
@@ -64,6 +65,7 @@ import {
   type TimelineDoc,
   type TrackKind,
   type TrackPatch,
+  type VolumePoint,
 } from '@/timeline/model'
 
 /** So viele Schritte merkt sich der Verlauf höchstens. */
@@ -376,6 +378,8 @@ export const useTimelineStore = defineStore('timeline', () => {
   ) => apply((d) => setClipFadeOp(d, clipId, side, fade))
 
   /** Lautstärke eines Ton-Clips. */
+  const setClipEnvelope = (clipId: string, points: readonly VolumePoint[] | null) =>
+    apply((d) => setClipEnvelopeOp(d, clipId, points))
   const setClipGain = (clipId: string, gain: number) => apply((d) => setClipGainOp(d, clipId, gain))
 
   /**
@@ -691,6 +695,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     addOverlayClips,
     setClipSpeed,
     setClipGain,
+    setClipEnvelope,
     setClipFade,
     setClipColor,
     setClipCrop,

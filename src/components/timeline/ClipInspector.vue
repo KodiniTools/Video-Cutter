@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import EnvelopeEditor from './EnvelopeEditor.vue'
 import { formatSpeedFactor, SPEED_STEPS, speedFactor } from '@/lib/clipSpeed'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
@@ -393,6 +394,7 @@ onBeforeUnmount(commit)
       </template>
       <p class="hint">{{ t('timeline.clipInspector.fadeHint') }}</p>
     </fieldset>
+    <EnvelopeEditor v-if="audio" :clip="audio" />
     <template v-if="canRepeat">
       <button
         type="button"

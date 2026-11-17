@@ -5,9 +5,10 @@ import WaveformCanvas from './WaveformCanvas.vue'
 import { stripTileStyle } from '@/lib/derivedApi'
 import { getImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
+import { envelopeLine } from '@/timeline/envelope'
 import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
-import type { Clip } from '@/timeline/model'
+import { MAX_CLIP_GAIN, type Clip } from '@/timeline/model'
 
 /** Ein Clip auf einer Spur: Lage und Breite aus Zeit und Zoom, Inhalt je nach Art. */
 const props = defineProps<{
@@ -91,6 +92,17 @@ const peaks = computed(() => {
   return clipPeaks(item.value?.peaks, rate, clip.sourceIn, clip.duration, clip.speed)
 })
 
+/** Lautstärke-Kurve als Linie über dem Ton-Clip (oben = lauter). */
+const envelope = computed(() => {
+  const clip = props.clip
+  if (clip.kind !== 'audio') return ''
+  return envelopeLine(clip)
+    .map(
+      ([x, gain]) => `${(x * 100).toFixed(2)},${(100 - (gain / MAX_CLIP_GAIN) * 100).toFixed(2)}`,
+    )
+    .join(' ')
+})
+
 /** Übergang am Anfang: Marke so breit wie der Teil, der in diesem Clip liegt. */
 const transition = computed(() => {
   const clip = props.clip
@@ -127,6 +139,15 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       <span v-for="thumb in thumbs" :key="thumb.key" class="thumb" :style="thumb.style"></span>
     </div>
     <div v-if="peaks && peaks.length" class="wave"><WaveformCanvas :peaks="peaks" /></div>
+    <svg
+      v-if="envelope"
+      class="envelope"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polyline :points="envelope" />
+    </svg>
     <span
       v-if="transition"
       class="transition"
@@ -237,5 +258,18 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   color: var(--ds-text);
   font-size: var(--ds-text-xs);
   line-height: 1.4;
+}
+.envelope {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.envelope polyline {
+  fill: none;
+  stroke: var(--vc-playhead);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
 }
 </style>

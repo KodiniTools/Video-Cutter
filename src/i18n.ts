@@ -718,6 +718,19 @@ const messages = {
         gain: 'Lautstärke',
         fade: 'Ton-Blende',
         fadeSides: { in: 'Einblenden', out: 'Ausblenden' },
+        envelope: {
+          title: 'Lautstärke-Kurve',
+          add: 'Punkt am Abspielkopf',
+          addOutside: 'Stelle den Abspielkopf auf den Clip, um dort einen Punkt zu setzen.',
+          full: 'Mehr Punkte sind nicht möglich.',
+          seek: 'Zu {time} springen',
+          gain: 'Lautstärke am Punkt {time}',
+          remove: 'Punkt bei {time} entfernen',
+          clear: 'Kurve entfernen',
+          hidden:
+            'Kein Punkt liegt außerhalb des Clips. | Ein Punkt liegt außerhalb des Clips und wirkt weiter. | {n} Punkte liegen außerhalb des Clips und wirken weiter.',
+          hint: 'Zwischen zwei Punkten ändert sich die Lautstärke gleichmäßig, davor und dahinter gilt der erste bzw. letzte Wert. Die Kurve wirkt zusätzlich zum Regler „Lautstärke“ und bleibt beim Teilen und Trimmen an derselben Stelle des Tons.',
+        },
         fadeHint:
           'Blendet den Ton am Anfang bzw. Ende dieses Clips. Beim Teilen bleibt die Einblendung am ersten, die Ausblendung am letzten Teil.',
         repeat: 'Bis zum Ende wiederholen',
@@ -1657,6 +1670,19 @@ const messages = {
         gain: 'Volume',
         fade: 'Audio fade',
         fadeSides: { in: 'Fade in', out: 'Fade out' },
+        envelope: {
+          title: 'Volume curve',
+          add: 'Point at playhead',
+          addOutside: 'Move the playhead onto the clip to set a point there.',
+          full: 'No more points are possible.',
+          seek: 'Go to {time}',
+          gain: 'Volume at point {time}',
+          remove: 'Remove point at {time}',
+          clear: 'Remove curve',
+          hidden:
+            'No point lies outside the clip. | One point lies outside the clip and still applies. | {n} points lie outside the clip and still apply.',
+          hint: 'Between two points the volume changes evenly; before and after, the first or last value applies. The curve works on top of the “Volume” slider and stays at the same spot of the audio when splitting and trimming.',
+        },
         fadeHint:
           'Fades the sound at the start or end of this clip. When you split it, the fade-in stays on the first part and the fade-out on the last.',
         repeat: 'Repeat until the end',

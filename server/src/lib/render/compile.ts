@@ -10,6 +10,7 @@ import {
   type DocColor,
   type DocOverlayTrack,
   type DocVideoClip,
+  type DocVolumePoint,
   type DocVideoTrack,
   type RenderDoc,
   type Time,
@@ -172,6 +173,26 @@ function pieces<C extends { start: Time; duration: Time }>(
 
 /** Kürzeste Blende, die noch gerendert wird. */
 const MIN_FADE: Time = 20_000
+
+/**
+ * `volume` mit der Lautstärke-Kurve eines Ton-Clips. Der Filter sitzt vor dem
+ * Tempo, dort läuft `t` in Quellzeit ab `from` (Sekunden in der Quelle).
+ * Zwischen den Punkten linear, davor und dahinter der erste bzw. letzte Wert.
+ */
+export function envelopeFilter(points: readonly DocVolumePoint[], from: number): string[] {
+  if (points.length === 0) return []
+  const at = (p: DocVolumePoint) => num(p.at / MICROS_PER_SECOND)
+  const T = `(t+${num(from)})`
+  let expr = num(points[points.length - 1].gain)
+  for (let i = points.length - 2; i >= 0; i--) {
+    const a = points[i]
+    const b = points[i + 1]
+    const slope = num((b.gain - a.gain) / ((b.at - a.at) / MICROS_PER_SECOND))
+    expr = `if(lt(${T},${at(b)}),${num(a.gain)}+(${slope})*(${T}-${at(a)}),${expr})`
+  }
+  expr = `if(lt(${T},${at(points[0])}),${num(points[0].gain)},${expr})`
+  return [`volume='${expr}':eval=frame`]
+}
 
 /** Vorlauf des Steuersignals beim automatischen Absenken (Sekunden). */
 const DUCK_PRIME_SEC = 0.3
@@ -575,6 +596,10 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         const volume = clip.gain * track.volume
         const steps = [
           'asetpts=PTS-STARTPTS',
+          ...envelopeFilter(
+            clip.envelope ?? [],
+            (clip.sourceIn + Math.round(piece.offset * clip.speed)) / MICROS_PER_SECOND,
+          ),
           ...atempoFilters(clip.speed),
           `aresample=${sr}`,
           'aformat=sample_fmts=fltp:channel_layouts=stereo',
