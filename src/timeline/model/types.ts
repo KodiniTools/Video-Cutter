@@ -215,6 +215,8 @@ export interface TimelineDoc {
 export type OpError =
   | 'track-not-found'
   | 'clip-not-found'
+  | 'marker-not-found'
+  | 'too-many'
   | 'asset-not-found'
   | 'asset-in-use'
   | 'track-locked'

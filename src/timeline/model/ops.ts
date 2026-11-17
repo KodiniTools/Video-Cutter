@@ -17,6 +17,7 @@ import {
   type ClipFade,
   type ClipKind,
   type FadeCurve,
+  type Marker,
   type OpError,
   type OpResult,
   type OverlayClip,
@@ -1320,6 +1321,59 @@ export function appendMedia(
   })
 }
 
+// --- Marker -----------------------------------------------------------------
+
+export const MAX_MARKERS = 200
+export const MAX_MARKER_LABEL = 60
+
+const markerLabel = (label: string | undefined): string =>
+  (label ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_MARKER_LABEL)
+
+const sortMarkers = (markers: Marker[]): Marker[] =>
+  markers.slice().sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
+
+/**
+ * Marker setzen. Liegt an der Stelle schon einer, bleibt das Dokument, wie es
+ * ist (kein zweiter Marker auf derselben Zeit).
+ */
+export function addMarker(
+  doc: TimelineDoc,
+  marker: { id?: string; at: Time; label?: string },
+): OpResult {
+  if (!isTime(marker.at)) return fail('invalid-time')
+  if (doc.markers.some((m) => m.at === marker.at)) return ok(doc)
+  if (doc.markers.length >= MAX_MARKERS) return fail('too-many')
+  const id = marker.id ?? createId()
+  if (hasId(doc, id)) return fail('duplicate-id')
+  const markers = sortMarkers([
+    ...doc.markers,
+    { id, at: marker.at, label: markerLabel(marker.label) },
+  ])
+  return ok({ ...doc, markers })
+}
+
+/** Marker umbenennen oder verschieben; auf einen anderen Marker lässt er sich nicht legen. */
+export function updateMarker(
+  doc: TimelineDoc,
+  markerId: string,
+  patch: { at?: Time; label?: string },
+): OpResult {
+  const before = doc.markers.find((m) => m.id === markerId)
+  if (!before) return fail('marker-not-found')
+  const at = patch.at ?? before.at
+  if (!isTime(at)) return fail('invalid-time')
+  if (doc.markers.some((m) => m.id !== markerId && m.at === at)) return fail('overlap')
+  const label = patch.label === undefined ? before.label : markerLabel(patch.label)
+  if (at === before.at && label === before.label) return ok(doc)
+  const markers = sortMarkers(doc.markers.map((m) => (m.id === markerId ? { ...m, at, label } : m)))
+  return ok({ ...doc, markers })
+}
+
+export function removeMarker(doc: TimelineDoc, markerId: string): OpResult {
+  if (!doc.markers.some((m) => m.id === markerId)) return fail('marker-not-found')
+  return ok({ ...doc, markers: doc.markers.filter((m) => m.id !== markerId) })
+}
+
 // --- Einrasten --------------------------------------------------------------
 
 /** Mögliche Einrastpunkte: 0, Clip-Ränder, Marker und (optional) der Abspielkopf. */
@@ -1327,6 +1381,7 @@ export function snapPoints(
   doc: TimelineDoc,
   opts: { exclude?: readonly string[]; playhead?: Time } = {},
 ): Time[] {
+  // `exclude` nimmt Clips und Marker aus (der gezogene Marker rastet nicht an sich selbst ein).
   const exclude = new Set(opts.exclude ?? [])
   const points = new Set<Time>([0])
   for (const t of doc.tracks)
@@ -1335,7 +1390,7 @@ export function snapPoints(
       points.add(c.start)
       points.add(clipEnd(c))
     }
-  for (const m of doc.markers) points.add(m.at)
+  for (const m of doc.markers) if (!exclude.has(m.id)) points.add(m.at)
   if (opts.playhead !== undefined && isTime(opts.playhead)) points.add(opts.playhead)
   return [...points].sort((a, b) => a - b)
 }

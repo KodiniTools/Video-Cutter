@@ -15,11 +15,14 @@ import {
   TIMELINE_GRAPHIC_KINDS,
 } from '@/timeline/graphics'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
+import { chapterList } from '@/timeline/markers'
 import {
   findClip,
   frameTime,
+  MAX_MARKER_LABEL,
   MICROS_PER_SECOND,
   timeToSeconds,
+  type Marker,
   type OpError,
   type Time,
   type TrackKind,
@@ -234,6 +237,7 @@ const HINTS: Partial<Record<OpError, string>> = {
   'too-short': 'timeline.hint.tooShort',
   'invalid-time': 'timeline.hint.nothingAtPlayhead',
   overlap: 'timeline.hint.overlap',
+  'too-many': 'timeline.hint.tooManyMarkers',
 }
 
 function run(command: () => boolean): void {
@@ -301,6 +305,102 @@ async function addImage(e: Event): Promise<void> {
   }
 }
 
+// --- Marker --------------------------------------------------------------------
+
+/** Angeklickter Marker: Name und Löschen stehen dann in der Marker-Zeile. */
+const selectedMarkerId = ref<string | null>(null)
+const selectedMarker = computed(
+  () => store.doc.markers.find((m) => m.id === selectedMarkerId.value) ?? null,
+)
+const markers = computed(() =>
+  store.doc.markers.map((m) => ({ marker: m, left: timeToPx(m.at, store.zoom) })),
+)
+const markerTime = (m: Marker) => formatTimeMs(timeToSeconds(m.at))
+const copyNote = ref('')
+
+function addMarker(): void {
+  run(() => {
+    const id = store.addMarkerAtPlayhead()
+    if (id) selectedMarkerId.value = id
+    return id !== null
+  })
+  void nextTick(() => markerName.value?.focus())
+}
+const markerName = ref<HTMLInputElement | null>(null)
+
+function pickMarker(m: Marker): void {
+  selectedMarkerId.value = m.id
+  store.seek(m.at)
+}
+
+function jumpMarker(dir: -1 | 1): void {
+  const id = store.jumpToMarker(dir)
+  if (id) selectedMarkerId.value = id
+}
+
+function renameMarker(event: Event): void {
+  const m = selectedMarker.value
+  if (m) run(() => store.updateMarker(m.id, { label: (event.target as HTMLInputElement).value }))
+}
+
+function removeMarker(id: string): void {
+  run(() => store.removeMarker(id))
+  if (selectedMarkerId.value === id) selectedMarkerId.value = null
+}
+
+let markerDrag: {
+  id: string
+  pointerId: number
+  startX: number
+  originPx: number
+  moved: boolean
+} | null = null
+
+function onMarkerDown(event: PointerEvent, m: Marker): void {
+  if (event.button !== 0) return
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  markerDrag = {
+    id: m.id,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    originPx: timeToPx(m.at, store.zoom),
+    moved: false,
+  }
+}
+
+function onMarkerMove(event: PointerEvent): void {
+  const d = markerDrag
+  if (!d || event.pointerId !== d.pointerId) return
+  const dx = event.clientX - d.startX
+  if (!d.moved) {
+    if (Math.abs(dx) < 4) return
+    d.moved = true
+    store.beginGesture()
+  }
+  store.dragMarkerTo(d.id, pxToTime(d.originPx + dx, store.zoom))
+}
+
+function onMarkerUp(event: PointerEvent): void {
+  const d = markerDrag
+  if (!d || event.pointerId !== d.pointerId) return
+  markerDrag = null
+  if (d.moved) store.endGesture()
+}
+
+async function copyChapters(): Promise<void> {
+  const text = chapterList(store.doc.markers, t('timeline.marker.chapter'))
+  try {
+    await navigator.clipboard.writeText(text)
+    copyNote.value = t('timeline.marker.copied')
+  } catch {
+    copyNote.value = t('timeline.marker.copyFailed')
+  }
+}
+watch(
+  () => store.doc.markers,
+  () => (copyNote.value = ''),
+)
+
 const canSplit = computed(() => store.splitTargets.length > 0)
 
 function stepPlayhead(frames: number): void {
@@ -324,6 +424,7 @@ function onKeydown(event: KeyboardEvent): void {
   else if (mod || event.altKey) handled = false
   else if (key === 'Delete' || key === 'Backspace') remove(event.shiftKey)
   else if (key === 's') split()
+  else if (key === 'm') addMarker()
   else if (key === ' ') store.togglePlay()
   else if (key === 'ArrowLeft')
     stepPlayhead(event.shiftKey ? -Math.round(store.doc.settings.fps) : -1)
@@ -479,6 +580,15 @@ function onKeydown(event: KeyboardEvent): void {
         data-testid="timeline-image-input"
         @change="addImage"
       />
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-add-marker"
+        :title="t('timeline.marker.addTitle')"
+        @click="addMarker"
+      >
+        {{ t('timeline.marker.add') }}
+      </button>
       <span class="time" data-testid="timeline-time">{{ timeText }}</span>
       <span v-if="hint" class="hint" role="status">{{ hint }}</span>
       <span class="spacer"></span>
@@ -513,11 +623,73 @@ function onKeydown(event: KeyboardEvent): void {
       </button>
     </div>
 
+    <div v-if="store.doc.markers.length" class="marker-bar" data-testid="marker-bar">
+      <button
+        type="button"
+        class="tool"
+        data-testid="timeline-prev-marker"
+        :title="t('timeline.marker.prev')"
+        :aria-label="t('timeline.marker.prev')"
+        @click="jumpMarker(-1)"
+      >
+        ⇤
+      </button>
+      <button
+        type="button"
+        class="tool"
+        data-testid="timeline-next-marker"
+        :title="t('timeline.marker.next')"
+        :aria-label="t('timeline.marker.next')"
+        @click="jumpMarker(1)"
+      >
+        ⇥
+      </button>
+      <template v-if="selectedMarker">
+        <span class="marker-at">{{
+          t('timeline.marker.at', { time: markerTime(selectedMarker) })
+        }}</span>
+        <input
+          ref="markerName"
+          :key="selectedMarker.id"
+          class="marker-name"
+          type="text"
+          data-testid="timeline-marker-name"
+          :maxlength="MAX_MARKER_LABEL"
+          :value="selectedMarker.label"
+          :placeholder="t('timeline.marker.namePlaceholder')"
+          :aria-label="t('timeline.marker.name')"
+          @change="renameMarker"
+          @keydown.stop
+          @keydown.enter="($event.target as HTMLInputElement).blur()"
+        />
+        <button
+          type="button"
+          class="tool wide"
+          data-testid="timeline-marker-remove"
+          @click="removeMarker(selectedMarker.id)"
+        >
+          {{ t('timeline.marker.remove') }}
+        </button>
+      </template>
+      <span v-else class="marker-hint">{{ t('timeline.marker.selectHint') }}</span>
+      <span class="spacer"></span>
+      <span v-if="copyNote" class="marker-hint" role="status">{{ copyNote }}</span>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-copy-chapters"
+        :title="t('timeline.marker.copyChaptersTitle')"
+        @click="copyChapters"
+      >
+        {{ t('timeline.marker.copyChapters') }}
+      </button>
+    </div>
+
     <p v-if="!store.doc.tracks.length" class="empty">{{ t('timeline.empty') }}</p>
 
     <div v-else ref="scroller" class="scroller" @scroll="measure" @wheel="onWheel">
       <div class="grid" :style="{ width: `${HEADER_WIDTH + contentWidth}px` }">
-        <div class="row ruler-row">
+        <div class="row ruler-row" :class="{ 'has-markers': markers.length > 0 }">
           <div class="head corner" :style="{ width: `${HEADER_WIDTH}px` }"></div>
           <div
             class="ruler"
@@ -535,6 +707,31 @@ function onKeydown(event: KeyboardEvent): void {
             >
               <span v-if="tick.label" class="tick-label">{{ tick.label }}</span>
             </span>
+            <button
+              v-for="m in markers"
+              :key="m.marker.id"
+              type="button"
+              class="marker"
+              :class="{ active: m.marker.id === selectedMarkerId }"
+              :data-marker="m.marker.id"
+              :style="{ left: `${m.left}px` }"
+              :title="m.marker.label || t('timeline.marker.unnamed')"
+              :aria-label="
+                t('timeline.marker.flag', {
+                  name: m.marker.label || t('timeline.marker.unnamed'),
+                  time: markerTime(m.marker),
+                })
+              "
+              :aria-pressed="m.marker.id === selectedMarkerId"
+              @pointerdown.stop="onMarkerDown($event, m.marker)"
+              @pointermove.stop="onMarkerMove"
+              @pointerup="onMarkerUp"
+              @pointercancel="onMarkerUp"
+              @click="pickMarker(m.marker)"
+              @keydown.delete.stop.prevent="removeMarker(m.marker.id)"
+            >
+              <span class="marker-label">{{ m.marker.label }}</span>
+            </button>
           </div>
         </div>
 
@@ -576,6 +773,12 @@ function onKeydown(event: KeyboardEvent): void {
           </div>
         </div>
 
+        <div
+          v-for="m in markers"
+          :key="m.marker.id"
+          class="marker-line"
+          :style="{ left: `${HEADER_WIDTH + m.left}px` }"
+        ></div>
         <div
           class="playhead"
           data-testid="timeline-playhead"
@@ -740,6 +943,77 @@ function onKeydown(event: KeyboardEvent): void {
 .lane {
   position: relative;
   flex: none;
+}
+.marker-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+}
+.marker-at,
+.marker-hint {
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.marker-name {
+  width: 220px;
+  max-width: 100%;
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm);
+}
+.marker-name:focus-visible,
+.marker:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+/* Mit Markern bekommt das Lineal oben einen eigenen Streifen für die Fähnchen. */
+.ruler-row.has-markers {
+  height: 44px;
+}
+.marker {
+  position: absolute;
+  top: 2px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 14px;
+  min-width: 10px;
+  max-width: 140px;
+  padding: 0 4px;
+  border: 0;
+  border-left: 2px solid var(--ds-accent);
+  border-radius: 0 var(--ds-radius-sm) var(--ds-radius-sm) 0;
+  background: var(--ds-accent-soft);
+  color: var(--ds-text);
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+.marker.active {
+  background: var(--ds-accent);
+  color: var(--ds-surface-0);
+}
+.marker-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.marker-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 0;
+  border-left: 1px dashed var(--ds-accent);
+  opacity: 0.6;
+  pointer-events: none;
 }
 .playhead {
   position: absolute;

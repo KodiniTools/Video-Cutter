@@ -353,6 +353,14 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   der nächste Clip derselben Spur beginnt. Ein Übergang des nächsten Clips
   setzt am Standbild an. Beim Teilen bleibt die Einstellung am letzten Teil.
   Standbilder aus Projekten des bisherigen Editors werden so übernommen.
+- **Marker und Kapitel** (nur Frontend): `addMarker`, `updateMarker`,
+  `removeMarker` pflegen `doc.markers` (sortiert, je Zeit nur einer, höchstens
+  200). Knopf „+ Marker“ oder Taste M setzt einen am Abspielkopf. Marker
+  stehen als Fähnchen im Lineal: Klick wählt und springt hin, Ziehen
+  verschiebt (aufs Bildraster, mit Einrasten), Name und Löschen in der
+  Marker-Zeile, ⇤/⇥ springen zum vorherigen/nächsten. Clips rasten an Markern
+  ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
+  Zwischenablage (`src/timeline/markers.ts`). Der Server ignoriert Marker.
 - **Automatisches Absenken** (Feature `timelineDuck`): Eine Ton-Spur kann
   `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7;
   `updateTrack`). Solange auf den übrigen hörbaren Ton-Spuren etwas zu hören

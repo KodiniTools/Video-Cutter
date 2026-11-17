@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
+import { neighbourMarker } from '@/timeline/markers'
 import {
+  addMarker as addMarkerOp,
   addTrack as addTrackOp,
   appendMedia as appendMediaOp,
   assetInUse,
@@ -22,6 +24,7 @@ import {
   putAsset as putAssetOp,
   removeAsset as removeAssetOp,
   removeClip as removeClipOp,
+  removeMarker as removeMarkerOp,
   removeTrack as removeTrackOp,
   setClipColor as setClipColorOp,
   setClipCrop as setClipCropOp,
@@ -39,6 +42,7 @@ import {
   trimRange,
   unlinkClips as unlinkClipsOp,
   updateClipData as updateClipDataOp,
+  updateMarker as updateMarkerOp,
   updateSettings as updateSettingsOp,
   updateTrack as updateTrackOp,
   validateDoc,
@@ -574,6 +578,33 @@ export const useTimelineStore = defineStore('timeline', () => {
     playhead.value = snapToFrame(t, doc.value.settings.fps)
   }
 
+  // --- Marker ---------------------------------------------------------------
+
+  /** Marker am Abspielkopf setzen; gibt den Marker an dieser Stelle zurück. */
+  function addMarkerAtPlayhead(label = ''): string | null {
+    const at = playhead.value
+    if (!apply((d) => addMarkerOp(d, { at, label }))) return null
+    return doc.value.markers.find((m) => m.at === at)?.id ?? null
+  }
+  const updateMarker = (markerId: string, patch: { at?: Time; label?: string }) =>
+    apply((d) => updateMarkerOp(d, markerId, patch))
+  const removeMarker = (markerId: string) => apply((d) => removeMarkerOp(d, markerId))
+
+  /** Marker beim Ziehen versetzen: aufs Bildraster, dann einrasten (wenn an). */
+  function dragMarkerTo(markerId: string, time: Time): boolean {
+    if (!Number.isFinite(time)) return false
+    const framed = snapToFrame(Math.max(0, Math.round(time)), doc.value.settings.fps)
+    return updateMarker(markerId, { at: snap(framed, { exclude: [markerId] }) })
+  }
+
+  /** Zum nächsten (`dir` 1) oder vorherigen (`dir` −1) Marker springen. */
+  function jumpToMarker(dir: -1 | 1): string | null {
+    const marker = neighbourMarker(doc.value.markers, playhead.value, dir)
+    if (!marker) return null
+    seek(marker.at)
+    return marker.id
+  }
+
   /** Projektformat ändern (rückgängig machbar); der Abspielkopf bleibt auf dem Bildraster. */
   function updateSettings(patch: SettingsPatch): boolean {
     const done = apply((d) => updateSettingsOp(d, patch))
@@ -671,5 +702,10 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateSettings,
     setZoom,
     snap,
+    addMarkerAtPlayhead,
+    updateMarker,
+    removeMarker,
+    dragMarkerTo,
+    jumpToMarker,
   }
 })
