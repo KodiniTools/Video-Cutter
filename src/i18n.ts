@@ -771,6 +771,25 @@ const messages = {
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
         hintNoAudio: 'Schneller macht den Clip kürzer, langsamer länger.',
       },
+      voice: {
+        start: '🎙 Sprachaufnahme',
+        startHint:
+          'Nimmt mit dem Mikrofon auf und legt die Aufnahme am Abspielkopf auf eine Ton-Spur',
+        processing: 'Aufnahme wird übernommen …',
+        running: 'Aufnahme läuft',
+        level: 'Pegel des Mikrofons',
+        stop: 'Stopp',
+        discard: 'Verwerfen',
+        hint: 'Die Aufnahme landet dort, wo der Abspielkopf beim Start stand. Wenn dabei die Vorschau läuft, am besten Kopfhörer tragen.',
+        fileName: 'Aufnahme',
+        problems: {
+          unsupported: 'Dieser Browser kann nicht mit dem Mikrofon aufnehmen.',
+          denied: 'Der Zugriff auf das Mikrofon wurde nicht erlaubt. Bitte im Browser freigeben.',
+          noMic: 'Kein Mikrofon gefunden.',
+          tooShort: 'Die Aufnahme war zu kurz.',
+          failed: 'Die Aufnahme ist fehlgeschlagen.',
+        },
+      },
       still: {
         open: '+ Bild-Clip / KI-Bild / KI-Video',
         close: 'Schließen',
@@ -1728,6 +1747,25 @@ const messages = {
           'The transition comes from the previous clip on the same track, otherwise from the background. “Fade in/out” fades the previous clip out and this one in (half the duration each). The others run for half the duration over the frozen last frame of the previous clip. The length of the timeline stays the same.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
         hintNoAudio: 'Faster makes the clip shorter, slower makes it longer.',
+      },
+      voice: {
+        start: '🎙 Voice recording',
+        startHint:
+          'Records with the microphone and places the recording on an audio track at the playhead',
+        processing: 'Adding the recording …',
+        running: 'Recording',
+        level: 'Microphone level',
+        stop: 'Stop',
+        discard: 'Discard',
+        hint: 'The recording is placed where the playhead was when you started. If the preview is playing, headphones work best.',
+        fileName: 'Recording',
+        problems: {
+          unsupported: 'This browser cannot record from the microphone.',
+          denied: 'Microphone access was not allowed. Please enable it in the browser.',
+          noMic: 'No microphone found.',
+          tooShort: 'The recording was too short.',
+          failed: 'The recording failed.',
+        },
       },
       still: {
         open: '+ Image clip / AI image / AI video',

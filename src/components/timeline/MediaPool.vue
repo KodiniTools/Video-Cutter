@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StillClipForm from './StillClipForm.vue'
+import VoiceRecorder from './VoiceRecorder.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
 import { MEDIA_AUDIO_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
@@ -149,6 +150,7 @@ const rejectedText = computed(() =>
       {{ t('timeline.still.open') }}
     </button>
     <StillClipForm v-if="stillOpen" @close="stillOpen = false" />
+    <VoiceRecorder />
 
     <p v-if="rejectedText" class="note error" role="alert">{{ rejectedText }}</p>
     <p v-if="!pool.items.length" class="note">{{ t('mediaPool.empty') }}</p>

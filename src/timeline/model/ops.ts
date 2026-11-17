@@ -1304,6 +1304,57 @@ function appendAudioFile(doc: TimelineDoc, asset: AssetRef, ids: () => string): 
 }
 
 /**
+ * Tondatei (z. B. Sprachaufnahme) an einer festen Stelle einfügen. Sie kommt
+ * auf die oberste nicht gesperrte Ton-Spur, die leer ist oder nur Tondateien
+ * trägt, nicht automatisch abgesenkt wird und an der Stelle frei ist; sonst
+ * entsteht unten eine neue Ton-Spur. So bleibt die Aufnahme neben der Musik
+ * hörbar und steuert deren Absenken.
+ */
+export function insertAudioAt(
+  doc: TimelineDoc,
+  assetId: string,
+  at: Time,
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const asset = doc.assets[assetId]
+  if (!asset) return fail('asset-not-found')
+  if (asset.kind !== 'audio' || asset.duration === null) return fail('kind-mismatch')
+  if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
+  if (!isTime(at)) return fail('invalid-time')
+  const ids = opts.ids ?? createId
+  const end = at + asset.duration
+  let next = doc
+  let trackId = doc.tracks.find(
+    (t) =>
+      t.kind === 'audio' &&
+      !t.locked &&
+      t.duck === undefined &&
+      (t.clips.length === 0 || isMusicTrack(doc, t)) &&
+      !overlaps(t.clips, at, end),
+  )?.id
+  if (trackId === undefined) {
+    trackId = ids()
+    const added = addTrack(
+      next,
+      { id: trackId, kind: 'audio', name: nextTrackName(next, 'A') },
+      next.tracks.length,
+    )
+    if (!added.ok) return added
+    next = added.doc
+  }
+  return insertClip(next, trackId, {
+    id: ids(),
+    kind: 'audio',
+    asset: asset.id,
+    start: at,
+    duration: asset.duration,
+    sourceIn: 0,
+    speed: 1,
+    gain: 1,
+  })
+}
+
+/**
  * Medium aus der Medienliste auf die Timeline legen. Video: Bild ans Ende der
  * obersten freien Video-Spur, Ton (falls vorhanden) verknüpft auf die oberste
  * freie Ton-Spur, die keine Musik-Spur ist. Fehlende oder gesperrte Spuren

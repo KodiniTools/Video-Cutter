@@ -376,6 +376,14 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   Marker-Zeile, ⇤/⇥ springen zum vorherigen/nächsten. Clips rasten an Markern
   ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
   Zwischenablage (`src/timeline/markers.ts`).
+- **Sprachaufnahme** (nur Frontend): Knopf „🎙 Sprachaufnahme“ in der
+  Medienliste (`VoiceRecorder.vue`). Der Browser nimmt mit dem Mikrofon auf
+  (`MediaRecorder`), wandelt die Aufnahme in WAV (`src/lib/voiceRecording.ts`,
+  `src/lib/wav.ts`; die Dateien des Browsers tragen oft keine Länge) und lädt
+  sie wie jede Tondatei hoch. `insertAudioAt` legt sie dorthin, wo der
+  Abspielkopf beim Start stand: auf die oberste freie Ton-Spur, die leer ist
+  oder nur Tondateien trägt und nicht abgesenkt wird, sonst auf eine neue.
+  Höchstens 10 Minuten je Aufnahme. Braucht HTTPS (oder localhost).
 - **Kapitel in der Exportdatei**: Der Export schreibt die Marker als Kapitel in
   die Datei (`server/src/lib/render/chapters.ts`, FFMETADATA-Datei als
   zusätzliche Eingabe mit `-map_chapters`), auch beim verlustfreien Export. Vor

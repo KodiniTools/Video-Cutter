@@ -5,6 +5,7 @@ import {
   addMarker as addMarkerOp,
   addTrack as addTrackOp,
   appendMedia as appendMediaOp,
+  insertAudioAt as insertAudioAtOp,
   assetInUse,
   createDoc,
   docDuration,
@@ -395,6 +396,19 @@ export const useTimelineStore = defineStore('timeline', () => {
     return true
   }
 
+  /**
+   * Tondatei (Sprachaufnahme) an einer Stelle einfügen (ein Verlaufsschritt)
+   * und den neuen Clip markieren.
+   */
+  function insertAudioAt(assetId: string, at: Time): boolean {
+    const before = new Set(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
+    if (!apply((d) => insertAudioAtOp(d, assetId, at))) return false
+    selection.value = doc.value.tracks
+      .flatMap((t) => t.clips.map((c) => c.id))
+      .filter((id) => !before.has(id))
+    return true
+  }
+
   // --- Ziehen mit der Maus ---------------------------------------------------
 
   /** Einrast-Toleranz in Zeit (aus Pixeln über den Zoom). */
@@ -673,6 +687,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     splitClip,
     removeClip,
     appendMedia,
+    insertAudioAt,
     splitTargets,
     splitAtPlayhead,
     dragClipTo,

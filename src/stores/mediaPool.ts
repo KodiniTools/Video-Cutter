@@ -87,8 +87,11 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
     return items.value.find((i) => i.media?.id === assetId)
   }
 
-  /** Videos und Tondateien hochladen. Alles andere wird abgelehnt (siehe `rejected`). */
-  function add(files: readonly File[]): void {
+  /**
+   * Videos und Tondateien hochladen. Alles andere wird abgelehnt (siehe `rejected`).
+   * `onReady` meldet jedes Medium, sobald es im Timeline-Dokument angemeldet ist.
+   */
+  function add(files: readonly File[], onReady?: (media: MediaView) => void): void {
     const accepted = (f: File) => f.type.startsWith('video/') || isAudioFile(f)
     rejected.value = files.filter((f) => !accepted(f)).map((f) => f.name)
     for (const file of files) {
@@ -126,6 +129,7 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
           item.size = media.size || item.size
           useTimelineStore().putAsset(assetFromMedia(media))
           void prepare(key)
+          onReady?.(media)
         },
         (err: unknown) => {
           const item = find(key)
