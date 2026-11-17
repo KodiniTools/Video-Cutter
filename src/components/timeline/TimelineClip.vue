@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { stripTileStyle } from '@/lib/derivedApi'
 import { getImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
-import { envelopeLine } from '@/timeline/envelope'
+import { useTimelineStore } from '@/stores/timeline'
+import { envelopeLine, movePoint, visiblePoints } from '@/timeline/envelope'
 import { clipGraphic } from '@/timeline/graphics'
 import { clipPeaks, clipThumbs, timeToPx } from '@/timeline/layout'
 import { MAX_CLIP_GAIN, type Clip } from '@/timeline/model'
@@ -103,6 +104,70 @@ const envelope = computed(() => {
     .join(' ')
 })
 
+/** Punkte der Kurve zum Ziehen: nur am markierten, nicht gesperrten Ton-Clip. */
+const store = useTimelineStore()
+const root = ref<HTMLElement | null>(null)
+const envelopePoints = computed(() => {
+  const clip = props.clip
+  if (clip.kind !== 'audio' || !props.selected || props.locked) return []
+  return visiblePoints(clip).map((p) => ({
+    index: p.index,
+    percent: Math.round(p.gain * 100),
+    style: {
+      left: `${(p.offset / clip.duration) * 100}%`,
+      top: `clamp(5px, ${(1 - p.gain / MAX_CLIP_GAIN) * 100}%, calc(100% - 5px))`,
+    },
+  }))
+})
+
+let pointDrag: { index: number; pointerId: number; active: boolean } | null = null
+
+function onPointDown(index: number, event: PointerEvent): void {
+  if (event.button !== 0) return
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  pointDrag = { index, pointerId: event.pointerId, active: false }
+}
+
+function onPointMove(event: PointerEvent): void {
+  const d = pointDrag
+  const clip = props.clip
+  const box = root.value?.getBoundingClientRect()
+  if (!d || event.pointerId !== d.pointerId || clip.kind !== 'audio') return
+  if (!box || box.width <= 0 || box.height <= 0) return
+  if (!d.active) {
+    d.active = true
+    store.beginGesture()
+  }
+  store.setClipEnvelope(
+    clip.id,
+    movePoint(clip, d.index, {
+      offset: Math.round(((event.clientX - box.left) / box.width) * clip.duration),
+      gain: (1 - (event.clientY - box.top) / box.height) * MAX_CLIP_GAIN,
+    }),
+  )
+}
+
+function onPointUp(event: PointerEvent): void {
+  const d = pointDrag
+  if (!d || event.pointerId !== d.pointerId) return
+  pointDrag = null
+  if (d.active) store.endGesture()
+}
+onBeforeUnmount(() => {
+  if (pointDrag?.active) store.endGesture()
+  pointDrag = null
+})
+
+/** Doppelklick entfernt den Punkt. */
+function removePoint(index: number): void {
+  const clip = props.clip
+  if (clip.kind !== 'audio' || !clip.envelope) return
+  store.setClipEnvelope(
+    clip.id,
+    clip.envelope.filter((_, i) => i !== index),
+  )
+}
+
 /** Übergang am Anfang: Marke so breit wie der Teil, der in diesem Clip liegt. */
 const transition = computed(() => {
   const clip = props.clip
@@ -127,6 +192,7 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
 
 <template>
   <div
+    ref="root"
     class="clip"
     :class="{ selected }"
     :data-kind="clip.kind"
@@ -148,6 +214,19 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
     >
       <polyline :points="envelope" />
     </svg>
+    <span
+      v-for="point in envelopePoints"
+      :key="point.index"
+      class="env-point"
+      :data-point="point.index"
+      :style="point.style"
+      :title="t('timeline.clipInspector.envelope.pointTitle', { percent: point.percent })"
+      @pointerdown.stop="onPointDown(point.index, $event)"
+      @pointermove="onPointMove"
+      @pointerup="onPointUp"
+      @pointercancel="onPointUp"
+      @dblclick.stop="removePoint(point.index)"
+    ></span>
     <span
       v-if="transition"
       class="transition"
@@ -265,6 +344,18 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+.env-point {
+  position: absolute;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid var(--vc-playhead);
+  border-radius: 50%;
+  background: var(--ds-surface-0);
+  cursor: move;
+  touch-action: none;
 }
 .envelope polyline {
   fill: none;
