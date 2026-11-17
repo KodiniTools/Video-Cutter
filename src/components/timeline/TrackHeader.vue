@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DEFAULT_DUCK, type Track, type TrackPatch } from '@/timeline/model'
 
@@ -23,6 +23,22 @@ const MAX_NAME = 24
 const editing = ref(false)
 const draft = ref('')
 const input = ref<HTMLInputElement | null>(null)
+
+/** Wählbare Stärken fürs automatische Absenken (Anteil, um den die Spur leiser wird). */
+const DUCK_LEVELS = [0.3, 0.5, 0.7, 0.85, 1]
+const duck = computed(() => (props.track.kind === 'audio' ? props.track.duck : undefined))
+/** Die Stufen, dazu ein abweichender Wert aus einem geöffneten Projekt. */
+const duckLevels = computed(() => {
+  const current = duck.value
+  return current === undefined || DUCK_LEVELS.includes(current)
+    ? DUCK_LEVELS
+    : [...DUCK_LEVELS, current].sort((a, b) => a - b)
+})
+
+function onDuckLevel(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement).value)
+  if (Number.isFinite(value)) emit('update', { duck: value })
+}
 
 function startRename(): void {
   draft.value = props.track.name
@@ -71,7 +87,21 @@ function cancelRename(): void {
       >
         {{ track.name }}
       </button>
-      <span class="track-kind">{{ t(`timeline.kind.${track.kind}`) }}</span>
+      <select
+        v-if="duck !== undefined"
+        class="duck-level"
+        data-action="duck-level"
+        :value="duck"
+        :title="t('timeline.track.duckLevel')"
+        :aria-label="t('timeline.track.duckLevelNamed', { name: track.name })"
+        @change="onDuckLevel"
+        @keydown.stop
+      >
+        <option v-for="level in duckLevels" :key="level" :value="level">
+          −{{ Math.round(level * 100) }} %
+        </option>
+      </select>
+      <span v-else class="track-kind">{{ t(`timeline.kind.${track.kind}`) }}</span>
     </div>
     <div class="line buttons">
       <button
@@ -204,6 +234,20 @@ function cancelRename(): void {
   flex: none;
   font-size: var(--ds-text-xs);
   color: var(--ds-text-3);
+}
+.duck-level {
+  flex: none;
+  height: 18px;
+  padding: 0 2px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-0);
+  color: var(--ds-text-2);
+  font-size: var(--ds-text-xs);
+}
+.duck-level:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .mini {
   width: 22px;

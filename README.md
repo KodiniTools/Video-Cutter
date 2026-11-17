@@ -371,7 +371,8 @@ Der bisherige Editor bleibt dabei unter `/` unverändert der Standard.
   ein. „Kapitelliste kopieren“ schreibt „0:00 Name“ je Marker in die
   Zwischenablage (`src/timeline/markers.ts`). Der Server ignoriert Marker.
 - **Automatisches Absenken** (Feature `timelineDuck`): Eine Ton-Spur kann
-  `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7;
+  `duck` tragen (0 … 1, Schalter 🔉 im Spurkopf, Voreinstellung 0,7, Stärke
+  daneben wählbar: 30, 50, 70, 85 oder 100 %;
   `updateTrack`). Solange auf den übrigen hörbaren Ton-Spuren etwas zu hören
   ist, wird die Spur um diesen Anteil leiser (`sidechaincompress` in
   `compile.ts`, Steuersignal = Mischung der übrigen Spuren). Der Anfang des

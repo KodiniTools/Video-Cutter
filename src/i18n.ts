@@ -822,6 +822,9 @@ const messages = {
         duck: 'Automatisch absenken: Die Spur wird leiser, solange auf einer anderen Ton-Spur etwas zu hören ist',
         unduck: 'Automatisches Absenken ausschalten',
         duckNamed: '{name} automatisch absenken',
+        duckLevel:
+          'So viel leiser wird die Spur, solange auf einer anderen Ton-Spur etwas zu hören ist',
+        duckLevelNamed: 'Stärke des Absenkens für {name}',
         hide: 'Ausblenden',
         show: 'Wieder einblenden',
         hideNamed: '{name} ausblenden',
@@ -1771,6 +1774,8 @@ const messages = {
         duck: 'Auto-duck: this track gets quieter while another audio track is audible',
         unduck: 'Turn off auto-ducking',
         duckNamed: 'Auto-duck {name}',
+        duckLevel: 'How much quieter this track gets while another audio track is audible',
+        duckLevelNamed: 'Ducking strength for {name}',
         hide: 'Hide',
         show: 'Show again',
         hideNamed: 'Hide {name}',

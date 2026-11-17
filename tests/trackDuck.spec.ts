@@ -82,6 +82,32 @@ describe('Automatisches Absenken einer Ton-Spur', () => {
     expect(w.emitted('update')?.[1]).toEqual([{ duck: null }])
   })
 
+  it('Stärke lässt sich im Spurkopf wählen, sobald das Absenken an ist', async () => {
+    const doc = docWithAudio()
+    const w = mount(TrackHeader, {
+      props: { track: audio(doc), canMoveUp: false, canMoveDown: false },
+      global: { plugins: [i18n] },
+    })
+    expect(w.find('[data-action="duck-level"]').exists()).toBe(false)
+    expect(w.get('.track-kind').text()).toBe('Ton')
+    await w.setProps({ track: audio(must(updateTrack(doc, 'A9', { duck: DEFAULT_DUCK }))) })
+    const select = w.get('[data-action="duck-level"]')
+    expect((select.element as HTMLSelectElement).value).toBe('0.7')
+    expect(select.findAll('option').map((o) => o.text())).toEqual([
+      '−30 %',
+      '−50 %',
+      '−70 %',
+      '−85 %',
+      '−100 %',
+    ])
+    await select.setValue('0.3')
+    expect(w.emitted('update')?.[0]).toEqual([{ duck: 0.3 }])
+    // Ein abweichender Wert aus einem Projekt steht mit in der Liste.
+    await w.setProps({ track: audio(must(updateTrack(doc, 'A9', { duck: 0.45 }))) })
+    expect(select.findAll('option').map((o) => o.text())).toContain('−45 %')
+    expect((select.element as HTMLSelectElement).value).toBe('0.45')
+  })
+
   it('Video-Spuren haben keinen Schalter', () => {
     const video = docWithAudio().tracks.find((t) => t.kind === 'video')
     if (!video) throw new Error('keine Video-Spur')
