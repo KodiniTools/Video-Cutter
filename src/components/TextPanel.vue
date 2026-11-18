@@ -7,17 +7,16 @@ import { useTextOverlayStore } from '@/stores/textOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
 import { frameCount, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
 import FrameSpinner from './FrameSpinner.vue'
-import { groupFonts, useCustomFonts } from '@/lib/customFonts'
+import { useCustomFonts } from '@/lib/customFonts'
+import FontSelect from './FontSelect.vue'
 import {
   ANIM_SPEEDS,
-  FONT_OPTIONS,
   MAX_TEXT_LENGTH,
   MAX_TEXT_OVERLAYS,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
   POSITION_PRESETS,
   TEXT_ANIMATIONS,
-  TEXT_FONTS,
   TEXT_STYLES,
   animSpeedIndex,
   animSpeedOf,
@@ -60,8 +59,7 @@ const texts = useTextOverlayStore()
 const { overlays, selected, selectedId, canAdd } = storeToRefs(texts)
 
 // Eigene Schriften vom Server (einmal pro Sitzung).
-const { fonts: customFonts, loadCustomFonts } = useCustomFonts()
-const fontGroups = computed(() => groupFonts(customFonts.value))
+const { loadCustomFonts } = useCustomFonts()
 onMounted(() => void loadCustomFonts())
 
 const allValid = computed(
@@ -416,26 +414,15 @@ function preview(text: string): string {
         <p class="hint">{{ t('text.dragHint') }}</p>
       </div>
 
-      <label class="field-col">
+      <div class="field-col">
         <span class="field-label">{{ t('text.font') }}</span>
-        <select
-          class="input"
+        <FontSelect
           :value="selected.font"
           :disabled="busy"
-          @change="
-            patch({ font: ($event.target as HTMLSelectElement).value as typeof selected.font })
-          "
-        >
-          <optgroup :label="t('text.fontsBuiltin')">
-            <option v-for="f in TEXT_FONTS" :key="f" :value="f">{{ FONT_OPTIONS[f].label }}</option>
-          </optgroup>
-          <optgroup v-for="g in fontGroups" :key="g.group" :label="g.group">
-            <option v-for="f in g.fonts" :key="f.key" :value="f.key">
-              {{ g.group }} {{ f.label }}
-            </option>
-          </optgroup>
-        </select>
-      </label>
+          :aria-label="t('text.font')"
+          @change="patch({ font: $event })"
+        />
+      </div>
 
       <label class="field-col">
         <span class="field-label">{{ t('text.animation') }}</span>
