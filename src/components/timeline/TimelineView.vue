@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
+import MarkerEffect from './MarkerEffect.vue'
 import { addImageAsset, getImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/lib/imageAssets'
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
@@ -836,6 +837,11 @@ function onKeydown(event: KeyboardEvent): void {
             </button>
           </span>
         </span>
+        <MarkerEffect
+          :key="selectedMarker.id"
+          :marker="selectedMarker"
+          @rejected="hint = t('timeline.marker.effect.rejected')"
+        />
       </template>
       <span v-else class="marker-hint">{{ t('timeline.marker.selectHint') }}</span>
       <span class="spacer"></span>
@@ -897,6 +903,13 @@ function onKeydown(event: KeyboardEvent): void {
               @keydown.delete.stop.prevent="removeMarker(m.marker.id)"
             >
               <span class="marker-label">{{ m.marker.label }}</span>
+              <span
+                v-if="m.marker.effect"
+                class="marker-count"
+                data-testid="timeline-marker-fx"
+                :title="t(`timeline.marker.effect.kinds.${m.marker.effect.kind}`)"
+                >✦</span
+              >
               <span
                 v-if="m.bound"
                 class="marker-count"

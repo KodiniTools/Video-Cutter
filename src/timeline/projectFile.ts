@@ -1,6 +1,7 @@
 import type { MediaView } from '@/lib/mediaApi'
 import { assetFromMedia } from './assets'
 import {
+  isMarkerEffect,
   TIMELINE_DOC_VERSION,
   type AssetRef,
   type Clip,
@@ -128,7 +129,10 @@ function parseTrack(v: unknown): Track {
 
 function parseMarker(v: unknown): Marker {
   if (!isObj(v) || !isId(v.id) || !isNum(v.at)) invalid()
-  return { id: v.id, at: v.at, label: typeof v.label === 'string' ? v.label : '' }
+  const marker: Marker = { id: v.id, at: v.at, label: typeof v.label === 'string' ? v.label : '' }
+  // Ein unbekannter oder kaputter Effekt fällt still weg (der Marker bleibt).
+  if (isMarkerEffect(v.effect)) marker.effect = { ...v.effect }
+  return marker
 }
 
 function parseDoc(v: unknown): TimelineDoc {

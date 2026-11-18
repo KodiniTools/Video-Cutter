@@ -18,7 +18,10 @@ import {
   type ClipFade,
   type ClipKind,
   type FadeCurve,
+  MARKER_EFFECTS,
   type Marker,
+  type MarkerEffect,
+  type MarkerEffectKind,
   type OpError,
   type OpResult,
   type OverlayClip,
@@ -1560,6 +1563,68 @@ export function updateMarker(
     next.markers.map((m) => (m.id === markerId ? { ...m, at, label } : m)),
   )
   return ok({ ...next, markers })
+}
+
+export const MIN_EFFECT_DURATION = 100_000
+export const MAX_EFFECT_DURATION = 5_000_000
+export const MIN_EFFECT_INTENSITY = 0.05
+export const MIN_STROBE_RATE = 1
+export const MAX_STROBE_RATE = 20
+
+/** Vorgaben je Art, wenn ein Effekt neu gewählt wird. */
+export const DEFAULT_MARKER_EFFECTS: Record<MarkerEffectKind, MarkerEffect> = {
+  flash: { kind: 'flash', color: '#ffffff', intensity: 0.8, duration: 400_000, rate: 8 },
+  burst: { kind: 'burst', color: '#ff4400', intensity: 0.6, duration: 600_000, rate: 8 },
+  strobe: { kind: 'strobe', color: '#ffffff', intensity: 0.8, duration: 1_000_000, rate: 8 },
+  vignette: { kind: 'vignette', color: '#ff0044', intensity: 0.7, duration: 800_000, rate: 8 },
+}
+
+/** Gültiger Effekt (Grenzen wie auf dem Server)? */
+export function isMarkerEffect(e: unknown): e is MarkerEffect {
+  if (typeof e !== 'object' || e === null) return false
+  const v = e as Record<string, unknown>
+  const inRange = (n: unknown, min: number, max: number) =>
+    typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max
+  return (
+    (MARKER_EFFECTS as readonly unknown[]).includes(v.kind) &&
+    typeof v.color === 'string' &&
+    /^#[0-9a-f]{6}$/.test(v.color) &&
+    inRange(v.intensity, MIN_EFFECT_INTENSITY, 1) &&
+    isTime(v.duration) &&
+    inRange(v.duration, MIN_EFFECT_DURATION, MAX_EFFECT_DURATION) &&
+    inRange(v.rate, MIN_STROBE_RATE, MAX_STROBE_RATE)
+  )
+}
+
+/**
+ * Drop-Effekt eines Markers setzen, ändern (`patch` mischt in den bisherigen
+ * bzw. die Vorgabe der Art) oder entfernen (`null`).
+ */
+export function setMarkerEffect(
+  doc: TimelineDoc,
+  markerId: string,
+  patch: Partial<MarkerEffect> | null,
+): OpResult {
+  const marker = doc.markers.find((m) => m.id === markerId)
+  if (!marker) return fail('marker-not-found')
+  let effect: MarkerEffect | undefined
+  if (patch !== null) {
+    const kind = patch.kind ?? marker.effect?.kind ?? 'flash'
+    // Andere Art: deren Vorgaben, nur ausdrücklich Übergebenes bleibt.
+    const base =
+      marker.effect && marker.effect.kind === kind ? marker.effect : DEFAULT_MARKER_EFFECTS[kind]
+    effect = { ...base, ...patch, kind }
+    if (typeof effect.color === 'string') effect.color = effect.color.toLowerCase()
+    if (!isMarkerEffect(effect)) return fail('invalid-time')
+  }
+  if (JSON.stringify(effect) === JSON.stringify(marker.effect)) return ok(doc)
+  const markers = doc.markers.map((m) => {
+    if (m.id !== markerId) return m
+    const next: Marker = { id: m.id, at: m.at, label: m.label }
+    if (effect) next.effect = effect
+    return next
+  })
+  return ok({ ...doc, markers })
 }
 
 /** Marker löschen; seine Clips bleiben liegen und sind danach nicht mehr gebunden. */

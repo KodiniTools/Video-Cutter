@@ -248,6 +248,27 @@ export interface RenderDoc {
   tracks: DocTrack[]
   /** Marker nach Zeit aufsteigend; der Export schreibt sie als Kapitel. */
   markers: DocMarker[]
+  /** Drop-Effekte an Markern (nach Zeit aufsteigend); fehlt = keine. */
+  effects?: DocMarkerEffect[]
+}
+
+/** Drop-Effekte am Marker (nach Muster des Beat-Drops im Visualizer). */
+export const MARKER_EFFECTS = ['flash', 'burst', 'strobe', 'vignette'] as const
+export type MarkerEffectKind = (typeof MARKER_EFFECTS)[number]
+export const MIN_EFFECT_DURATION = 100_000
+export const MAX_EFFECT_DURATION = 5_000_000
+export const MIN_EFFECT_INTENSITY = 0.05
+export const MIN_STROBE_RATE = 1
+export const MAX_STROBE_RATE = 20
+
+/** Effekt ab `at` für `duration`: Farbe, Stärke 0,05–1, beim Stroboskop Blitze je Sekunde. */
+export interface DocMarkerEffect {
+  at: Time
+  kind: MarkerEffectKind
+  color: string
+  intensity: number
+  duration: Time
+  rate: number
 }
 
 /** Marker der Timeline: Zeit und Name (kann leer sein). */
@@ -278,6 +299,36 @@ export function parseMarkers(raw: unknown): DocMarker[] {
     if (byTime.size >= MAX_MARKERS) break
   }
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([at, label]) => ({ at, label }))
+}
+
+/**
+ * Liest die Drop-Effekte der Marker nachsichtig (wie die Marker selbst):
+ * Ungültige fallen still weg; je Zeit zählt der erste.
+ */
+export function parseMarkerEffects(raw: unknown): DocMarkerEffect[] {
+  if (!Array.isArray(raw)) return []
+  const byTime = new Map<Time, DocMarkerEffect>()
+  for (const m of raw as unknown[]) {
+    if (!isObject(m) || !isTime(m.at) || byTime.has(m.at) || !isObject(m.effect)) continue
+    const e = m.effect
+    if (!(MARKER_EFFECTS as readonly unknown[]).includes(e.kind)) continue
+    if (typeof e.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(e.color)) continue
+    if (!inRange(e.intensity, MIN_EFFECT_INTENSITY, 1)) continue
+    if (!isTime(e.duration) || e.duration < MIN_EFFECT_DURATION || e.duration > MAX_EFFECT_DURATION)
+      continue
+    const rate = e.rate === undefined ? 8 : e.rate
+    if (!inRange(rate, MIN_STROBE_RATE, MAX_STROBE_RATE)) continue
+    byTime.set(m.at, {
+      at: m.at,
+      kind: e.kind as MarkerEffectKind,
+      color: e.color.toLowerCase(),
+      intensity: e.intensity,
+      duration: e.duration,
+      rate,
+    })
+    if (byTime.size >= MAX_MARKERS) break
+  }
+  return [...byTime.values()].sort((a, b) => a.at - b.at)
 }
 
 /** Grenzen gegen übergroße Dokumente (schützen CPU und FFmpeg-Graph). */
@@ -802,6 +853,7 @@ export function parseTimelineDoc(
       assets,
       tracks,
       markers: parseMarkers(input.markers),
+      effects: parseMarkerEffects(input.markers),
     },
   }
 }

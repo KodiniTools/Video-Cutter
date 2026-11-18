@@ -236,10 +236,31 @@ export interface OverlayTrack extends TrackBase {
 
 export type Track = VideoTrack | AudioTrack | OverlayTrack
 
+/** Drop-Effekte am Marker (nach Muster des Beat-Drops im Visualizer). */
+export const MARKER_EFFECTS = ['flash', 'burst', 'strobe', 'vignette'] as const
+export type MarkerEffectKind = (typeof MARKER_EFFECTS)[number]
+
+/**
+ * Effekt ab dem Marker: Blitz (klingt ab), Farbblitz (steigt kurz an, klingt
+ * ab), Stroboskop (`rate` Blitze je Sekunde) oder Vignetten-Puls (farbiger
+ * Rand). Gerechnet wird auf dem Server über dem fertigen Bild.
+ */
+export interface MarkerEffect {
+  kind: MarkerEffectKind
+  /** CSS-Hex `#rrggbb`. */
+  color: string
+  /** Stärke 0,05–1. */
+  intensity: number
+  duration: Time
+  /** Nur Stroboskop: Blitze je Sekunde (1–20). */
+  rate: number
+}
+
 export interface Marker {
   id: string
   at: Time
   label: string
+  effect?: MarkerEffect
 }
 
 export interface TimelineDoc {

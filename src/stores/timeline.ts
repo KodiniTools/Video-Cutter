@@ -29,6 +29,7 @@ import {
   removeAsset as removeAssetOp,
   removeClip as removeClipOp,
   removeMarker as removeMarkerOp,
+  setMarkerEffect as setMarkerEffectOp,
   removeTrack as removeTrackOp,
   setClipColor as setClipColorOp,
   setClipCrop as setClipCropOp,
@@ -65,6 +66,7 @@ import {
   type OpResult,
   type OverlayClip,
   type SettingsPatch,
+  type MarkerEffect,
   type Time,
   type TimelineDoc,
   type TrackKind,
@@ -627,6 +629,8 @@ export const useTimelineStore = defineStore('timeline', () => {
   const bindSelectionToMarker = (markerId: string) =>
     apply((d) => bindClipsToMarkerOp(d, markerId, selection.value))
   const unbindClip = (clipId: string) => apply((d) => unbindClipOp(d, clipId))
+  const setMarkerEffect = (markerId: string, patch: Partial<MarkerEffect> | null) =>
+    apply((d) => setMarkerEffectOp(d, markerId, patch))
 
   /**
    * Element am Marker anlegen: Abspielkopf auf den Marker, `add` legt den Clip
@@ -763,6 +767,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     dragMarkerTo,
     bindSelectionToMarker,
     unbindClip,
+    setMarkerEffect,
     addAtMarker,
     jumpToMarker,
   }

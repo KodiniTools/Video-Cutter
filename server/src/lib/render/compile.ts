@@ -1,6 +1,7 @@
 import { LOUDNORM_FILTER, PROGRESS, XFADE_TYPES, atempoFilters, buildCropFilter } from '../args'
 import { graphicFilter } from '../graphicOverlay'
 import { buildAss, escapeFilterPath, type TextOverlay } from '../textOverlay'
+import { markerEffectFilters } from './effects'
 import {
   MICROS_PER_SECOND,
   clipEnd,
@@ -688,6 +689,24 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           ? ''
           : `ass=filename=${ASS_PLACEHOLDER}:fontsdir=${FONTS_PLACEHOLDER},`) +
         'setpts=PTS-STARTPTS,format=yuv420p[vout]',
+    )
+  }
+
+  // --- Drop-Effekte an Markern ----------------------------------------------
+
+  // Ganz oben über Bild, Grafiken und Texten; Zeiten wie bei den Grafiken.
+  const fx = markerEffectFilters(doc.effects ?? [], {
+    t0,
+    t1,
+    frameSec: secondsOf(1),
+    width,
+    height,
+  })
+  if (fx.length > 0) {
+    const last = chains.length - 1
+    chains[last] = chains[last].replace(/\[vout\]$/, '[vprefx]')
+    chains.push(
+      `[vprefx]setpts=PTS+${sec(t0)}/TB,${fx.join(',')},setpts=PTS-STARTPTS,format=yuv420p[vout]`,
     )
   }
 

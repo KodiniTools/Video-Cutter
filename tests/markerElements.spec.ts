@@ -5,12 +5,16 @@ import { nextTick } from 'vue'
 import { i18n } from '@/i18n'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 import { useTimelineStore } from '@/stores/timeline'
+import { checkLossless } from '@/timeline/lossless'
 import { buildTimelineProject, parseTimelineProject } from '@/timeline/projectFile'
 import {
   addMarker,
   addTrack,
   bindClipsToMarker,
   createDoc,
+  DEFAULT_MARKER_EFFECTS,
+  isMarkerEffect,
+  setMarkerEffect,
   findClip,
   insertClip,
   markerClipIds,
@@ -202,5 +206,102 @@ describe('Clips am Marker im Editor', () => {
     expect(startOf(store.doc, videoId)).toBe(s(4))
     expect(findClip(store.doc, videoId)?.clip.marker).toBeDefined()
     wrapper.unmount()
+  })
+})
+
+describe('Drop-Effekt am Marker', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('Befehl: setzen mit Vorgaben, ändern, Art wechseln, entfernen, prüfen', () => {
+    const doc = must(addMarker(createDoc(), { id: 'm', at: s(1) }))
+    let next = must(setMarkerEffect(doc, 'm', { kind: 'flash' }))
+    expect(next.markers[0].effect).toEqual(DEFAULT_MARKER_EFFECTS.flash)
+    next = must(setMarkerEffect(next, 'm', { intensity: 0.5, color: '#00FF00' }))
+    expect(next.markers[0].effect).toMatchObject({
+      kind: 'flash',
+      intensity: 0.5,
+      color: '#00ff00',
+    })
+    next = must(setMarkerEffect(next, 'm', { kind: 'strobe' }))
+    expect(next.markers[0].effect).toEqual(DEFAULT_MARKER_EFFECTS.strobe)
+    expect(error(setMarkerEffect(next, 'm', { rate: 99 }))).toBe('invalid-time')
+    expect(error(setMarkerEffect(next, 'm', { intensity: 0 }))).toBe('invalid-time')
+    expect(error(setMarkerEffect(next, 'x', null))).toBe('marker-not-found')
+    // Verschieben behält den Effekt, Entfernen nimmt ihn weg.
+    const moved = must(updateMarker(next, 'm', { at: s(2) }))
+    expect(moved.markers[0].effect?.kind).toBe('strobe')
+    expect(must(setMarkerEffect(moved, 'm', null)).markers[0]).toEqual({
+      id: 'm',
+      at: s(2),
+      label: '',
+    })
+    expect(isMarkerEffect(DEFAULT_MARKER_EFFECTS.vignette)).toBe(true)
+  })
+
+  it('übersteht Speichern und Öffnen, kaputter Effekt fällt weg', () => {
+    const doc = must(
+      setMarkerEffect(must(addMarker(createDoc(), { id: 'm', at: s(1) })), 'm', { kind: 'burst' }),
+    )
+    const raw = JSON.parse(JSON.stringify(buildTimelineProject(doc, {})))
+    expect(parseTimelineProject(raw).doc.markers[0].effect).toEqual(DEFAULT_MARKER_EFFECTS.burst)
+    raw.doc.markers[0].effect.kind = 'laser'
+    expect(parseTimelineProject(raw).doc.markers[0]).not.toHaveProperty('effect')
+  })
+
+  it('Ansicht: Art wählen, Regler ist ein Verlaufsschritt, Zeichen am Fähnchen', async () => {
+    const store = useTimelineStore()
+    store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10) })
+    store.appendMedia('vid')
+    store.seek(s(2))
+    store.addMarkerAtPlayhead()
+    const wrapper = mount(TimelineView, { global: { plugins: [i18n] }, attachTo: document.body })
+    await nextTick()
+    await wrapper.get('.marker').trigger('click')
+    expect(wrapper.find('[data-testid=marker-effect-intensity]').exists()).toBe(false)
+    const kind = wrapper.get('[data-testid=marker-effect-kind]')
+    ;(kind.element as HTMLSelectElement).value = 'vignette'
+    await kind.trigger('change')
+    expect(store.doc.markers[0].effect?.kind).toBe('vignette')
+    expect(wrapper.find('[data-testid=timeline-marker-fx]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid=marker-effect-rate]').exists()).toBe(false)
+
+    const slider = wrapper.get('[data-testid=marker-effect-intensity]')
+    ;(slider.element as HTMLInputElement).value = '0.3'
+    await slider.trigger('input')
+    ;(slider.element as HTMLInputElement).value = '0.4'
+    await slider.trigger('input')
+    await slider.trigger('change')
+    expect(store.doc.markers[0].effect?.intensity).toBe(0.4)
+    store.undo()
+    expect(store.doc.markers[0].effect?.intensity).toBe(DEFAULT_MARKER_EFFECTS.vignette.intensity)
+
+    ;(kind.element as HTMLSelectElement).value = ''
+    await kind.trigger('change')
+    expect(store.doc.markers[0].effect).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('Verlustfrei geht mit Drop-Effekt nicht', () => {
+    let doc = must(addTrack(createDoc(), { id: 'V', kind: 'video', name: 'V' }))
+    doc = {
+      ...doc,
+      settings: { ...doc.settings, width: 640, height: 360 },
+      assets: { a: { id: 'a', kind: 'video', name: 'a', duration: s(4) } },
+    }
+    doc = must(
+      insertClip(doc, 'V', {
+        id: 'v',
+        kind: 'video',
+        asset: 'a',
+        start: 0,
+        duration: s(4),
+        sourceIn: 0,
+        speed: 1,
+      }),
+    )
+    const info = () => ({ width: 640, height: 360, hasAudio: false })
+    expect(checkLossless(doc, info).ok).toBe(true)
+    doc = must(setMarkerEffect(must(addMarker(doc, { id: 'm', at: s(1) })), 'm', { kind: 'flash' }))
+    expect(checkLossless(doc, info)).toEqual({ ok: false, reason: 'effects' })
   })
 })
