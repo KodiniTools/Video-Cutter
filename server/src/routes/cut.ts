@@ -139,6 +139,7 @@ export const SERVER_FEATURES = [
   'timelineGraphicKeys',
   'timelineTextKeys',
   'timelineMarkerEffects',
+  'beatDetection',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */

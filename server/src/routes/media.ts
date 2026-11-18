@@ -11,6 +11,7 @@ import { buildStillArgs, parseStillParams, stillClipName } from '../lib/stillCli
 import { safeExt, ValidationError } from '../lib/validate'
 import { isMediaId, mediaStore, mediaView, StorageFullError } from '../lib/media'
 import { derivedStore, type DerivedPart } from '../lib/derived'
+import { beatStore } from '../lib/beats'
 
 /**
  * Video-Bibliothek: Videos werden EINMAL hochgeladen und dann per ID zum
@@ -222,6 +223,31 @@ mediaRouter.get('/media/:id/peaks', sendDerived('peaks', 'application/octet-stre
 mediaRouter.get('/media/:id/strip', sendDerived('strip', 'image/jpeg'))
 /** GET /api/media/:id/proxy -> Vorschau-Kopie (MP4, unterstützt Bereichsanfragen) */
 mediaRouter.get('/media/:id/proxy', sendDerived('proxy', 'video/mp4'))
+
+/**
+ * GET /api/media/:id/beats -> { bpm, beats: [s…], downbeat }
+ * Takt der Tonspur (ohne KI). Wird beim ersten Abruf berechnet (bei langen
+ * Stücken einige Sekunden) und danach gespeichert. Ohne Tonspur: leer.
+ */
+mediaRouter.get(
+  '/media/:id/beats',
+  asyncHandler(async (req, res) => {
+    let result
+    try {
+      result = await beatStore.get(req.params.id)
+    } catch (err) {
+      console.error(`Takt für ${req.params.id} fehlgeschlagen:`, err)
+      res.status(500).json({ error: 'Der Takt konnte nicht erkannt werden.' })
+      return
+    }
+    if (!result) {
+      res.status(404).json({ error: 'Video nicht gefunden.' })
+      return
+    }
+    res.set('Cache-Control', 'private, max-age=3600')
+    res.json(result)
+  }),
+)
 
 /** DELETE /api/media/:id -> sofort vom Server löschen */
 mediaRouter.delete(

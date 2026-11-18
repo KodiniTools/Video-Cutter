@@ -16,6 +16,7 @@ import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
 import { graphicImages } from '@/timeline/graphics'
 import { losslessCheck } from '@/timeline/lossless'
+import { chapterMarkers } from '@/timeline/markers'
 import { timeToSeconds } from '@/timeline/model'
 
 /**
@@ -64,7 +65,9 @@ const summary = computed(() =>
   }),
 )
 /** Marker innerhalb des Films: Der Server schreibt sie als Kapitel in die Datei. */
-const chapterCount = computed(() => store.doc.markers.filter((m) => m.at < store.duration).length)
+const chapterCount = computed(
+  () => chapterMarkers(store.doc.markers).filter((m) => m.at < store.duration).length,
+)
 const downloadUrl = computed(() =>
   phase.value === 'done' && jobId ? renderDownloadUrl(jobId) : '',
 )

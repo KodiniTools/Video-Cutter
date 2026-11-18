@@ -11,6 +11,7 @@ import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import type { GraphicSymbol } from '@/lib/graphicOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
+import { useTimelineBeatsStore } from '@/stores/timelineBeats'
 import { useTextDefaultStore } from '@/stores/textDefault'
 import {
   clipGraphic,
@@ -80,6 +81,16 @@ const ticks = computed(() =>
     pxToTime(Math.min(contentWidth.value, scrollLeft.value + laneViewport.value + 200), store.zoom),
   ).map((tick) => ({ ...tick, left: timeToPx(tick.time, store.zoom) })),
 )
+
+// Takt-Raster der Musik (nur der sichtbare Ausschnitt, sonst wären es Tausende Linien).
+const beats = useTimelineBeatsStore()
+const beatLines = computed(() => {
+  const from = pxToTime(scrollLeft.value - 200, store.zoom)
+  const to = pxToTime(scrollLeft.value + laneViewport.value + 200, store.zoom)
+  return beats.visibleTimes
+    .filter((time) => time >= from && time <= to)
+    .map((time) => ({ time, left: timeToPx(time, store.zoom) }))
+})
 
 const timeText = computed(
   () =>
@@ -935,7 +946,7 @@ function onKeydown(event: KeyboardEvent): void {
               :key="m.marker.id"
               type="button"
               class="marker"
-              :class="{ active: m.marker.id === selectedMarkerId }"
+              :class="{ active: m.marker.id === selectedMarkerId, beat: m.marker.beat }"
               :data-marker="m.marker.id"
               :style="{ left: `${m.left}px` }"
               :title="m.marker.label || t('timeline.marker.unnamed')"
@@ -1019,7 +1030,15 @@ function onKeydown(event: KeyboardEvent): void {
           v-for="m in markers"
           :key="m.marker.id"
           class="marker-line"
+          :class="{ beat: m.marker.beat }"
           :style="{ left: `${HEADER_WIDTH + m.left}px` }"
+        ></div>
+        <div
+          v-for="b in beatLines"
+          :key="`beat-${b.time}`"
+          class="beat-line"
+          data-testid="timeline-beat-line"
+          :style="{ left: `${HEADER_WIDTH + b.left}px` }"
         ></div>
         <div
           class="playhead"
@@ -1310,6 +1329,25 @@ function onKeydown(event: KeyboardEvent): void {
   width: 0;
   border-left: 1px dashed var(--ds-accent);
   opacity: 0.6;
+  pointer-events: none;
+}
+/* Takt-Marker: schmales Fähnchen ohne Namen, leisere Linie. */
+.marker.beat {
+  min-width: 6px;
+  padding: 0;
+}
+.marker-line.beat {
+  opacity: 0.35;
+}
+/* Takt-Raster (noch nicht übernommen): feine Linien über allen Spuren. */
+.beat-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 0;
+  border-left: 1px solid var(--ds-success, #2e7d32);
+  opacity: 0.45;
   pointer-events: none;
 }
 .playhead {

@@ -268,6 +268,11 @@ export interface Marker {
   at: Time
   label: string
   effect?: MarkerEffect
+  /**
+   * Vom Takt der Musik gesetzt (Knopf „Takt“): wirkt wie jeder Marker, zählt
+   * aber nicht als Kapitel und lässt sich gesammelt wieder entfernen.
+   */
+  beat?: true
 }
 
 export interface TimelineDoc {

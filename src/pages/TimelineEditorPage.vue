@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AiInspector from '@/components/timeline/AiInspector.vue'
+import BeatPanel from '@/components/timeline/BeatPanel.vue'
 import ClipInspector from '@/components/timeline/ClipInspector.vue'
 import ClipNudge from '@/components/timeline/ClipNudge.vue'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
@@ -102,6 +103,7 @@ function openProjects(): void {
         <ClipInspector />
         <TextInspector />
         <GraphicInspector />
+        <BeatPanel />
         <AiInspector />
       </div>
       <div class="stage">
