@@ -150,12 +150,17 @@ export function isBuiltinFont(v: string): v is BuiltinFont {
 
 /**
  * Vorschau-Daten einer Schrift. Eigene Schriften werden dabei für die Vorschau
- * registriert; unbekannte (noch nicht geladen) fallen auf Roboto zurück.
+ * registriert; unbekannte (noch nicht geladen) werden vorerst in Roboto gezeigt,
+ * behalten aber ihren Namen.
  */
 export function fontPreview(font: TextFont): FontPreview {
   if (isBuiltinFont(font)) return FONT_OPTIONS[font]
   const c = getCustomFont(font)
-  if (!c) return FONT_OPTIONS.roboto
+  if (!c) {
+    // Name der gewählten Schrift zeigen, nicht „Roboto“: Die Wahl ist ja noch da.
+    const name = font.slice(2).replace(/[_-]+/g, ' ').trim()
+    return name ? { ...FONT_OPTIONS.roboto, label: name } : FONT_OPTIONS.roboto
+  }
   ensureFontFace(c)
   return { label: `${c.group} ${c.label}`, css: c.css, lineRatio: c.lineRatio, shift: c.shift }
 }
