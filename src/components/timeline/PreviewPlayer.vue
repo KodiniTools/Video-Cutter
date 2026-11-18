@@ -13,6 +13,13 @@ import { formatTimeMs } from '@/lib/timeFormat'
 import { PreviewEngine, previewSupported } from '@/preview/player'
 import { useTimelineStore } from '@/stores/timeline'
 import { graphicImages } from '@/timeline/graphics'
+import {
+  DEFAULT_NUDGE_MS,
+  isNudgeStep,
+  NUDGE_STEPS_MS,
+  nudgeTime,
+  type NudgeStepMs,
+} from '@/timeline/nudge'
 import { frameTime, MICROS_PER_SECOND, timeToSeconds, type TimelineDoc } from '@/timeline/model'
 
 /**
@@ -35,6 +42,40 @@ const problem = ref<string | null>(null)
 const stats = ref<PreviewStats | null>(null)
 
 const empty = computed(() => store.duration <= 0)
+
+// --- Abspielkopf genau verschieben (nur bei pausierter Wiedergabe) -----------
+
+const NUDGE_STORAGE_KEY = 'videoCutter.nudgeStep'
+
+function storedNudge(): NudgeStepMs {
+  try {
+    const v = Number(localStorage.getItem(NUDGE_STORAGE_KEY))
+    return isNudgeStep(v) ? v : DEFAULT_NUDGE_MS
+  } catch {
+    return DEFAULT_NUDGE_MS
+  }
+}
+
+/** Gewählte Schrittweite; bleibt im Browser gemerkt. */
+const nudgeStep = ref<NudgeStepMs>(storedNudge())
+
+function chooseNudge(step: NudgeStepMs): void {
+  nudgeStep.value = step
+  try {
+    localStorage.setItem(NUDGE_STORAGE_KEY, String(step))
+  } catch {
+    // Gesperrter Speicher: Auswahl gilt nur für diese Sitzung.
+  }
+}
+
+const canNudge = computed(() => !empty.value && !store.playing)
+
+function nudge(dir: -1 | 1): void {
+  if (!canNudge.value) return
+  store.seek(
+    nudgeTime(store.playhead, dir, nudgeStep.value, store.doc.settings.fps, store.duration),
+  )
+}
 const frameSec = computed(() => 1 / store.doc.settings.fps)
 const aspect = computed(() => `${store.doc.settings.width} / ${store.doc.settings.height}`)
 const timeLabel = computed(
@@ -279,6 +320,48 @@ onBeforeUnmount(() => {
         {{ store.playing ? '❚❚' : '▶' }}
       </button>
       <span class="time" data-testid="preview-time">{{ timeLabel }}</span>
+      <div
+        class="nudge"
+        role="group"
+        :aria-label="t('timelinePreview.nudge.label')"
+        data-testid="preview-nudge"
+      >
+        <button
+          type="button"
+          class="nudge-move back"
+          data-testid="preview-nudge-back"
+          :disabled="!canNudge || store.playhead <= 0"
+          :title="t('timelinePreview.nudge.backTitle', { ms: nudgeStep })"
+          :aria-label="t('timelinePreview.nudge.backTitle', { ms: nudgeStep })"
+          @click="nudge(-1)"
+        >
+          −
+        </button>
+        <button
+          v-for="step in NUDGE_STEPS_MS"
+          :key="step"
+          type="button"
+          class="nudge-step"
+          :class="{ active: step === nudgeStep }"
+          :aria-pressed="step === nudgeStep"
+          :data-testid="`preview-nudge-${step}`"
+          :title="t('timelinePreview.nudge.stepTitle', { ms: step })"
+          @click="chooseNudge(step)"
+        >
+          {{ step }} ms
+        </button>
+        <button
+          type="button"
+          class="nudge-move forward"
+          data-testid="preview-nudge-forward"
+          :disabled="!canNudge || store.playhead >= store.duration"
+          :title="t('timelinePreview.nudge.forwardTitle', { ms: nudgeStep })"
+          :aria-label="t('timelinePreview.nudge.forwardTitle', { ms: nudgeStep })"
+          @click="nudge(1)"
+        >
+          +
+        </button>
+      </div>
       <span v-if="speedLabel" class="speed" data-testid="preview-speed">{{ speedLabel }}</span>
     </div>
   </section>
@@ -328,6 +411,7 @@ onBeforeUnmount(() => {
 }
 .controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--ds-space-3);
 }
@@ -357,6 +441,52 @@ onBeforeUnmount(() => {
   font-size: var(--ds-text-sm);
   font-variant-numeric: tabular-nums;
   color: var(--ds-text-2);
+}
+.nudge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-1);
+}
+.nudge button {
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-sm);
+  cursor: pointer;
+}
+.nudge-move {
+  min-width: var(--ds-control-sm);
+  font-weight: var(--ds-weight-semibold);
+}
+/* Wie die Feinschritt-Knöpfe: zurück rot, vor grün. */
+.nudge-move.back {
+  border-color: var(--ds-danger);
+  color: var(--ds-danger);
+}
+.nudge-move.forward {
+  border-color: var(--ds-success);
+  color: var(--ds-success);
+}
+.nudge-step.active {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+}
+.nudge button:hover:not(:disabled):not(.active) {
+  border-color: var(--ds-accent);
+}
+.nudge button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.nudge button:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .speed {
   margin-left: auto;

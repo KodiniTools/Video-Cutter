@@ -962,6 +962,12 @@ const messages = {
       pause: 'Pause',
       playTitle: 'Abspielen (Leertaste)',
       pauseTitle: 'Pause (Leertaste)',
+      nudge: {
+        label: 'Abspielkopf genau verschieben',
+        backTitle: 'Abspielkopf {ms} ms zurück (nur bei pausierter Wiedergabe)',
+        forwardTitle: 'Abspielkopf {ms} ms vor (nur bei pausierter Wiedergabe)',
+        stepTitle: 'Schrittweite {ms} ms für − und +',
+      },
       speed: 'Server: {sec} s je Abschnitt ({speed}× Echtzeit)',
     },
     timelineExport: {
@@ -2006,6 +2012,12 @@ const messages = {
       pause: 'Pause',
       playTitle: 'Play (space bar)',
       pauseTitle: 'Pause (space bar)',
+      nudge: {
+        label: 'Move the playhead precisely',
+        backTitle: 'Move the playhead back {ms} ms (only while paused)',
+        forwardTitle: 'Move the playhead forward {ms} ms (only while paused)',
+        stepTitle: 'Step size {ms} ms for − and +',
+      },
       speed: 'Server: {sec} s per segment ({speed}× real time)',
     },
     timelineExport: {
