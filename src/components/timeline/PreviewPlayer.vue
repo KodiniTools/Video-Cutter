@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CropFrame from './CropFrame.vue'
 import PositionFrame from './PositionFrame.vue'
 import {
   fetchPreviewPlan,
@@ -379,7 +380,8 @@ onBeforeUnmount(() => {
           data-testid="preview-video"
           @click="store.togglePlay()"
         />
-        <PositionFrame v-if="!empty && !problem" />
+        <PositionFrame v-if="!empty && !problem && !store.cropEditing" />
+        <CropFrame v-if="!empty" />
         <div v-if="showGrid && !empty" class="grid" aria-hidden="true" data-testid="preview-grid">
           <i class="v" style="left: 33.333%"></i>
           <i class="v" style="left: 66.667%"></i>

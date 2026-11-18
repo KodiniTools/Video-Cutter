@@ -25,6 +25,7 @@ import {
   type FadeCurve,
   type VideoClip,
 } from '@/timeline/model'
+import { cropPixelSize, DEFAULT_CLIP_CROP } from '@/timeline/cropFrame'
 import {
   canAddKey,
   FULL_LAYOUT,
@@ -208,6 +209,27 @@ function onCrop(side: CropSide, e: Event): void {
 function resetCrop(): void {
   commit()
   if (video.value) store.setClipCrop(video.value.id, null)
+}
+
+/** Wird der Ausschnitt dieses Clips gerade in der Vorschau gewählt? */
+const pickingCrop = computed(() => !!video.value && store.cropEditing === video.value.id)
+/** Größe des Ausschnitts in Pixeln der Quelle (nur mit Zuschnitt). */
+const cropSize = computed(() => {
+  const v = video.value
+  return v && cropped.value ? cropPixelSize(store.doc.assets[v.asset], v.crop) : null
+})
+
+/** Rechteck in der Vorschau ein-/ausschalten; ohne Zuschnitt beginnt es zentriert bei 80 %. */
+function toggleCropPicker(): void {
+  commit()
+  const v = video.value
+  if (!v) return
+  if (pickingCrop.value) {
+    store.cropEditing = null
+    return
+  }
+  if (!v.crop) store.setClipCrop(v.id, DEFAULT_CLIP_CROP)
+  store.cropEditing = v.id
 }
 
 // --- Farbkorrektur -------------------------------------------------------------
@@ -579,6 +601,23 @@ onBeforeUnmount(commit)
     <p v-if="video" class="hint">{{ t('timeline.clipInspector.holdHint') }}</p>
     <fieldset v-if="video" class="crop" data-testid="clip-crop">
       <legend>{{ t('timeline.clipInspector.crop') }}</legend>
+      <button
+        type="button"
+        class="crop-pick"
+        :class="{ active: pickingCrop }"
+        :aria-pressed="pickingCrop"
+        data-testid="clip-crop-pick"
+        @click="toggleCropPicker"
+      >
+        {{
+          pickingCrop
+            ? t('timeline.clipInspector.cropPickDone')
+            : t('timeline.clipInspector.cropPick')
+        }}
+      </button>
+      <p v-if="cropSize" class="hint" data-testid="clip-crop-size">
+        {{ t('timeline.clipInspector.cropSize', cropSize) }}
+      </p>
       <label v-for="side in CROP_SIDES" :key="side" class="side">
         <span>{{ t(`timeline.clipInspector.cropSides.${side}`) }}</span>
         <RangeSpinner
@@ -833,6 +872,20 @@ h3 {
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+.crop-pick {
+  align-self: flex-start;
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font: inherit;
+  cursor: pointer;
+}
+.crop-pick.active {
+  border-color: var(--ds-accent);
+  color: var(--ds-accent);
 }
 .repeat:disabled {
   opacity: 0.5;

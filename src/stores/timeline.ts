@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { neighbourMarker } from '@/timeline/markers'
 import {
   addMarker as addMarkerOp,
@@ -105,6 +105,8 @@ export const useTimelineStore = defineStore('timeline', () => {
   const snapping = ref(true)
   /** Läuft die Vorschau? Der Vorschau-Player folgt diesem Wert. */
   const playing = ref(false)
+  /** Clip, dessen Bildausschnitt gerade in der Vorschau gewählt wird (`null` = keiner). */
+  const cropEditing = ref<string | null>(null)
   /** Grund, warum der letzte Befehl abgelehnt wurde (`null` = angenommen). */
   const lastError = ref<OpError | null>(null)
 
@@ -120,6 +122,12 @@ export const useTimelineStore = defineStore('timeline', () => {
       return loc ? [loc.clip] : []
     }),
   )
+
+  // Ausschnitt-Wahl endet, sobald ihr Video-Clip nicht mehr markiert ist (oder fehlt).
+  watch(selectedClips, (clips) => {
+    const id = cropEditing.value
+    if (id && !clips.some((c) => c.id === id && c.kind === 'video')) cropEditing.value = null
+  })
 
   /** Auswahl auf Clips beschränken, die es (noch) gibt. */
   function pruneSelection(): void {
@@ -706,6 +714,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     zoom,
     snapping,
     playing,
+    cropEditing,
     lastError,
     duration,
     canUndo,
