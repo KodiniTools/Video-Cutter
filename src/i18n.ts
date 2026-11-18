@@ -1244,6 +1244,44 @@ const messages = {
       unsupported:
         'Das Backend kennt den Export des neuen Editors noch nicht (veraltet). Bitte das Backend neu deployen.',
     },
+    timelineQuality: {
+      title: 'Qualitäts-Check',
+      allGood: 'Keine Auffälligkeiten gefunden.',
+      counts: '{warn} Warnungen · {info} Hinweise',
+      measuring: 'Der Ton wird gemessen …',
+      loudnessSummary: 'Ton: {lufs} LUFS gesamt · Spitze {peak} dBFS · Umfang {range} LU',
+      unsupported:
+        'Das Backend kennt die Ton-Messung noch nicht (veraltet). Geprüft wurden nur Bild und Texte.',
+      failed: 'Der Ton konnte nicht gemessen werden: {error}',
+      retry: 'Erneut messen',
+      jump: 'Zeigen',
+      jumpTitle: 'Dialog schließen und die Stelle in der Timeline zeigen',
+      severity: { warn: 'Warnung', info: 'Hinweis' },
+      kinds: {
+        loudnessLow:
+          'Der Ton ist insgesamt leise ({lufs} LUFS, üblich sind −16 bis −14). Tipp: „Lautstärke angleichen“ einschalten.',
+        loudnessHigh:
+          'Der Ton ist insgesamt sehr laut ({lufs} LUFS, üblich sind −16 bis −14). Tipp: „Lautstärke angleichen“ einschalten.',
+        clipping:
+          'Übersteuert: Die Spitze erreicht {db} dBFS, das klingt verzerrt. Lautstärke des Clips senken oder angleichen.',
+        noAudio: 'Der Film hat keinen hörbaren Ton.',
+        silence: '{s} s Stille.',
+        quiet: '{s} s deutlich leiser als der Rest (etwa {lu} LU unter der Gesamtlautheit).',
+        audioJump: {
+          up: 'Der Ton setzt abrupt ein (+{lu} LU). Eine Ton-Blende macht den Übergang weicher.',
+          down: 'Der Ton bricht abrupt ab (−{lu} LU). Eine Ton-Blende macht den Übergang weicher.',
+        },
+        textOutside: 'Text „{text}“ ragt über den Bildrand hinaus.',
+        textUnsafe:
+          'Text „{text}“ liegt außerhalb des sicheren Bereichs (5 % Rand) und kann auf manchen Geräten abgeschnitten werden.',
+        textShort: 'Text „{text}“ ist nur {shown} s zu sehen, zum Lesen braucht er etwa {need} s.',
+        gap: '{s} s ohne Bild: Zu sehen ist nur der Hintergrund.',
+        flashClip:
+          'Sehr kurzer Clip ({frames} Bilder), wirkt wie ein Blitzer. Rest eines Schnitts?',
+        jumpCut:
+          'Sprung im selben Video ({s} s ausgelassen). Ein Übergang kann ihn weicher machen.',
+      },
+    },
     timelineProject: {
       size: 'Format',
       fps: 'Bilder/s',
@@ -2522,6 +2560,42 @@ const messages = {
       },
       unsupported:
         'The backend does not know the new editor’s export yet (outdated). Please redeploy the backend.',
+    },
+    timelineQuality: {
+      title: 'Quality check',
+      allGood: 'Nothing conspicuous found.',
+      counts: '{warn} warnings · {info} notes',
+      measuring: 'Measuring the sound …',
+      loudnessSummary: 'Sound: {lufs} LUFS overall · peak {peak} dBFS · range {range} LU',
+      unsupported:
+        'The backend does not know the sound measurement yet (outdated). Only picture and texts were checked.',
+      failed: 'The sound could not be measured: {error}',
+      retry: 'Measure again',
+      jump: 'Show',
+      jumpTitle: 'Close the dialog and show the spot on the timeline',
+      severity: { warn: 'Warning', info: 'Note' },
+      kinds: {
+        loudnessLow:
+          'The sound is quiet overall ({lufs} LUFS, usual is −16 to −14). Tip: turn on “Normalise loudness”.',
+        loudnessHigh:
+          'The sound is very loud overall ({lufs} LUFS, usual is −16 to −14). Tip: turn on “Normalise loudness”.',
+        clipping:
+          'Clipping: the peak reaches {db} dBFS, which sounds distorted. Lower the clip volume or normalise.',
+        noAudio: 'The film has no audible sound.',
+        silence: '{s} s of silence.',
+        quiet: '{s} s clearly quieter than the rest (about {lu} LU below the overall loudness).',
+        audioJump: {
+          up: 'The sound starts abruptly (+{lu} LU). An audio fade softens the transition.',
+          down: 'The sound stops abruptly (−{lu} LU). An audio fade softens the transition.',
+        },
+        textOutside: 'Text “{text}” extends past the edge of the picture.',
+        textUnsafe:
+          'Text “{text}” lies outside the safe area (5 % margin) and may be cut off on some devices.',
+        textShort: 'Text “{text}” is shown for only {shown} s, reading it takes about {need} s.',
+        gap: '{s} s without picture: only the background is visible.',
+        flashClip: 'Very short clip ({frames} frames), looks like a flash. Leftover from a cut?',
+        jumpCut: 'Jump within the same video ({s} s skipped). A transition can soften it.',
+      },
     },
     timelineProject: {
       size: 'Format',
