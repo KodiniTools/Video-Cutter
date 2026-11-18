@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
  * Fortschritt per SSE (/api/ai/jobs/:id/events), Abbruch per AbortSignal.
  */
 
-export type AiJobKind = 'transcribe' | 'claude' | 'image' | 'video'
+export type AiJobKind = 'transcribe' | 'claude' | 'image' | 'video' | 'voice'
 export type AiJobState = 'processing' | 'done' | 'error'
 
 export interface AiJobSnapshot {
@@ -34,6 +34,8 @@ const LIMITS: Record<AiJobKind, number> = {
   image: 2,
   // Videos sind teuer und dauern Minuten: immer nur eines.
   video: 1,
+  // Vertonung (ElevenLabs) kostet Zeichen-Kontingent: eine nach der anderen.
+  voice: 1,
 }
 /** Fertige Jobs werden nach dieser Zeit vergessen. */
 const TTL_MS = 30 * 60 * 1000

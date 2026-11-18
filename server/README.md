@@ -100,6 +100,15 @@ kommt als normales Video in die Bibliothek und dauerhaft in die Galerie
 (`POST /api/ai/gallery/:id/media` holt es später wieder in die Bibliothek). Modell:
 `GEMINI_VIDEO_MODEL` (Standard `gemini-omni-1.2-flash`).
 
+**KI-Sprecher (ElevenLabs):** `ELEVENLABS_API_KEY` in die Backend-`.env` eintragen (optional
+`ELEVENLABS_MODEL`, Standard `eleven_multilingual_v2`) und neu starten. `GET /api/health` meldet
+dann `ai.voice: true`. `GET /api/ai/voices` listet die Stimmen des Kontos (10 min gemerkt),
+`POST /api/ai/voice-over { text, voiceId, speed, stability }` vertont bis 5000 Zeichen als MP3;
+die Datei kommt als Tondatei in die Bibliothek. `POST /api/ai/script` lässt Claude einen
+Sprechertext schreiben (`mode: write, idea, language, seconds`) oder übersetzen
+(`mode: translate, text, language`). Der Schlüssel braucht die Rechte „Text to Speech“ und
+„Voices: Lesen“.
+
 **Modellauswahl:** `GET /api/ai/models` liefert die Bild- und Videomodelle, die der Schlüssel
 nutzen darf (live von Google, 1 h gemerkt; ohne Verbindung eine feste Ersatzliste).
 `POST /api/ai/images` und `POST /api/ai/video` nehmen optional `model` entgegen; ohne Angabe

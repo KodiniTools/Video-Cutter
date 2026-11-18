@@ -23,10 +23,13 @@ describe('aiApi: Ergebnisse prüfen', () => {
       transcribe: true,
       claude: false,
       image: false,
+      voice: null,
     })
     expect(parseAiStatus({ ai: { transcribe: false, claude: true, image: true } })?.image).toBe(
       true,
     )
+    expect(parseAiStatus({ ai: { voice: false } })?.voice).toBe(false)
+    expect(parseAiStatus({ ai: { voice: true } })?.voice).toBe(true)
   })
 
   it('Transkript, Untertitel und Vorschläge werden bereinigt', () => {

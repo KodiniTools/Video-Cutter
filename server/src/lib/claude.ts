@@ -525,6 +525,110 @@ export async function translateTexts(
   return buildTranslations(texts, raw)
 }
 
+// --- Sprechertext für den KI-Sprecher ----------------------------------------------
+
+/** Sprachen für Sprechertexte (wie die Transkription, ohne „auto“). */
+export const SCRIPT_LANGUAGES = Object.keys(LANG_NAMES) as readonly string[]
+/** Längster Sprechertext (wie MAX_SCRIPT_LENGTH der Vertonung). */
+export const MAX_SCRIPT_CHARS = 5000
+export const MAX_SCRIPT_IDEA = 1000
+export const MIN_SCRIPT_SECONDS = 5
+export const MAX_SCRIPT_SECONDS = 300
+/** Gesprochene Wörter pro Sekunde (ruhiges Sprechtempo, für die Ziel-Länge). */
+const WORDS_PER_SECOND = 2.4
+
+const SCRIPT_SYSTEM = `You write and translate voice-over scripts for short videos. The script is read aloud by a text-to-speech voice. Answer only with the requested JSON.`
+
+const SCRIPT_RULES = `- Plain spoken text only: no headings, stage directions, speaker names, emojis, markdown, lists or URLs.
+- Short, clear sentences that sound natural when spoken. Write numbers, units and abbreviations the way they are spoken.
+- Separate paragraphs with "\\n\\n" where the voice should pause a little.`
+
+function scriptWriteTask(language: string, seconds: number): string {
+  const words = Math.max(10, Math.round(seconds * WORDS_PER_SECOND))
+  return `Write a voice-over script in ${LANG_NAMES[language] ?? 'German'} based on the idea above.
+
+Rules:
+- Length: about ${words} words (about ${seconds} seconds when spoken). Stay close to this length.
+${SCRIPT_RULES}
+- Keep facts from the idea; do not invent concrete numbers, names or claims that are not in it.`
+}
+
+function scriptTranslateTask(language: string): string {
+  return `Translate the voice-over script above into ${LANG_NAMES[language] ?? 'English'}.
+
+Rules:
+- Translate naturally for speaking, keep the meaning, tone and roughly the same length.
+${SCRIPT_RULES}
+- Keep product names and proper names unchanged.`
+}
+
+const SCRIPT_SCHEMA = {
+  type: 'object',
+  properties: { text: { type: 'string' } },
+  required: ['text'],
+  additionalProperties: false,
+}
+
+/**
+ * Bereinigt Claudes Sprechertext: echte Absätze, keine Steuerzeichen,
+ * höchstens `max` Zeichen (am Satzende gekürzt, wenn möglich).
+ */
+export function cleanScript(raw: unknown, max = MAX_SCRIPT_CHARS): string {
+  const text = isRecord(raw) && typeof raw.text === 'string' ? raw.text : ''
+  const clean = text
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
+    .split(/\n{2,}/)
+    .map((p) =>
+      p
+        .replace(/\s*\n\s*/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join('\n\n')
+  if (!clean) throw new Error('Claude hat keinen Text geliefert.')
+  if (clean.length <= max) return clean
+  const cut = clean.slice(0, max)
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '))
+  return end > max / 2 ? cut.slice(0, end + 1) : cut.trim()
+}
+
+/** Claude schreibt einen Sprechertext zu einer Idee. */
+export async function writeScript(
+  idea: string,
+  language: string,
+  seconds: number,
+  signal: AbortSignal,
+): Promise<{ text: string }> {
+  const raw = await askClaudeWith(
+    SCRIPT_SYSTEM,
+    `<idea>\n${idea}\n</idea>`,
+    scriptWriteTask(language, seconds),
+    SCRIPT_SCHEMA,
+    signal,
+  )
+  return { text: cleanScript(raw) }
+}
+
+/** Claude übersetzt einen Sprechertext. */
+export async function translateScript(
+  text: string,
+  language: string,
+  signal: AbortSignal,
+): Promise<{ text: string }> {
+  const raw = await askClaudeWith(
+    SCRIPT_SYSTEM,
+    `<script>\n${text}\n</script>`,
+    scriptTranslateTask(language),
+    SCRIPT_SCHEMA,
+    signal,
+  )
+  return { text: cleanScript(raw) }
+}
+
 // --- Prompt für KI-Bilder (Bild-Clip) ------------------------------------------------
 
 /** Stilvorlagen für KI-Bilder (einheitlicher Look aller Bild-Clips). */

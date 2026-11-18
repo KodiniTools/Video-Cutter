@@ -162,6 +162,14 @@ export const config = {
   geminiVideoDuration: process.env.GEMINI_VIDEO_DURATION ?? '',
   /** Zeitgrenze pro Video. */
   geminiVideoTimeoutMs: num('GEMINI_VIDEO_TIMEOUT_SEC', 15 * 60) * 1000,
+
+  // --- KI-Sprecher (ElevenLabs) ---
+  /** ElevenLabs-Modell; der API-Key kommt aus ELEVENLABS_API_KEY. */
+  elevenlabsModel: process.env.ELEVENLABS_MODEL ?? 'eleven_multilingual_v2',
+  /** API-Basis (für Tests/Proxy oder andere Region überschreibbar). */
+  elevenlabsBaseUrl: process.env.ELEVENLABS_BASE_URL ?? 'https://api.elevenlabs.io',
+  /** Zeitgrenze pro Vertonung. */
+  elevenlabsTimeoutMs: num('ELEVENLABS_TIMEOUT_SEC', 180) * 1000,
 } as const
 
 export type AppConfig = typeof config

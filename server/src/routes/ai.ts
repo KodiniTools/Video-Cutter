@@ -41,6 +41,12 @@ import {
   createVideoPrompt,
   createSubtitles,
   translateTexts,
+  MAX_SCRIPT_IDEA,
+  MAX_SCRIPT_SECONDS,
+  MIN_SCRIPT_SECONDS,
+  SCRIPT_LANGUAGES,
+  translateScript,
+  writeScript,
   type ImageContextScene,
   type ImageStyle,
   type SubtitleTarget,
@@ -57,6 +63,14 @@ import {
   nearestAspect,
 } from '../lib/gemini'
 import { MAX_TEXT_LENGTH, MAX_TEXT_OVERLAYS } from '../lib/textOverlay'
+import {
+  MAX_SCRIPT_LENGTH,
+  elevenlabsReady,
+  isVoiceId,
+  listVoices,
+  parseVoiceSettings,
+  synthesizeSpeech,
+} from '../lib/elevenlabs'
 import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } from '../lib/gallery'
 
 /**
@@ -81,6 +95,11 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  * - GET  /api/ai/gallery                            -> dauerhaft gespeicherte KI-Bilder
  * - GET  /api/ai/gallery/:id/file | /thumb          -> Original bzw. Vorschau
  * - DELETE /api/ai/gallery/:id                      -> Bild vom Server löschen
+ * - POST /api/ai/script { mode: write, idea, language, seconds }
+ *                     | { mode: translate, text, language } -> Sprechertext (Claude)
+ * - GET  /api/ai/voices                             -> Stimmen des ElevenLabs-Kontos
+ * - POST /api/ai/voice-over { text, voiceId, speed, stability, voiceName? }
+ *                                                  -> vertonter Text als Tondatei (ElevenLabs)
  * Alle Aufrufe starten einen Job: 202 { jobId }. Status/Ergebnis per SSE unter
  * GET /api/ai/jobs/:id/events, Abbruch per DELETE /api/ai/jobs/:id.
  */
@@ -95,8 +114,18 @@ const sweeper = setInterval(() => {
 sweeper.unref?.()
 
 /** Stand der Einrichtung (für /api/health). */
-export function aiStatus(): { transcribe: boolean; claude: boolean; image: boolean } {
-  return { transcribe: whisperReady(), claude: claudeReady(), image: geminiReady() }
+export function aiStatus(): {
+  transcribe: boolean
+  claude: boolean
+  image: boolean
+  voice: boolean
+} {
+  return {
+    transcribe: whisperReady(),
+    claude: claudeReady(),
+    image: geminiReady(),
+    voice: elevenlabsReady(),
+  }
 }
 
 function requireMedia(body: Record<string, unknown>): MediaItem {
@@ -836,4 +865,129 @@ aiRouter.get('/ai/jobs/:id/events', (req: Request, res: Response) => {
 aiRouter.delete('/ai/jobs/:id', (req: Request, res: Response) => {
   const ok = aiJobs.cancel(req.params.id)
   res.status(ok ? 200 : 404).json({ cancelled: ok })
+})
+
+// --- KI-Sprecher (Claude schreibt/übersetzt, ElevenLabs spricht) -----------------------
+
+export type ScriptRequest =
+  | { mode: 'write'; idea: string; language: string; seconds: number }
+  | { mode: 'translate'; text: string; language: string }
+
+/** Prüft POST /api/ai/script. */
+export function parseScriptRequest(body: Record<string, unknown>): ScriptRequest {
+  const language = typeof body.language === 'string' ? body.language : ''
+  if (!SCRIPT_LANGUAGES.includes(language)) throw new ValidationError('Unbekannte Sprache.')
+  if (body.mode === 'translate') {
+    const text = typeof body.text === 'string' ? body.text.trim() : ''
+    if (!text) throw new ValidationError('Bitte zuerst einen Text eingeben.')
+    if (text.length > MAX_SCRIPT_LENGTH) {
+      throw new ValidationError(`Der Text ist zu lang (max. ${MAX_SCRIPT_LENGTH} Zeichen).`)
+    }
+    return { mode: 'translate', text, language }
+  }
+  if (body.mode !== 'write') throw new ValidationError('Unbekannte Aktion.')
+  const idea = typeof body.idea === 'string' ? body.idea.trim() : ''
+  if (!idea) throw new ValidationError('Bitte beschreiben, worum es gehen soll.')
+  if (idea.length > MAX_SCRIPT_IDEA) {
+    throw new ValidationError(`Die Beschreibung ist zu lang (max. ${MAX_SCRIPT_IDEA} Zeichen).`)
+  }
+  const raw = Math.round(Number(body.seconds))
+  const seconds = Number.isFinite(raw)
+    ? Math.min(MAX_SCRIPT_SECONDS, Math.max(MIN_SCRIPT_SECONDS, raw))
+    : 30
+  return { mode: 'write', idea, language, seconds }
+}
+
+aiRouter.post('/ai/script', json, (req: Request, res: Response) => {
+  const request = parseScriptRequest((req.body ?? {}) as Record<string, unknown>)
+  requireClaude()
+  if (!capacity('claude', res)) return
+  const job = aiJobs.start('claude', (signal) =>
+    request.mode === 'write'
+      ? writeScript(request.idea, request.language, request.seconds, signal)
+      : translateScript(request.text, request.language, signal),
+  )
+  started(res, job)
+})
+
+function requireElevenlabs(): void {
+  if (!elevenlabsReady()) {
+    throw new ValidationError(
+      'Der KI-Sprecher ist nicht eingerichtet (ELEVENLABS_API_KEY fehlt in der Server-.env).',
+      503,
+    )
+  }
+}
+
+/** GET /api/ai/voices -> { voices } (10 min gemerkt). */
+aiRouter.get('/ai/voices', (_req: Request, res: Response, next: NextFunction) => {
+  requireElevenlabs()
+  listVoices()
+    .then((voices) => res.json({ voices }))
+    .catch((err: unknown) =>
+      next(new ValidationError(err instanceof Error ? err.message : String(err), 502)),
+    )
+})
+
+/** Dateiname der Vertonung: „KI-Sprecher <Stimme> hh-mm-ss.mp3“. */
+export function voiceOverName(voiceName: unknown, now = new Date()): string {
+  const clean =
+    typeof voiceName === 'string'
+      ? voiceName
+          .replace(/[^\p{L}\p{N} _-]/gu, '')
+          .trim()
+          .slice(0, 40)
+      : ''
+  const two = (n: number) => String(n).padStart(2, '0')
+  const time = `${two(now.getHours())}-${two(now.getMinutes())}-${two(now.getSeconds())}`
+  return `KI-Sprecher${clean ? ` ${clean}` : ''} ${time}.mp3`
+}
+
+/** Prüft POST /api/ai/voice-over. */
+export function parseVoiceOverRequest(body: Record<string, unknown>): {
+  text: string
+  voiceId: string
+  settings: { speed: number; stability: number }
+} {
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  if (!text) throw new ValidationError('Bitte zuerst einen Text eingeben.')
+  if (text.length > MAX_SCRIPT_LENGTH) {
+    throw new ValidationError(`Der Text ist zu lang (max. ${MAX_SCRIPT_LENGTH} Zeichen).`)
+  }
+  if (!isVoiceId(body.voiceId)) throw new ValidationError('Bitte eine Stimme wählen.')
+  return { text, voiceId: body.voiceId, settings: parseVoiceSettings(body) }
+}
+
+/**
+ * POST /api/ai/voice-over -> Job. Ergebnis: { media } – die Vertonung liegt
+ * als Tondatei in der Bibliothek (wie ein Upload) und kann auf die Timeline.
+ */
+aiRouter.post('/ai/voice-over', json, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const request = parseVoiceOverRequest(body)
+  requireElevenlabs()
+  if (!capacity('voice', res)) return
+  const name = voiceOverName(body.voiceName)
+  const job = aiJobs.start('voice', async (signal, progress) => {
+    progress(5)
+    const data = await synthesizeSpeech(request.text, request.voiceId, request.settings, signal)
+    progress(90)
+    const file = path.join(config.tmpDir, `${randomUUID()}-voice.mp3`)
+    let stored = false
+    try {
+      await writeFile(file, data)
+      const info = await probeMedia(file).catch(() => {
+        throw new Error('ElevenLabs lieferte keine gültige Tondatei.')
+      })
+      if (!info.hasAudio || !(info.duration > 0)) {
+        throw new Error('ElevenLabs lieferte keine gültige Tondatei.')
+      }
+      const item = await mediaStore.add(file, name, info, data.length)
+      stored = true
+      return { media: mediaView(item) }
+    } finally {
+      if (!stored) await rm(file, { force: true }).catch(() => {})
+    }
+  })
+  started(res, job)
 })
