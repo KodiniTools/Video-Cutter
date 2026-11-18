@@ -26,7 +26,17 @@ const { t } = useI18n()
 const store = useTimelineStore()
 const pool = useMediaPoolStore()
 const ai = useTimelineAiStore()
-const { status, statusChecked, task, progress, running, textClips, suggestions } = storeToRefs(ai)
+const {
+  status,
+  statusChecked,
+  task,
+  progress,
+  running,
+  textClips,
+  suggestions,
+  skipChecked,
+  audition,
+} = storeToRefs(ai)
 
 onMounted(() => void ai.loadStatus())
 
@@ -114,6 +124,28 @@ const cutChecked = computed(() => cutList.value.filter((s) => s.checked))
 const cutSeconds = computed(() =>
   cutChecked.value.reduce((sum, s) => sum + timeToSeconds(s.range.end - s.range.start), 0),
 )
+
+/** Arten in der Liste mit Anzahl; Häkchen = alle dieser Art angehakt. */
+const cutKinds = computed(() => {
+  const order = ['filler', 'slip', 'repeat', 'pause'] as const
+  return order.flatMap((kind) => {
+    const all = cutList.value.filter((s) => s.kind === kind)
+    if (all.length === 0) return []
+    const on = all.filter((s) => s.checked).length
+    return [
+      { kind, count: all.length, checked: on === all.length, mixed: on > 0 && on < all.length },
+    ]
+  })
+})
+
+function onAudition(id: number): void {
+  if (running.value) return
+  if (audition.value?.id === id && store.playing) {
+    store.playing = false
+    return
+  }
+  ai.auditionSuggestion(id)
+}
 
 async function onSuggest(): Promise<void> {
   const c = clip.value
@@ -289,6 +321,19 @@ async function onTranslate(): Promise<void> {
               t('ai.selected', { n: cutChecked.length, s: cutSeconds.toFixed(1) })
             }}</small>
           </div>
+          <div v-if="cutKinds.length > 1" class="kinds" data-testid="timeline-ai-kinds">
+            <label v-for="k in cutKinds" :key="k.kind" class="kind-filter">
+              <input
+                type="checkbox"
+                :checked="k.checked"
+                :indeterminate.prop="k.mixed"
+                :disabled="running"
+                :data-kind="k.kind"
+                @change="ai.setKindChecked(k.kind, ($event.target as HTMLInputElement).checked)"
+              />
+              <span>{{ t(`timeline.ai.kinds.${k.kind}`, { n: k.count }) }}</span>
+            </label>
+          </div>
           <ul class="cuts" data-testid="timeline-ai-cut-list">
             <li v-for="s in cutList" :key="s.id" :class="{ off: !s.checked }">
               <input
@@ -309,8 +354,25 @@ async function onTranslate(): Promise<void> {
                 <span v-if="s.text">„{{ s.text }}“</span>
                 <small v-if="s.reason">{{ s.reason }}</small>
               </button>
+              <button
+                type="button"
+                class="listen"
+                :class="{ active: audition?.id === s.id && store.playing }"
+                :disabled="running"
+                :title="t('timeline.ai.audition')"
+                :aria-label="t('timeline.ai.audition')"
+                data-testid="timeline-ai-audition"
+                @click="onAudition(s.id)"
+              >
+                {{ audition?.id === s.id && store.playing ? '■' : '▶' }}
+              </button>
             </li>
           </ul>
+          <label class="skip">
+            <input v-model="skipChecked" type="checkbox" data-testid="timeline-ai-skip" />
+            <span>{{ t('timeline.ai.skipChecked') }}</span>
+          </label>
+          <p class="hint">{{ t('timeline.ai.reviewHint') }}</p>
           <button
             type="button"
             class="action"
@@ -539,6 +601,38 @@ select {
 }
 .cut small {
   color: var(--ds-text-2);
+}
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-1) var(--ds-space-3);
+}
+.kind-filter,
+.skip {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  color: var(--ds-text-2);
+}
+.listen {
+  flex: none;
+  width: 2em;
+  align-self: stretch;
+  padding: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.listen.active {
+  border-color: var(--ds-accent);
+  color: var(--ds-accent);
+}
+.listen:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .plain {
   padding: 0;

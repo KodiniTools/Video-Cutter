@@ -891,6 +891,18 @@ const messages = {
         applyCutsHint:
           'Teilt den Clip an den Rändern der gewählten Bereiche, löscht sie samt verknüpftem Ton und rückt alles Spätere nach. Mit Rückgängig zurückholbar. Tipp: erst schneiden, dann Untertitel erzeugen.',
         cutsApplied: '{n} Bereiche herausgeschnitten.',
+        kinds: {
+          filler: 'Füllwörter ({n})',
+          slip: 'Versprecher ({n})',
+          repeat: 'Wiederholungen ({n})',
+          pause: 'Pausen ({n})',
+        },
+        audition: 'Probehören: kurz davor abspielen, die Stelle überspringen, kurz danach anhalten',
+        skipChecked: 'Beim Abspielen angehakte Stellen überspringen',
+        reviewHint:
+          'Die Stellen sind auf dem Clip rot markiert. Ein Klick auf eine Markierung hakt sie an oder ab, gestrichelt bleibt sie drin.',
+        markChecked: 'wird herausgeschnitten (Klick: behalten)',
+        markUnchecked: 'bleibt drin (Klick: herausschneiden)',
         cutsAppliedPartly:
           '{n} Bereiche herausgeschnitten, {m} lagen nicht mehr im Clip und wurden ausgelassen.',
       },
@@ -2033,6 +2045,18 @@ const messages = {
         applyCutsHint:
           'Splits the clip at the edges of the chosen ranges, deletes them together with the linked sound and moves everything later up. Undo brings them back. Tip: cut first, then create subtitles.',
         cutsApplied: '{n} ranges cut out.',
+        kinds: {
+          filler: 'Fillers ({n})',
+          slip: 'Slips ({n})',
+          repeat: 'Repeats ({n})',
+          pause: 'Pauses ({n})',
+        },
+        audition: 'Listen: play from shortly before, skip the spot, stop shortly after',
+        skipChecked: 'Skip checked spots during playback',
+        reviewHint:
+          'The spots are marked red on the clip. Click a mark to check or uncheck it; dashed means it stays in.',
+        markChecked: 'will be cut out (click: keep)',
+        markUnchecked: 'stays in (click: cut out)',
         cutsAppliedPartly:
           '{n} ranges cut out, {m} were no longer inside the clip and were skipped.',
       },

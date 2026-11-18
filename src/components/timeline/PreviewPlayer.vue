@@ -13,6 +13,8 @@ import { GRAPHICS_UNSUPPORTED } from '@/lib/graphicsApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { PreviewEngine, previewSupported } from '@/preview/player'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTimelineAiStore } from '@/stores/timelineAi'
+import { skipTarget } from '@/timeline/cutSuggestions'
 import { graphicImages } from '@/timeline/graphics'
 import {
   DEFAULT_NUDGE_MS,
@@ -34,6 +36,8 @@ const PLAN_DELAY_MS = 250
 
 const { t, locale } = useI18n()
 const store = useTimelineStore()
+/** Probehören der Schnittvorschläge: zu überspringende Bereiche und Halt. */
+const ai = useTimelineAiStore()
 
 const video = ref<HTMLVideoElement | null>(null)
 /** Abschnitt unter dem Abspielkopf liegt in aktueller Fassung vor. */
@@ -263,7 +267,23 @@ function tick(): void {
     store.playing = false
     return
   }
-  store.seek(frameTime(Math.floor(el.currentTime * fps + 1e-3), fps))
+  const now = frameTime(Math.floor(el.currentTime * fps + 1e-3), fps)
+  const stopAt = ai.audition?.stopAt
+  if (stopAt !== undefined && now >= stopAt) {
+    store.seek(stopAt)
+    synced = store.playhead
+    store.playing = false
+    return
+  }
+  // Probehören: Stellen, die herausgeschnitten würden, überspringen. Der
+  // Sprung setzt über den Abspielkopf auch das Bild (synced bleibt alt).
+  const jump = skipTarget(now, ai.skipRanges)
+  if (jump !== null) {
+    store.seek(Math.min(jump, store.duration))
+    raf = requestAnimationFrame(tick)
+    return
+  }
+  store.seek(now)
   synced = store.playhead
   raf = requestAnimationFrame(tick)
 }
@@ -273,6 +293,7 @@ watch(
   (on) => {
     const el = video.value
     stopLoop()
+    if (!on) ai.endAudition()
     if (!el) return
     if (!on) {
       el.pause()
