@@ -114,6 +114,7 @@ export const SERVER_FEATURES = [
   'timelinePreview',
   'timelinePreviewFull',
   'timelineAnimOut',
+  'timelineLoopSpeed',
   'timelineClipFadeOut',
   'timelineRender',
   'timelineNormalize',

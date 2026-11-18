@@ -9,6 +9,7 @@ import {
   clipGraphic,
   GraphicImages,
   isDrawable,
+  loopSpeedOf,
   newGraphicData,
   newImageData,
   TIMELINE_GRAPHIC_KINDS,
@@ -177,6 +178,28 @@ describe('GraphicImages', () => {
     expect(datas[1]).toMatchObject({ x: 0.2, keys, ease: 'smooth', png: 'id1' })
     expect(datas[2].keys).toBeUndefined()
     expect(datas[2].ease).toBeUndefined()
+  })
+
+  it('gibt ein eigenes Tempo der Dauer-Animation weiter, sonst keines', async () => {
+    const { images } = setup()
+    const rect = newGraphicData('rect')
+    const sent = await images.prepare(
+      docWith(
+        { ...rect, loop: 'pulse', animSpeed: 2 },
+        { ...rect, loop: 'pulse', animSpeed: 2, loopSpeed: 0.25 },
+        { ...rect, loop: 'none', loopSpeed: 0.25 },
+        { ...rect, loop: 'spin', loopSpeed: 99 },
+      ),
+    )
+    const datas = sent.tracks[0].clips.map((c) => (c as { data: Record<string, unknown> }).data)
+    expect(datas[0]).not.toHaveProperty('loopSpeed')
+    expect(datas[1]).toMatchObject({ animSpeed: 2, loopSpeed: 0.25 })
+    expect(datas[2]).not.toHaveProperty('loopSpeed')
+    expect(datas[3].loopSpeed).toBe(4)
+    // Ohne eigenes Tempo gilt das des Einblendens (ältere Projekte).
+    expect(loopSpeedOf({ animSpeed: 2 })).toBe(2)
+    expect(loopSpeedOf({ animSpeed: 2, loopSpeed: 0.5 })).toBe(0.5)
+    expect(loopSpeedOf({})).toBe(1)
   })
 
   it('lässt Emojis ohne Zeichen aus und lädt Vergessenes neu hoch', async () => {

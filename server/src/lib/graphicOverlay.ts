@@ -89,6 +89,8 @@ export interface GraphicOverlay {
   animOut?: OutAnimation
   /** Tempo des Ausblendens (nur mit `animOut`). */
   animOutSpeed?: number
+  /** Eigenes Tempo der Dauer-Animation; fehlt es, gilt `animSpeed` (wie bisher). */
+  loopSpeed?: number
   /**
    * Bewegung über Keyframes (Timeline-Editor): fertige FFmpeg-Ausdrücke in `t`
    * für die Mitte (Anteil 0…1 des Bildes) und optional die Größe (Faktor).
@@ -262,7 +264,8 @@ export function graphicFilter(
   const f = fadeMs(dur, sp) / 1000
   const m = moveMs(dur, sp) / 1000
   /** Periode einer Dauer-Animation beim gewählten Tempo (s). */
-  const per = (base: number) => String(Math.round((base / sp) * 1e4) / 1e4)
+  const lsp = g.loopSpeed ?? sp
+  const per = (base: number) => String(Math.round((base / lsp) * 1e4) / 1e4)
   const loop = g.loop ?? 'none'
   const st = f3(g.start)
   const u = `(t-${st})`

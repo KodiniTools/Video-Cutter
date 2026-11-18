@@ -105,6 +105,31 @@ describe('Grafik-Clips im Dokument', () => {
     expect(errorPath({ animation: 'wirbel' })).toBe('tracks[0].clips[0].data.animation')
     expect(errorPath({ loop: 'jump' })).toBe('tracks[0].clips[0].data.loop')
     expect(errorPath({ animSpeed: 'schnell' })).toBe('tracks[0].clips[0].data.animSpeed')
+    expect(errorPath({ loopSpeed: 'schnell' })).toBe('tracks[0].clips[0].data.loopSpeed')
+  })
+
+  it('eigenes Tempo der Dauer-Animation: getrennt vom Tempo des Einblendens', () => {
+    const filter = (over: Record<string, unknown>) =>
+      compileTimeline(
+        parsed(rawDoc(graphicData({ animation: 'fadeIn', loop: 'pulse', ...over }))),
+        {
+          sources,
+          graphics: image,
+        },
+      ).filter
+    // Ohne loopSpeed wie bisher: Periode 1 s / animSpeed, Einblenden 0,4 s / animSpeed.
+    const shared = filter({ animSpeed: 2 })
+    expect(shared).toContain('/0.5)))')
+    expect(shared).toContain(':d=0.2:alpha=1')
+    // Mit loopSpeed: nur die Periode ändert sich.
+    const own = filter({ animSpeed: 2, loopSpeed: 0.25 })
+    expect(own).toContain('/4)))')
+    expect(own).not.toContain('/0.5)))')
+    expect(own).toContain(':d=0.2:alpha=1')
+    // null = nicht gesetzt; Werte außerhalb werden begrenzt.
+    expect(filter({ animSpeed: 2, loopSpeed: null })).toBe(shared)
+    const doc = parsed(rawDoc(graphicData({ loop: 'spin', loopSpeed: 99 })))
+    expect((doc.tracks[0].clips[0] as Loose).graphic.loopSpeed).toBe(4)
   })
 })
 
