@@ -3,6 +3,9 @@ import { computed, ref, shallowRef } from 'vue'
 import { neighbourMarker } from '@/timeline/markers'
 import {
   addMarker as addMarkerOp,
+  bindClipsToMarker as bindClipsToMarkerOp,
+  markerClipIds,
+  unbindClip as unbindClipOp,
   addTrack as addTrackOp,
   appendMedia as appendMediaOp,
   insertAudioAt as insertAudioAtOp,
@@ -612,7 +615,39 @@ export const useTimelineStore = defineStore('timeline', () => {
   function dragMarkerTo(markerId: string, time: Time): boolean {
     if (!Number.isFinite(time)) return false
     const framed = snapToFrame(Math.max(0, Math.round(time)), doc.value.settings.fps)
-    return updateMarker(markerId, { at: snap(framed, { exclude: [markerId] }) })
+    // Gebundene Clips wandern mit: an ihren Rändern einzurasten ergäbe keinen Halt.
+    const exclude = [
+      markerId,
+      ...markerClipIds(doc.value, markerId).flatMap((id) => linkGroupIds(doc.value, id)),
+    ]
+    return updateMarker(markerId, { at: snap(framed, { exclude }) })
+  }
+
+  /** Markierte Clips an den Marker binden (sie rücken an den Marker). */
+  const bindSelectionToMarker = (markerId: string) =>
+    apply((d) => bindClipsToMarkerOp(d, markerId, selection.value))
+  const unbindClip = (clipId: string) => apply((d) => unbindClipOp(d, clipId))
+
+  /**
+   * Element am Marker anlegen: Abspielkopf auf den Marker, `add` legt den Clip
+   * dort an und markiert ihn, danach wird er gebunden – ein Verlaufsschritt.
+   */
+  function addAtMarker(markerId: string, add: () => boolean): boolean {
+    const marker = doc.value.markers.find((m) => m.id === markerId)
+    if (!marker) {
+      lastError.value = 'marker-not-found'
+      return false
+    }
+    seek(marker.at)
+    beginGesture()
+    if (!add() || !bindSelectionToMarker(markerId)) {
+      const error = lastError.value
+      cancelGesture()
+      lastError.value = error
+      return false
+    }
+    endGesture()
+    return true
   }
 
   /** Zum nächsten (`dir` 1) oder vorherigen (`dir` −1) Marker springen. */
@@ -726,6 +761,9 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateMarker,
     removeMarker,
     dragMarkerTo,
+    bindSelectionToMarker,
+    unbindClip,
+    addAtMarker,
     jumpToMarker,
   }
 })

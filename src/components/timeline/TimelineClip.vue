@@ -265,7 +265,15 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       :title="t('timeline.clipInspector.hold')"
       aria-hidden="true"
     ></span>
-    <span v-if="name" class="label">{{ name }}</span>
+    <span v-if="name || clip.marker" class="label"
+      ><span
+        v-if="clip.marker"
+        class="bound"
+        data-testid="clip-marker-bound"
+        :title="t('timeline.marker.elements.boundClip')"
+        >⚡</span
+      >{{ name }}</span
+    >
     <template v-if="!locked">
       <span class="handle start" @pointerdown.stop="grab('start', $event)"></span>
       <span class="handle end" @pointerdown.stop="grab('end', $event)"></span>

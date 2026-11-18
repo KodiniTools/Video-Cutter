@@ -3,11 +3,12 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
-import { addImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/lib/imageAssets'
+import { addImageAsset, getImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/lib/imageAssets'
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
 import {
+  clipGraphic,
   DEFAULT_GRAPHIC_DURATION,
   isTimelineGraphicKind,
   newGraphicData,
@@ -19,9 +20,11 @@ import { chapterList } from '@/timeline/markers'
 import {
   findClip,
   frameTime,
+  markerClipIds,
   MAX_MARKER_LABEL,
   MICROS_PER_SECOND,
   timeToSeconds,
+  type Clip,
   type Marker,
   type OpError,
   type Time,
@@ -34,7 +37,7 @@ import {
  * Clips lassen sich ziehen (auch auf eine andere Spur gleicher Art), an den
  * Rändern trimmen, am Abspielkopf teilen und löschen – per Maus und Tastatur.
  */
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = useTimelineStore()
 
 /** Breite der Spalte mit den Spurnamen (px). */
@@ -257,15 +260,15 @@ function run(command: () => boolean): void {
 const split = () => run(() => store.splitAtPlayhead())
 const remove = (ripple: boolean) => run(() => store.removeSelection({ ripple }))
 
+const insertText = (): boolean =>
+  store.addText(
+    { ...DEFAULT_TEXT_STYLE, animSpeed: 1, text: t('text.defaultText') },
+    secondsToTime(DEFAULT_TEXT_DURATION),
+  ) !== null
+
 /** Text am Abspielkopf anlegen; die Einstellungen stehen danach neben der Vorschau. */
 function addText(): void {
-  run(
-    () =>
-      store.addText(
-        { ...DEFAULT_TEXT_STYLE, animSpeed: 1, text: t('text.defaultText') },
-        secondsToTime(DEFAULT_TEXT_DURATION),
-      ) !== null,
-  )
+  run(insertText)
 }
 
 /** Form, Symbol oder Emoji am Abspielkopf anlegen (Auswahl aus der Liste). */
@@ -281,6 +284,13 @@ function addGraphic(e: Event): void {
 
 const imageInput = ref<HTMLInputElement | null>(null)
 const imageBusy = ref(false)
+/** Marker, an den das nächste geladene Bild kommt (`null` = an den Abspielkopf). */
+let imageForMarker: string | null = null
+
+function pickImage(markerId: string | null): void {
+  imageForMarker = markerId
+  imageInput.value?.click()
+}
 
 /** Eigenes Bild laden und am Abspielkopf als Clip anlegen. */
 async function addImage(e: Event): Promise<void> {
@@ -289,12 +299,14 @@ async function addImage(e: Event): Promise<void> {
   el.value = ''
   if (!file || imageBusy.value) return
   imageBusy.value = true
+  // Über die Marker-Zeile geöffnet: Bild am Marker anlegen und binden.
+  const markerId = imageForMarker
+  imageForMarker = null
   try {
     const asset = await addImageAsset(file)
-    run(
-      () =>
-        store.addGraphic(newImageData(asset.id), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null,
-    )
+    const insert = () =>
+      store.addGraphic(newImageData(asset.id), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null
+    run(() => (markerId ? store.addAtMarker(markerId, insert) : insert()))
   } catch (err) {
     hint.value =
       err instanceof ImageAssetError
@@ -312,9 +324,18 @@ const selectedMarkerId = ref<string | null>(null)
 const selectedMarker = computed(
   () => store.doc.markers.find((m) => m.id === selectedMarkerId.value) ?? null,
 )
-const markers = computed(() =>
-  store.doc.markers.map((m) => ({ marker: m, left: timeToPx(m.at, store.zoom) })),
-)
+const markers = computed(() => {
+  // Anzahl gebundener Clips je Marker (für das Zeichen am Fähnchen).
+  const bound = new Map<string, number>()
+  for (const track of store.doc.tracks)
+    for (const c of track.clips as Clip[])
+      if (c.marker) bound.set(c.marker, (bound.get(c.marker) ?? 0) + 1)
+  return store.doc.markers.map((m) => ({
+    marker: m,
+    left: timeToPx(m.at, store.zoom),
+    bound: bound.get(m.id) ?? 0,
+  }))
+})
 const markerTime = (m: Marker) => formatTimeMs(timeToSeconds(m.at))
 const copyNote = ref('')
 
@@ -346,6 +367,83 @@ function renameMarker(event: Event): void {
 function removeMarker(id: string): void {
   run(() => store.removeMarker(id))
   if (selectedMarkerId.value === id) selectedMarkerId.value = null
+}
+
+/** Clips am angeklickten Marker (wie die Elemente eines Beat-Drop-Markers im Visualizer). */
+const markerElements = computed(() => {
+  const m = selectedMarker.value
+  if (!m) return []
+  return markerClipIds(store.doc, m.id).flatMap((id) => {
+    const loc = findClip(store.doc, id)
+    if (!loc) return []
+    const offset = loc.clip.start - m.at
+    return [{ id, name: elementName(loc.clip), offset }]
+  })
+})
+
+/** Kurzname eines Clips für die Marker-Zeile. */
+function elementName(clip: Clip): string {
+  if (clip.kind === 'text') {
+    const text = typeof clip.data.text === 'string' ? clip.data.text.split('\n')[0].trim() : ''
+    return text || t('timeline.marker.elements.text')
+  }
+  if (clip.kind === 'graphic') {
+    const g = clipGraphic(clip.data)
+    if (g.kind === 'emoji') return g.emoji || t('graphics.kinds.emoji')
+    if (g.kind === 'image') return getImageAsset(g.image)?.name ?? t('graphics.kinds.image')
+    return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
+  }
+  if ('asset' in clip && clip.asset) return store.doc.assets[clip.asset]?.name ?? clip.kind
+  return clip.kind
+}
+
+/** Abstand zum Marker, z. B. „+0,50 s“ (leer bei 0). */
+function offsetText(offset: Time): string {
+  if (offset === 0) return ''
+  const s = timeToSeconds(Math.abs(offset)).toLocaleString(locale.value, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return `${offset > 0 ? '+' : '−'}${s} s`
+}
+
+/** Tondateien aus der Medienliste (können am Marker einsetzen). */
+const audioAssets = computed(() =>
+  Object.values(store.doc.assets).filter((a) => a.kind === 'audio' && a.duration !== null),
+)
+
+/** Auswahl „+ Am Marker“: Text, Form/Emoji, Bild oder Ton am Marker anlegen und binden. */
+function addAtMarker(e: Event): void {
+  const el = e.target as HTMLSelectElement
+  const value = el.value
+  el.value = ''
+  const m = selectedMarker.value
+  if (!m || !value) return
+  if (value === 'text') run(() => store.addAtMarker(m.id, insertText))
+  else if (value === 'image') pickImage(m.id)
+  else if (value.startsWith('graphic:')) {
+    const kind = value.slice('graphic:'.length)
+    if (!isTimelineGraphicKind(kind)) return
+    run(() =>
+      store.addAtMarker(
+        m.id,
+        () =>
+          store.addGraphic(newGraphicData(kind), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null,
+      ),
+    )
+  } else if (value.startsWith('audio:')) {
+    const assetId = value.slice('audio:'.length)
+    run(() => store.addAtMarker(m.id, () => store.insertAudioAt(assetId, m.at)))
+  }
+}
+
+function bindSelection(): void {
+  const m = selectedMarker.value
+  if (m) run(() => store.bindSelectionToMarker(m.id))
+}
+
+function selectElement(id: string): void {
+  store.select([id])
 }
 
 let markerDrag: {
@@ -568,7 +666,7 @@ function onKeydown(event: KeyboardEvent): void {
         data-testid="timeline-add-image"
         :title="t('timeline.addImageTitle')"
         :disabled="imageBusy"
-        @click="imageInput?.click()"
+        @click="pickImage(null)"
       >
         {{ imageBusy ? t('graphics.image.loading') : t('timeline.addImage') }}
       </button>
@@ -662,14 +760,82 @@ function onKeydown(event: KeyboardEvent): void {
           @keydown.stop
           @keydown.enter="($event.target as HTMLInputElement).blur()"
         />
+        <select
+          class="tool wide add-graphic"
+          data-testid="timeline-marker-add"
+          :title="t('timeline.marker.elements.addTitle')"
+          :aria-label="t('timeline.marker.elements.addTitle')"
+          :disabled="imageBusy"
+          @change="addAtMarker"
+          @keydown.stop
+        >
+          <option value="">{{ t('timeline.marker.elements.add') }}</option>
+          <option value="text">{{ t('timeline.marker.elements.text') }}</option>
+          <optgroup :label="t('timeline.marker.elements.graphics')">
+            <option v-for="k in TIMELINE_GRAPHIC_KINDS" :key="k" :value="`graphic:${k}`">
+              {{ t(`graphics.kinds.${k}`) }}
+            </option>
+          </optgroup>
+          <option value="image">{{ t('timeline.marker.elements.image') }}</option>
+          <optgroup v-if="audioAssets.length" :label="t('timeline.marker.elements.audio')">
+            <option v-for="a in audioAssets" :key="a.id" :value="`audio:${a.id}`">
+              {{ a.name }}
+            </option>
+          </optgroup>
+        </select>
+        <button
+          type="button"
+          class="tool wide"
+          data-testid="timeline-marker-bind"
+          :title="t('timeline.marker.elements.bindTitle')"
+          :disabled="store.selection.length === 0"
+          @click="bindSelection"
+        >
+          {{ t('timeline.marker.elements.bind') }}
+        </button>
         <button
           type="button"
           class="tool wide"
           data-testid="timeline-marker-remove"
+          :title="markerElements.length ? t('timeline.marker.elements.removeKeeps') : undefined"
           @click="removeMarker(selectedMarker.id)"
         >
           {{ t('timeline.marker.remove') }}
         </button>
+        <span
+          v-if="markerElements.length"
+          class="marker-elements"
+          data-testid="timeline-marker-elements"
+        >
+          <span class="marker-hint">{{ t('timeline.marker.elements.title') }}</span>
+          <span
+            v-for="el in markerElements"
+            :key="el.id"
+            class="marker-element"
+            :class="{ active: store.selection.includes(el.id) }"
+            :data-element="el.id"
+          >
+            <button
+              type="button"
+              class="element-pick"
+              :title="t('timeline.marker.elements.pick')"
+              @click="selectElement(el.id)"
+            >
+              {{ el.name
+              }}<span v-if="el.offset" class="element-offset"> {{ offsetText(el.offset) }}</span>
+            </button>
+            <button
+              type="button"
+              class="element-unbind"
+              data-testid="timeline-marker-unbind"
+              :title="t('timeline.marker.elements.unbind')"
+              :aria-label="t('timeline.marker.elements.unbindNamed', { name: el.name })"
+              @click="run(() => store.unbindClip(el.id))"
+            >
+              ×
+            </button>
+          </span>
+        </span>
       </template>
       <span v-else class="marker-hint">{{ t('timeline.marker.selectHint') }}</span>
       <span class="spacer"></span>
@@ -731,6 +897,13 @@ function onKeydown(event: KeyboardEvent): void {
               @keydown.delete.stop.prevent="removeMarker(m.marker.id)"
             >
               <span class="marker-label">{{ m.marker.label }}</span>
+              <span
+                v-if="m.bound"
+                class="marker-count"
+                data-testid="timeline-marker-count"
+                :title="t('timeline.marker.elements.count', { count: m.bound })"
+                >⚡{{ m.bound }}</span
+              >
             </button>
           </div>
         </div>
@@ -967,6 +1140,52 @@ function onKeydown(event: KeyboardEvent): void {
   color: var(--ds-text);
   font-size: var(--ds-text-sm);
 }
+.marker-elements {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ds-space-1);
+}
+.marker-element {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-0);
+  font-size: var(--ds-text-xs);
+}
+.marker-element.active {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+.element-pick,
+.element-unbind {
+  border: 0;
+  background: none;
+  color: var(--ds-text);
+  font: inherit;
+  cursor: pointer;
+}
+.element-pick {
+  overflow: hidden;
+  padding: 2px 6px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.element-offset {
+  color: var(--ds-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.element-unbind {
+  padding: 2px 6px 2px 2px;
+  color: var(--ds-text-2);
+}
+.element-unbind:hover {
+  color: var(--ds-danger, var(--ds-text));
+}
+.element-pick:focus-visible,
+.element-unbind:focus-visible,
 .marker-name:focus-visible,
 .marker:focus-visible {
   outline: none;
@@ -1004,6 +1223,11 @@ function onKeydown(event: KeyboardEvent): void {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.marker-count {
+  flex: none;
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
 }
 .marker-line {
   position: absolute;
