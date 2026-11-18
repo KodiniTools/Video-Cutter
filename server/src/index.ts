@@ -11,6 +11,7 @@ import { projectsRouter } from './routes/projects'
 import { previewRouter } from './routes/preview'
 import { graphicsRouter } from './routes/graphics'
 import { renderRouter } from './routes/render'
+import { qualityRouter } from './routes/quality'
 import { previewStore } from './lib/render/preview'
 import { graphicStore } from './lib/render/graphics'
 import { mediaStore } from './lib/media'
@@ -93,6 +94,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api', previewRouter)
   app.use('/api', graphicsRouter)
   app.use('/api', renderRouter)
+  app.use('/api', qualityRouter)
 
   // 404
   app.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }))

@@ -18,6 +18,8 @@ import { graphicImages } from '@/timeline/graphics'
 import { losslessCheck } from '@/timeline/lossless'
 import { chapterMarkers } from '@/timeline/markers'
 import { timeToSeconds } from '@/timeline/model'
+import type { QualityHint } from '@/timeline/quality'
+import QualityCheck from './QualityCheck.vue'
 
 /**
  * Export der Timeline: Der Server rendert in voller Größe mit demselben Code
@@ -144,6 +146,13 @@ function close(): void {
   emit('close')
 }
 
+/** Hinweis des Qualitäts-Checks: Dialog schließen, Stelle zeigen, Clip markieren. */
+function jumpTo(hint: QualityHint): void {
+  store.seek(hint.at)
+  if (hint.clipId) store.selectClip(hint.clipId)
+  close()
+}
+
 function onCancel(e: Event): void {
   e.preventDefault()
   close()
@@ -226,6 +235,7 @@ onBeforeUnmount(discard)
             <small>{{ t('timelineExport.normalizeHint') }}</small>
           </span>
         </label>
+        <QualityCheck :normalized="normalizeAudio && quality !== 'lossless'" @jump="jumpTo" />
         <p v-if="chapterCount > 0" class="summary" data-testid="export-chapters">
           {{ t('timelineExport.chapters', chapterCount) }}
         </p>
@@ -285,7 +295,9 @@ onBeforeUnmount(discard)
   background: var(--ds-surface-1);
   color: var(--ds-text);
   box-shadow: var(--ds-shadow-overlay);
-  width: min(480px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
 }
 .export::backdrop {
   background: rgb(0 0 0 / 0.65);
