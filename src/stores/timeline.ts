@@ -24,6 +24,7 @@ import {
   linkGroupIds,
   moveClip as moveClipOp,
   moveTrack as moveTrackOp,
+  nudgeClips as nudgeClipsOp,
   nextTrackName,
   putAsset as putAssetOp,
   removeAsset as removeAssetOp,
@@ -63,6 +64,7 @@ import {
   type DocIssue,
   type FadeCurve,
   type MoveTarget,
+  type NudgeTarget,
   type NewTrack,
   type OpError,
   type OpResult,
@@ -551,6 +553,16 @@ export const useTimelineStore = defineStore('timeline', () => {
     })
   }
 
+  /**
+   * Markierte Clips (samt verknüpften, mit `wholeTracks` samt allen Clips ihrer
+   * Spuren) zeitlich verschieben: um einen Betrag oder mit Anfang/Ende an eine
+   * Zeit. Ein Verlaufsschritt; ohne Wirkung (z. B. schon bei 0) keiner.
+   */
+  function nudgeSelection(target: NudgeTarget, opts: { wholeTracks?: boolean } = {}): boolean {
+    if (selection.value.length === 0) return false
+    return apply((d) => nudgeClipsOp(d, selection.value, target, opts))
+  }
+
   // --- Ansicht -------------------------------------------------------------
 
   function select(ids: readonly string[]): void {
@@ -748,6 +760,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     dragClipTo,
     dragTrimTo,
     removeSelection,
+    nudgeSelection,
     select,
     toggleSelected,
     selectClip,

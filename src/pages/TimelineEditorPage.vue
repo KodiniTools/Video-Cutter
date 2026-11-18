@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AiInspector from '@/components/timeline/AiInspector.vue'
 import ClipInspector from '@/components/timeline/ClipInspector.vue'
+import ClipNudge from '@/components/timeline/ClipNudge.vue'
 import ExportDialog from '@/components/timeline/ExportDialog.vue'
 import MediaPool from '@/components/timeline/MediaPool.vue'
 import PreviewPlayer from '@/components/timeline/PreviewPlayer.vue'
@@ -97,6 +98,7 @@ function openProjects(): void {
     <div class="layout">
       <div class="side">
         <MediaPool />
+        <ClipNudge />
         <ClipInspector />
         <TextInspector />
         <GraphicInspector />
