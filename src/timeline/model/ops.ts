@@ -1772,6 +1772,78 @@ export function unbindClip(doc: TimelineDoc, clipId: string): OpResult {
   return ok(setClipMarker(doc, [clipId], undefined))
 }
 
+// --- Zeitlich verschieben (Knopfleiste) ---------------------------------------
+
+/** Wohin markierte Clips rücken: um einen Betrag, mit dem Anfang oder dem Ende an eine Zeit. */
+export type NudgeTarget = { by: Time } | { startAt: Time } | { endAt: Time }
+
+/** Was beim Verschieben mitwandert, mit gemeinsamem Anfang und Ende. */
+export interface NudgeSpan {
+  ids: string[]
+  start: Time
+  end: Time
+}
+
+/**
+ * Clips, die beim Verschieben von `clipIds` gemeinsam wandern: die Clips
+ * selbst samt verknüpften (Bild und Ton), mit `wholeTracks` zusätzlich alle
+ * Clips ihrer Spuren. `null`, wenn keiner der Clips existiert.
+ */
+export function nudgeSpan(
+  doc: TimelineDoc,
+  clipIds: readonly string[],
+  opts: { wholeTracks?: boolean } = {},
+): NudgeSpan | null {
+  const seeds = clipIds.flatMap((id) => {
+    const loc = findClip(doc, id)
+    return loc ? [loc] : []
+  })
+  if (seeds.length === 0) return null
+  const roots = opts.wholeTracks
+    ? [...new Set(seeds.map((l) => l.trackIndex))].flatMap((i) =>
+        doc.tracks[i].clips.map((clip) => findClip(doc, clip.id) as ClipLocation),
+      )
+    : seeds
+  const moving = new Map<string, Clip>()
+  for (const loc of roots)
+    for (const m of linkedClips(doc, loc, true)) moving.set(m.clip.id, m.clip)
+  const clips = [...moving.values()]
+  return {
+    ids: clips.map((c) => c.id),
+    start: Math.min(...clips.map((c) => c.start)),
+    end: Math.max(...clips.map(clipEnd)),
+  }
+}
+
+/**
+ * Markierte Clips gemeinsam zeitlich verschieben (Abstände bleiben). `by`
+ * wird an 0 begrenzt: Wer schon am Anfang liegt, bleibt dort. Bei `startAt`
+ * und `endAt` wird abgelehnt (`invalid-time`), wenn ein Clip vor 0 beginnen
+ * müsste. Stößt ein Clip auf einen nicht mitbewegten, bleibt alles, wie es ist
+ * (`overlap`). Keyframes und Lautstärke-Kurven hängen am Clip und wandern mit;
+ * Marker-Bindungen bleiben bestehen (wie beim Ziehen).
+ */
+export function nudgeClips(
+  doc: TimelineDoc,
+  clipIds: readonly string[],
+  target: NudgeTarget,
+  opts: { wholeTracks?: boolean } = {},
+): OpResult {
+  const span = nudgeSpan(doc, clipIds, opts)
+  if (!span) return fail('clip-not-found')
+  let delta: number
+  if ('by' in target) {
+    if (!Number.isFinite(target.by)) return fail('invalid-time')
+    delta = Math.max(-span.start, Math.round(target.by))
+  } else {
+    const at = 'startAt' in target ? target.startAt : target.endAt
+    if (!isTime(at)) return fail('invalid-time')
+    delta = at - ('startAt' in target ? span.start : span.end)
+    if (span.start + delta < 0) return fail('invalid-time')
+  }
+  return shiftClips(doc, span.ids, delta)
+}
+
 // --- Einrasten --------------------------------------------------------------
 
 /** Mögliche Einrastpunkte: 0, Clip-Ränder, Marker und (optional) der Abspielkopf. */
