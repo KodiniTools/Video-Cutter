@@ -1,3 +1,4 @@
+import { animParts, OUT_ANIMATIONS } from '@/lib/textOverlay'
 import {
   clampGraphic,
   defaultGraphic,
@@ -167,6 +168,13 @@ export class GraphicImages {
                 animation: g.animation,
                 loop: g.loop,
                 animSpeed: g.animSpeed ?? 1,
+                // Eigenes Ausblenden steht nur in den Clip-Daten (clipGraphic kennt es nicht).
+                ...((OUT_ANIMATIONS as readonly unknown[]).includes(clip.data.animOut)
+                  ? {
+                      animOut: clip.data.animOut,
+                      animOutSpeed: animParts(clip.data).outSpeed,
+                    }
+                  : {}),
                 png,
                 renderHeight: height,
                 ...(keys.length > 0 ? { keys } : {}),

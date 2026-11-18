@@ -380,6 +380,34 @@ function onTransitionDuration(e: Event): void {
   })
 }
 
+// --- Ausblenden am Ende ------------------------------------------------------
+
+const fadeOut = computed(() => video.value?.fadeOut ?? null)
+const fadeOutSeconds = computed(() => (fadeOut.value ? timeToSeconds(fadeOut.value.duration) : 1))
+const fadeOutLabel = computed(() =>
+  fadeOutSeconds.value.toLocaleString(locale.value, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }),
+)
+
+function onFadeOutToggle(e: Event): void {
+  commit()
+  const clip = video.value
+  if (clip) store.setClipFadeOut(clip.id, (e.target as HTMLInputElement).checked ? {} : null)
+}
+
+function onFadeOutDuration(e: Event): void {
+  const clip = video.value
+  if (!clip || !fadeOut.value) return
+  if (!editing) {
+    store.beginGesture()
+    editing = true
+  }
+  const seconds = Number((e.target as HTMLInputElement).value)
+  store.setClipFadeOut(clip.id, { duration: secondsToTime(seconds) })
+}
+
 function onHold(e: Event): void {
   commit()
   if (video.value) store.setClipHold(video.value.id, (e.target as HTMLInputElement).checked)
@@ -512,6 +540,32 @@ onBeforeUnmount(commit)
         <span class="value">{{ transitionLabel }} s</span>
       </label>
       <p class="hint">{{ t('timeline.clipInspector.transitionHint') }}</p>
+    </fieldset>
+    <fieldset v-if="video" class="crop" data-testid="clip-fade-out">
+      <legend>{{ t('timeline.clipInspector.fadeOut') }}</legend>
+      <label class="check">
+        <input
+          type="checkbox"
+          :checked="!!fadeOut"
+          data-testid="clip-fade-out-toggle"
+          @change="onFadeOutToggle"
+        />
+        <span>{{ t('timeline.clipInspector.fadeOutOn') }}</span>
+      </label>
+      <label v-if="fadeOut" class="side">
+        <span>{{ t('timeline.clipInspector.transitionDuration') }}</span>
+        <RangeSpinner
+          :min="timeToSeconds(MIN_TRANSITION)"
+          :max="timeToSeconds(MAX_TRANSITION)"
+          step="0.1"
+          :value="fadeOutSeconds"
+          data-testid="clip-fade-out-duration"
+          @input="onFadeOutDuration"
+          @change="commit"
+        />
+        <span class="value">{{ fadeOutLabel }} s</span>
+      </label>
+      <p class="hint">{{ t('timeline.clipInspector.fadeOutHint') }}</p>
     </fieldset>
     <label v-if="video" class="check">
       <input

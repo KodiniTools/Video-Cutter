@@ -33,6 +33,96 @@ export const TEXT_ANIMATIONS = [
 export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
 
 /**
+ * Eigene Animation zum Ausblenden (Texte und Grafiken, identisch auf dem
+ * Server). Ist `animOut` gesetzt, bestimmt `animation` nur noch das
+ * Einblenden; fehlt es, gilt das bisherige Verhalten (die meisten Animationen
+ * blenden am Ende mit aus).
+ */
+export const OUT_ANIMATIONS = [
+  'none',
+  'fade',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+] as const
+export type OutAnimation = (typeof OUT_ANIMATIONS)[number]
+
+/** Animationen zum Einblenden (Auswahl im Editor); Grafiken ohne Schreibmaschine. */
+export const IN_ANIMATIONS = [
+  'none',
+  'fadeIn',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+  'typewriter',
+] as const
+export type InAnimation = (typeof IN_ANIMATIONS)[number]
+
+/** Ein- und Ausblenden getrennt, jeweils mit eigenem Tempo. */
+export interface AnimParts {
+  in: InAnimation
+  inSpeed: number
+  out: OutAnimation
+  outSpeed: number
+}
+
+const speedOr1 = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 1
+
+/**
+ * Liest Ein- und Ausblenden aus den Daten eines Textes oder einer Grafik.
+ * Ältere Einträge ohne `animOut` werden so gedeutet, wie sie bisher aussahen:
+ * „Ein- und Ausblenden“ = einblenden + ausblenden, „Nur ausblenden“ = nur
+ * ausblenden, Hereingleiten/Zoomen/Ploppen/Schreibmaschine blenden am Ende aus.
+ */
+export function animParts(data: {
+  animation?: unknown
+  animSpeed?: unknown
+  animOut?: unknown
+  animOutSpeed?: unknown
+}): AnimParts {
+  const a = data.animation
+  const inSpeed = speedOr1(data.animSpeed)
+  const into: InAnimation =
+    a === 'fade'
+      ? 'fadeIn'
+      : (IN_ANIMATIONS as readonly unknown[]).includes(a)
+        ? (a as InAnimation)
+        : 'none'
+  if ((OUT_ANIMATIONS as readonly unknown[]).includes(data.animOut))
+    return {
+      in: into,
+      inSpeed,
+      out: data.animOut as OutAnimation,
+      outSpeed: speedOr1(data.animOutSpeed),
+    }
+  const fades =
+    (TEXT_ANIMATIONS as readonly unknown[]).includes(a) && a !== 'none' && a !== 'fadeIn'
+  return { in: into, inSpeed, out: fades ? 'fade' : 'none', outSpeed: inSpeed }
+}
+
+/** Felder für die Daten eines Textes oder einer Grafik (getrennte Schreibweise). */
+export function animPatch(parts: AnimParts): {
+  animation: InAnimation
+  animSpeed: number
+  animOut: OutAnimation
+  animOutSpeed: number
+} {
+  return {
+    animation: parts.in,
+    animSpeed: parts.inSpeed,
+    animOut: parts.out,
+    animOutSpeed: parts.outSpeed,
+  }
+}
+
+/**
  * Schriften der Vorschau. `css` = Familienname der @font-face-Regel (siehe
  * TextOverlayLayer.vue), `lineRatio` = (usWinAscent + usWinDescent) / unitsPerEm –
  * so hoch ist eine Zeile bei libass, relativ zur CSS-Schriftgröße (gemessen).

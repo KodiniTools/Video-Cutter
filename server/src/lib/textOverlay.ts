@@ -34,6 +34,47 @@ export const TEXT_ANIMATIONS = [
 export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
 
 /**
+ * Eigene Animation zum Ausblenden (für Texte und Grafiken gleich). Ist sie
+ * gesetzt, bestimmt `animation` nur noch das Einblenden; fehlt sie, gilt das
+ * bisherige Verhalten (die meisten Animationen blenden am Ende mit aus).
+ * `slide…` gleitet nach unten, oben, links bzw. rechts hinaus, `zoom` wächst
+ * weg, `pop` schrumpft weg.
+ */
+export const OUT_ANIMATIONS = [
+  'none',
+  'fade',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+] as const
+export type OutAnimation = (typeof OUT_ANIMATIONS)[number]
+
+/** Ausblend-Animation aus der Anfrage: fehlt = `undefined` (bisheriges Verhalten). */
+export function parseAnimOut(v: unknown, label: string): OutAnimation | undefined {
+  if (v === undefined || v === null) return undefined
+  if (typeof v === 'string' && (OUT_ANIMATIONS as readonly string[]).includes(v))
+    return v as OutAnimation
+  throw new ValidationError(`Ungültige Auswahl für ${label}.`)
+}
+
+/** Aus `animation` und `animOut`: Was am Anfang und was am Ende passiert. */
+export function splitAnimation(o: {
+  animation: TextAnimation
+  animOut?: OutAnimation
+  animSpeed?: number
+  animOutSpeed?: number
+}): { out: OutAnimation; outSpeed: number; legacy: boolean } {
+  if (o.animOut !== undefined)
+    return { out: o.animOut, outSpeed: o.animOutSpeed ?? 1, legacy: false }
+  // Bisher: alles außer „Ohne“ und „Nur einblenden“ blendet am Ende aus.
+  const out = o.animation === 'none' || o.animation === 'fadeIn' ? 'none' : 'fade'
+  return { out, outSpeed: o.animSpeed ?? 1, legacy: true }
+}
+
+/**
  * Schrift-Metadaten. `winRatio` = (usWinAscent + usWinDescent) / unitsPerEm:
  * libass interpretiert `\fs` als Gesamthöhe der Schrift, CSS `font-size` als
  * Em-Größe. Damit Vorschau (CSS) und Ergebnis (libass) gleich groß sind, gilt
@@ -67,6 +108,10 @@ export interface TextOverlay {
   animation: TextAnimation
   /** Tempo der Animation (Faktor 0,25–4, 1 = normal). */
   animSpeed: number
+  /** Eigene Animation zum Ausblenden; fehlt sie, blendet `animation` wie bisher mit aus. */
+  animOut?: OutAnimation
+  /** Tempo des Ausblendens (nur mit `animOut`). */
+  animOutSpeed?: number
   /**
    * Bewegung über Keyframes (Timeline-Editor): Mitte und Größe ändern sich
    * über die Zeit. Ersetzt `x`/`y`.
@@ -198,6 +243,7 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
     if (!(end - start >= MIN_TEXT_DURATION)) {
       throw new ValidationError(`Text ${n}: Ende muss nach dem Start liegen (im Video).`)
     }
+    const animOut = parseAnimOut(item.animOut, `Ausblenden von Text ${n}`)
     return {
       text,
       start,
@@ -211,6 +257,12 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
       accent: color(item.accent, `Akzent von Text ${n}`),
       animation: oneOf(item.animation, TEXT_ANIMATIONS, `Animation von Text ${n}`),
       animSpeed: parseAnimSpeed(item.animSpeed, `Tempo von Text ${n}`),
+      ...(animOut !== undefined
+        ? {
+            animOut,
+            animOutSpeed: parseAnimSpeed(item.animOutSpeed, `Tempo des Ausblendens von Text ${n}`),
+          }
+        : {}),
     }
   })
 }
@@ -453,7 +505,7 @@ function motionBreaks(motion: TextMotion, dur: number): number[] {
  */
 export function buildAssEvents(o: TextOverlay, width: number, height: number): string[] {
   const motion = o.motion
-  if (!motion || motion.keys.length === 0) return [buildAssEvent(o, width, height)]
+  if (!motion || motion.keys.length === 0) return buildAssLines(o, width, height)
   const dur = o.end - o.start
   const px = o.size * height
   const meta = fontMeta(o.font)
@@ -487,7 +539,9 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
       throw new Error(`Unbekannte Animation: ${String(never)}`)
     }
   }
-  const fadeOut = o.animation === 'none' || o.animation === 'fadeIn' ? 0 : f
+  // Mit Keyframes wird jede Ausblend-Animation zum Ausblenden (wie beim Einblenden).
+  const end = splitAnimation(o)
+  const fadeOut = end.out === 'none' ? 0 : end.legacy ? f : fadeMs(dur, end.outSpeed)
   const style = o.style === 'box' ? 'Box' : 'Text'
   const breaks = motionBreaks(motion, dur)
   const scaled = motion.keys.some((k) => k.scale !== 1)
@@ -526,8 +580,11 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
   return lines
 }
 
-/** Eine Dialogue-Zeile für eine Einblendung. */
-export function buildAssEvent(o: TextOverlay, width: number, height: number): string {
+/**
+ * Dialogue-Zeilen für eine Einblendung ohne Keyframes: eine, mit bewegtem
+ * Ausblenden (`animOut` gleiten/zoomen/ploppen) zwei.
+ */
+export function buildAssLines(o: TextOverlay, width: number, height: number): string[] {
   const dur = o.end - o.start
   const px = o.size * height
   const meta = fontMeta(o.font)
@@ -538,22 +595,23 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
     `\\an5\\fn${meta.family}\\b${meta.bold ? 1 : 0}\\fs${r1(px * meta.winRatio)}` +
     `\\c${assColor(o.color)}${look}${alpha}`
 
-  const f = fadeMs(dur, o.animSpeed)
+  const end = splitAnimation(o)
+  // Bewegtes Ausblenden braucht eine eigene Zeile (ASS kennt je Zeile nur ein \\move).
+  const tail = !end.legacy && end.out !== 'none' && end.out !== 'fade'
+  /** Ausblendzeit der (ersten) Zeile in ms. */
+  const f = tail ? 0 : end.out === 'none' ? 0 : fadeMs(dur, end.outSpeed)
+  const fi = fadeMs(dur, o.animSpeed)
   const m = moveMs(dur, o.animSpeed)
   let anim: string
   let body = escapeAssText(o.text)
   switch (o.animation) {
     case 'none':
-      anim = `\\pos(${x},${y})`
+    case 'fadeOut':
+      anim = `\\pos(${x},${y})` + (f > 0 ? `\\fad(0,${f})` : '')
       break
     case 'fade':
-      anim = `\\pos(${x},${y})\\fad(${f},${f})`
-      break
     case 'fadeIn':
-      anim = `\\pos(${x},${y})\\fad(${f},0)`
-      break
-    case 'fadeOut':
-      anim = `\\pos(${x},${y})\\fad(0,${f})`
+      anim = `\\pos(${x},${y})\\fad(${fi},${f})`
       break
     case 'slide':
     case 'slideTop':
@@ -580,7 +638,7 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
       break
     }
     case 'typewriter':
-      anim = `\\pos(${x},${y})\\fad(0,${f})`
+      anim = `\\pos(${x},${y})` + (f > 0 ? `\\fad(0,${f})` : '')
       body = typewriterBody(o, dur, alpha, 0)
       break
     default: {
@@ -590,7 +648,62 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
   }
 
   const style = o.style === 'box' ? 'Box' : 'Text'
-  return `Dialogue: 0,${assTime(o.start)},${assTime(o.end)},${style},,0,0,0,,{${base}${anim}}${body}`
+  const line = (from: number, to: number, tags: string, text: string) =>
+    `Dialogue: 0,${assTime(from)},${assTime(to)},${style},,0,0,0,,{${base}${tags}}${text}`
+  if (!tail) return [line(o.start, o.end, anim, body)]
+
+  // Zweite Zeile für das bewegte Ausblenden: schließt lückenlos an die erste an.
+  // Die Grenze liegt auf dem Hundertstel-Raster von ASS (wie assTime rundet).
+  const mo = moveMs(dur, end.outSpeed)
+  // In Hundertstel, so wie assTime Beginn und Ende der Zeilen schreibt.
+  const cs = (sec: number) => Math.max(0, Math.floor(sec * 100 - 0.1))
+  const startCs = cs(o.start)
+  const endCs = cs(o.end)
+  const splitCs = Math.min(endCs - 1, Math.max(startCs, cs(o.end - mo / 1000)))
+  /** Zeit, die assTime genau auf `splitCs` abbildet. */
+  const split = (splitCs + 0.5) / 100
+  const rest = Math.max(1, (endCs - splitCs) * 10)
+  const t0 = Math.max(0, rest - mo)
+  let out: string
+  switch (end.out) {
+    case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight': {
+      const d = Math.round(SLIDE_OFFSET * height)
+      const [dx, dy] = slideVector(end.out)
+      out = `\\move(${x},${y},${x + dx * d},${y + dy * d},${t0},${rest})\\fad(0,${mo})`
+      break
+    }
+    case 'zoom': {
+      const to = Math.round(ZOOM_FROM * 100)
+      out =
+        `\\pos(${x},${y})\\fad(0,${Math.round(mo / 2)})` +
+        `\\t(${t0},${rest},\\fscx${to}\\fscy${to})`
+      break
+    }
+    case 'pop': {
+      const a = t0 + Math.round(mo * 0.4)
+      out =
+        `\\pos(${x},${y})\\fad(0,${Math.round(mo / 2)})` +
+        `\\t(${t0},${a},\\fscx112\\fscy112)\\t(${a},${rest},\\fscx40\\fscy40)`
+      break
+    }
+    default:
+      throw new Error(`Unbekannte Ausblend-Animation: ${String(end.out)}`)
+  }
+  const tailBody =
+    o.animation === 'typewriter'
+      ? typewriterBody(o, dur, alpha, (splitCs - startCs) * 10)
+      : escapeAssText(o.text)
+  // Reicht das Einblenden bis hinter die Grenze (sehr kurze Texte), entfällt die erste Zeile.
+  if (splitCs - startCs < MIN_MOTION_STEP * 100) return [line(o.start, o.end, out, tailBody)]
+  return [line(o.start, split, anim, body), line(split, o.end, out, tailBody)]
+}
+
+/** Eine Dialogue-Zeile für eine Einblendung (ohne bewegtes Ausblenden). */
+export function buildAssEvent(o: TextOverlay, width: number, height: number): string {
+  return buildAssLines(o, width, height)[0]
 }
 
 /**

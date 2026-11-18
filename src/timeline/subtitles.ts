@@ -26,7 +26,19 @@ export const SUBTITLE_STYLE: Record<string, unknown> = {
   animSpeed: 1,
 }
 
-const STYLE_KEYS = ['x', 'y', 'font', 'size', 'color', 'style', 'accent', 'animation', 'animSpeed']
+const STYLE_KEYS = [
+  'x',
+  'y',
+  'font',
+  'size',
+  'color',
+  'style',
+  'accent',
+  'animation',
+  'animSpeed',
+  'animOut',
+  'animOutSpeed',
+]
 
 /**
  * Vorlage für neue Untertitel: der gespeicherte Text-Standard, sonst das

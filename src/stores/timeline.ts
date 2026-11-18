@@ -38,6 +38,7 @@ import {
   setClipFade as setClipFadeOp,
   setClipHold as setClipHoldOp,
   setClipTransition as setClipTransitionOp,
+  setClipFadeOut as setClipFadeOutOp,
   setClipGain as setClipGainOp,
   setClipSpeed as setClipSpeedOp,
   snapPoints,
@@ -375,6 +376,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     clipId: string,
     transition: { preset: ClipTransitionPreset; duration?: Time } | null,
   ) => apply((d) => setClipTransitionOp(d, clipId, transition))
+  const setClipFadeOut = (clipId: string, fade: { duration?: Time } | null) =>
+    apply((d) => setClipFadeOutOp(d, clipId, fade))
 
   /** Ton eines Clips ein- (`in`) bzw. ausblenden (`out`); Dauer 0 oder `null` = aus. */
   const setClipFade = (
@@ -755,6 +758,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setClipCrop,
     setClipLayout,
     setClipTransition,
+    setClipFadeOut,
     cutClipRanges,
     repeatClip,
     setClipHold,

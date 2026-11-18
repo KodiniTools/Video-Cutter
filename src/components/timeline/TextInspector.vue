@@ -5,14 +5,20 @@ import RangeSpinner from './RangeSpinner.vue'
 import FontSelect from '@/components/FontSelect.vue'
 import {
   ANIM_SPEEDS,
+  animParts,
+  animPatch,
   DEFAULT_TEXT_STYLE,
   formatAnimSpeed,
   MAX_TEXT_LENGTH,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
+  IN_ANIMATIONS,
+  OUT_ANIMATIONS,
   POSITION_PRESETS,
-  TEXT_ANIMATIONS,
   TEXT_STYLES,
+  type AnimParts,
+  type InAnimation,
+  type OutAnimation,
   type PositionPreset,
 } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
@@ -55,8 +61,15 @@ const size = computed(() => num('size', DEFAULT_TEXT_STYLE.size))
 const color = computed(() => str('color', DEFAULT_TEXT_STYLE.color))
 const style = computed(() => str('style', DEFAULT_TEXT_STYLE.style))
 const accent = computed(() => str('accent', DEFAULT_TEXT_STYLE.accent))
-const animation = computed(() => str('animation', DEFAULT_TEXT_STYLE.animation))
-const animSpeed = computed(() => num('animSpeed', 1))
+/** Ein- und Ausblenden getrennt (ältere Texte werden passend gedeutet). */
+const anim = computed(() =>
+  animParts({ animation: DEFAULT_TEXT_STYLE.animation, ...clip.value?.data }),
+)
+
+/** Schreibt immer alle vier Felder, damit Ein- und Ausblenden unabhängig bleiben. */
+function setAnim(change: Partial<AnimParts>): void {
+  set(animPatch({ ...anim.value, ...change }))
+}
 /** Zeit im Clip, an der der Abspielkopf steht (in den Clip geholt). */
 const offset = computed(() => {
   const c = clip.value
@@ -222,23 +235,51 @@ onBeforeUnmount(commit)
     </div>
     <div class="row">
       <label class="field">
-        <span>{{ t('text.animation') }}</span>
+        <span>{{ t('text.animIn') }}</span>
         <select
-          :value="animation"
+          :value="anim.in"
           data-testid="text-animation"
-          @change="set({ animation: value($event) })"
+          @change="setAnim({ in: value($event) as InAnimation })"
         >
-          <option v-for="a in TEXT_ANIMATIONS" :key="a" :value="a">
-            {{ t(`text.animations.${a}`) }}
+          <option v-for="a in IN_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.inAnimations.${a}`) }}
           </option>
         </select>
       </label>
       <label class="field">
-        <span>{{ t('text.animSpeed') }}</span>
+        <span>{{ t('text.animInSpeed') }}</span>
         <select
-          :value="animSpeed"
-          :disabled="animation === 'none'"
-          @change="set({ animSpeed: Number(value($event)) })"
+          :value="anim.inSpeed"
+          :disabled="anim.in === 'none'"
+          data-testid="text-anim-speed"
+          @change="setAnim({ inSpeed: Number(value($event)) })"
+        >
+          <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
+            {{ formatAnimSpeed(s, locale) }}
+          </option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label class="field">
+        <span>{{ t('text.animOut') }}</span>
+        <select
+          :value="anim.out"
+          data-testid="text-anim-out"
+          @change="setAnim({ out: value($event) as OutAnimation })"
+        >
+          <option v-for="a in OUT_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.outAnimations.${a}`) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('text.animOutSpeed') }}</span>
+        <select
+          :value="anim.outSpeed"
+          :disabled="anim.out === 'none'"
+          data-testid="text-anim-out-speed"
+          @change="setAnim({ outSpeed: Number(value($event)) })"
         >
           <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
             {{ formatAnimSpeed(s, locale) }}

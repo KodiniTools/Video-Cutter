@@ -15,8 +15,10 @@ import {
 } from '../graphicOverlay'
 import {
   MIN_TEXT_DURATION,
+  parseAnimOut,
   parseAnimSpeed,
   parseTextOverlays,
+  type OutAnimation,
   type TextOverlay,
 } from '../textOverlay'
 
@@ -126,6 +128,8 @@ export interface DocVideoClip extends DocClipBase {
   /** Farbkorrektur: Helligkeit, Kontrast, Sättigung, je −1 … 1 (0 = unverändert). */
   color?: DocColor
   transitionIn?: DocTransition | null
+  /** Bild am Clip-Ende ausblenden (Dauer auf der Timeline). */
+  fadeOut?: { duration: Time }
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt. */
   hold?: boolean
 }
@@ -180,6 +184,9 @@ export interface DocGraphic {
   animation: GraphicAnimation
   loop: GraphicLoop
   animSpeed: number
+  /** Eigene Animation zum Ausblenden (fehlt = wie bisher über `animation`). */
+  animOut?: OutAnimation
+  animOutSpeed?: number
   /** Keyframes (nach Zeit sortiert): Mitte und Größe ändern sich über die Zeit. */
   keys?: DocGraphicKey[]
   /** Weiche Bewegung zwischen den Keyframes. */
@@ -573,6 +580,17 @@ export function parseTimelineDoc(
             } catch (e) {
               return fail(`${gp}.animSpeed`, e instanceof Error ? e.message : 'Ungültiges Tempo.')
             }
+            let animOut: OutAnimation | undefined
+            let animOutSpeed = 1
+            try {
+              animOut = parseAnimOut(data.animOut, 'Ausblenden der Grafik')
+              animOutSpeed = parseAnimSpeed(data.animOutSpeed, 'Tempo des Ausblendens')
+            } catch (e) {
+              return fail(
+                `${gp}.animOut`,
+                e instanceof Error ? e.message : 'Ungültiges Ausblenden.',
+              )
+            }
             const keys = parseOverlayKeys(data.keys)
             if (!keys) return fail(`${gp}.keys`, 'Ungültige Keyframes.')
             if (data.ease !== undefined && data.ease !== null && data.ease !== 'smooth')
@@ -588,6 +606,7 @@ export function parseTimelineDoc(
                 animation: animation as GraphicAnimation,
                 loop: loop as GraphicLoop,
                 animSpeed,
+                ...(animOut !== undefined ? { animOut, animOutSpeed } : {}),
                 ...(keys.length > 0 ? { keys } : {}),
                 ...(keys.length > 0 && data.ease === 'smooth' ? { ease: 'smooth' as const } : {}),
               },
@@ -797,6 +816,17 @@ export function parseTimelineDoc(
             return fail(`${cp}.transitionIn`, 'Ungültiger Übergang.')
           transitionIn = { preset: t.preset as ClipTransitionPreset, duration: t.duration }
         }
+        let fadeOut: { duration: Time } | null = null
+        if (rc.fadeOut !== undefined && rc.fadeOut !== null) {
+          const f = rc.fadeOut
+          if (
+            !isObject(f) ||
+            !isTime(f.duration) ||
+            !inRange(f.duration, MIN_TRANSITION, MAX_TRANSITION)
+          )
+            return fail(`${cp}.fadeOut`, 'Ungültiges Ausblenden.')
+          fadeOut = { duration: f.duration }
+        }
         clips.push({
           ...base,
           kind: ck as 'video' | 'still',
@@ -807,6 +837,7 @@ export function parseTimelineDoc(
           ...(layout ? { layout } : {}),
           ...(color ? { color } : {}),
           ...(transitionIn ? { transitionIn } : {}),
+          ...(fadeOut ? { fadeOut } : {}),
           ...(rc.hold === true ? { hold: true } : {}),
         })
       })

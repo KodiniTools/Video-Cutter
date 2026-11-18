@@ -369,7 +369,8 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
           break
         }
       }
-      if (!held?.hold || !next || frameOf(next.start) <= frame) return null
+      // Ein ausgeblendeter Clip hält kein Bild: Es käme nach dem Ausblenden zurück.
+      if (!held?.hold || held.fadeOut || !next || frameOf(next.start) <= frame) return null
       return { clip: held, next, start: frameOf(clipEnd(held)), end: frameOf(next.start) }
     }
     const parts =
@@ -544,7 +545,8 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         const before = at > 0 ? track.clips[at - 1] : undefined
         const adjacent = before !== undefined && frameOf(clipEnd(before)) === frameOf(clip.start)
         // Voriges Bild für den Übergang: direkt davor oder über die Lücke gehalten.
-        const prev = before && (adjacent || before.hold) ? before : undefined
+        // Ein ausgeblendeter Clip liefert keins (sein Bild ist am Ende schon weg).
+        const prev = before && !before.fadeOut && (adjacent || before.hold) ? before : undefined
         const after = track.clips[at + 1]
         const next = after && frameOf(after.start) === frameOf(clipEnd(clip)) ? after : undefined
         const total = clipFrames(clip)
@@ -554,7 +556,12 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         const preset = clip.transitionIn?.preset
         const inActive = nIn > 0 && local < nIn
         // Ausblenden, wenn der nächste Clip mit „Blende“ beginnt.
-        const nOut = next?.transitionIn?.preset === 'fade' ? halfFrames(next, total) : 0
+        // Oder der Clip blendet selbst aus (`fadeOut`); das längere von beiden gilt.
+        const ownOut = clip.fadeOut ? Math.min(total, frameOf(clip.fadeOut.duration)) : 0
+        const nOut = Math.max(
+          ownOut,
+          next?.transitionIn?.preset === 'fade' ? halfFrames(next, total) : 0,
+        )
         const outActive = nOut > 0 && local + piece.frames > total - nOut
         const fades = [
           ...(inActive && preset === 'fade' ? fadeSteps('in', 0, nIn, local) : []),
@@ -659,6 +666,9 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         animation: g.animation,
         loop: g.loop,
         animSpeed: g.animSpeed,
+        ...(g.animOut !== undefined
+          ? { animOut: g.animOut, animOutSpeed: g.animOutSpeed ?? 1 }
+          : {}),
         ...(g.keys?.length ? { motion: graphicMotion(g.keys, start, g.ease === 'smooth') } : {}),
       }
       graphics.push({

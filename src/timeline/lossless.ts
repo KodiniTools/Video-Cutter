@@ -54,7 +54,7 @@ export function checkLossless(
   if (clip.crop) return no('crop')
   if (clip.color) return no('color')
   if (clip.layout) return no('layout')
-  if (clip.transitionIn) return no('transition')
+  if (clip.transitionIn || clip.fadeOut) return no('transition')
   if (doc.markers.some((m) => m.effect)) return no('effects')
   const source = info(clip.asset)
   if (

@@ -101,6 +101,7 @@ function parseClip(v: unknown): Clip {
       if (v.kind === 'audio' && v.envelope !== undefined && !Array.isArray(v.envelope)) invalid()
       if (v.kind !== 'audio' && v.crop != null && !isObj(v.crop)) invalid()
       if (v.kind !== 'audio' && v.transitionIn !== undefined && !isObj(v.transitionIn)) invalid()
+      if (v.kind !== 'audio' && v.fadeOut !== undefined && !isObj(v.fadeOut)) invalid()
       if (v.kind !== 'audio' && v.hold !== undefined && typeof v.hold !== 'boolean') invalid()
       break
     case 'text':

@@ -113,6 +113,8 @@ export const SERVER_FEATURES = [
   'mediaDerived',
   'timelinePreview',
   'timelinePreviewFull',
+  'timelineAnimOut',
+  'timelineClipFadeOut',
   'timelineRender',
   'timelineNormalize',
   'timelineText',

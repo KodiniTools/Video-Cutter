@@ -330,6 +330,31 @@ const messages = {
       animSpeed: 'Tempo der Animation',
       animSpeedHint: 'Kleiner = langsamer (0,5× = halb so schnell), größer = schneller.',
       animation: 'Animation',
+      animIn: 'Einblenden',
+      animInSpeed: 'Tempo Einblenden',
+      animOut: 'Ausblenden',
+      animOutSpeed: 'Tempo Ausblenden',
+      inAnimations: {
+        none: 'Ohne',
+        fadeIn: 'Einblenden',
+        slide: 'Hereingleiten von unten',
+        slideTop: 'Hereingleiten von oben',
+        slideLeft: 'Hereingleiten von links',
+        slideRight: 'Hereingleiten von rechts',
+        zoom: 'Heranzoomen (groß → normal)',
+        pop: 'Aufploppen',
+        typewriter: 'Schreibmaschine',
+      },
+      outAnimations: {
+        none: 'Ohne',
+        fade: 'Ausblenden',
+        slide: 'Hinausgleiten nach unten',
+        slideTop: 'Hinausgleiten nach oben',
+        slideLeft: 'Hinausgleiten nach links',
+        slideRight: 'Hinausgleiten nach rechts',
+        zoom: 'Wegzoomen (normal → groß)',
+        pop: 'Wegploppen',
+      },
       animations: {
         none: 'Keine',
         fade: 'Ein- und Ausblenden',
@@ -363,6 +388,7 @@ const messages = {
     },
     graphics: {
       entry: 'Animation (Ein-/Ausblenden)',
+      animInSpeed: 'Tempo Einblenden + Dauer-Animation',
       loop: 'Dauer-Animation',
       loops: {
         none: 'Keine',
@@ -793,6 +819,10 @@ const messages = {
         transition: 'Übergang am Anfang',
         transitionType: 'Art',
         transitionDuration: 'Dauer',
+        fadeOut: 'Ausblenden am Ende',
+        fadeOutOn: 'Bild am Clip-Ende ausblenden',
+        fadeOutHint:
+          'Das Bild blendet am Ende des Clips aus: auf der untersten Spur in den Hintergrund, auf höheren Spuren auf das Bild darunter. Den Ton blendest du am Ton-Clip aus.',
         transitionHint:
           'Der Übergang kommt vom vorigen Clip derselben Spur, sonst aus dem Hintergrund. „Ein-/Ausblenden“ blendet den vorigen Clip aus und diesen ein (je die halbe Dauer). Die anderen laufen in der halben Dauer über dem angehaltenen letzten Bild des vorigen Clips. Die Länge der Timeline bleibt gleich.',
         hint: 'Das Tempo gilt für Bild und verknüpften Ton gemeinsam (die Tonhöhe bleibt). Schneller macht den Clip kürzer, langsamer länger.',
@@ -1408,6 +1438,31 @@ const messages = {
       animSpeed: 'Animation speed',
       animSpeedHint: 'Lower = slower (0.5× = half as fast), higher = faster.',
       animation: 'Animation',
+      animIn: 'Fade in',
+      animInSpeed: 'Fade-in speed',
+      animOut: 'Fade out',
+      animOutSpeed: 'Fade-out speed',
+      inAnimations: {
+        none: 'None',
+        fadeIn: 'Fade in',
+        slide: 'Slide in from below',
+        slideTop: 'Slide in from above',
+        slideLeft: 'Slide in from the left',
+        slideRight: 'Slide in from the right',
+        zoom: 'Zoom in (large → normal)',
+        pop: 'Pop',
+        typewriter: 'Typewriter',
+      },
+      outAnimations: {
+        none: 'None',
+        fade: 'Fade out',
+        slide: 'Slide out downwards',
+        slideTop: 'Slide out upwards',
+        slideLeft: 'Slide out to the left',
+        slideRight: 'Slide out to the right',
+        zoom: 'Zoom away (normal → large)',
+        pop: 'Pop away',
+      },
       animations: {
         none: 'None',
         fade: 'Fade in and out',
@@ -1441,6 +1496,7 @@ const messages = {
     },
     graphics: {
       entry: 'Animation (in/out)',
+      animInSpeed: 'Fade-in + continuous speed',
       loop: 'Continuous animation',
       loops: {
         none: 'None',
@@ -1863,6 +1919,10 @@ const messages = {
         transition: 'Transition at the start',
         transitionType: 'Type',
         transitionDuration: 'Duration',
+        fadeOut: 'Fade out at the end',
+        fadeOutOn: 'Fade the picture out at the end of the clip',
+        fadeOutHint:
+          'The picture fades out at the end of the clip: into the background on the lowest track, onto the picture below on higher tracks. Fade the sound on the audio clip.',
         transitionHint:
           'The transition comes from the previous clip on the same track, otherwise from the background. “Fade in/out” fades the previous clip out and this one in (half the duration each). The others run for half the duration over the frozen last frame of the previous clip. The length of the timeline stays the same.',
         hint: 'Speed applies to picture and linked sound together (pitch is kept). Faster makes the clip shorter, slower makes it longer.',
