@@ -864,6 +864,46 @@ const messages = {
           failed: 'Die Aufnahme ist fehlgeschlagen.',
         },
       },
+      voiceOver: {
+        open: '🗣 KI-Sprecher',
+        openHint:
+          'Einen Text mit einer KI-Stimme (ElevenLabs) vertonen und am Abspielkopf einfügen',
+        title: 'KI-Sprecher',
+        outdated: 'Das Backend kennt den KI-Sprecher noch nicht. Bitte das Backend neu deployen.',
+        noKey:
+          'ElevenLabs ist noch nicht eingerichtet: ELEVENLABS_API_KEY in /opt/video-cutter-server/.env eintragen und den Server neu starten (pm2 restart video-cutter-api --update-env). Text schreiben und übersetzen geht schon.',
+        language: 'Sprache',
+        writeOpen: 'Text von Claude schreiben lassen',
+        idea: 'Worum soll es gehen?',
+        ideaPlaceholder:
+          'z. B. Kurzes Intro für ein Tutorial über den Video-Cutter, freundlich und locker',
+        seconds: 'Ungefähre Länge (s)',
+        write: 'Text schreiben',
+        text: 'Sprechertext',
+        textPlaceholder: 'Text eingeben, den die Stimme sprechen soll …',
+        translate: 'In {lang} übersetzen',
+        restore: 'Vorherigen Text zurückholen',
+        voice: 'Stimme',
+        loadingVoices: 'Stimmen werden geladen …',
+        noVoices: 'Im ElevenLabs-Konto sind keine Stimmen vorhanden.',
+        preview: 'Hörprobe der Stimme',
+        reloadVoices: 'Stimmen neu laden',
+        speed: 'Sprechtempo',
+        stability: 'Stabilität (%)',
+        stabilityHint:
+          'Niedrige Stabilität klingt lebendiger, hohe gleichmäßiger. Die Sprache erkennt die Stimme am Text.',
+        speak: 'Vertonen und einfügen',
+        speakHint:
+          'Die Vertonung kommt in die Medienliste und auf eine Ton-Spur am Abspielkopf ({at}). Jede Vertonung verbraucht Zeichen aus dem ElevenLabs-Kontingent.',
+        added: '„{name}“ ({duration}) liegt jetzt bei {at} auf einer Ton-Spur.',
+        addedPoolOnly:
+          '„{name}“ ({duration}) liegt in der Medienliste, ließ sich aber nicht automatisch einfügen. Mit „+ Timeline“ einfügen.',
+        running: {
+          write: 'Claude schreibt den Text …',
+          translate: 'Claude übersetzt den Text …',
+          speak: 'ElevenLabs vertont den Text …',
+        },
+      },
       still: {
         open: '+ Bild-Clip / KI-Bild / KI-Video',
         close: 'Schließen',
@@ -2224,6 +2264,45 @@ const messages = {
           noMic: 'No microphone found.',
           tooShort: 'The recording was too short.',
           failed: 'The recording failed.',
+        },
+      },
+      voiceOver: {
+        open: '🗣 AI voice-over',
+        openHint: 'Speak a text with an AI voice (ElevenLabs) and insert it at the playhead',
+        title: 'AI voice-over',
+        outdated: 'The backend does not know the AI voice-over yet. Please redeploy the backend.',
+        noKey:
+          'ElevenLabs is not set up yet: add ELEVENLABS_API_KEY to /opt/video-cutter-server/.env and restart the server (pm2 restart video-cutter-api --update-env). Writing and translating the text already works.',
+        language: 'Language',
+        writeOpen: 'Let Claude write the text',
+        idea: 'What should it be about?',
+        ideaPlaceholder:
+          'e.g. Short intro for a tutorial about the video cutter, friendly and casual',
+        seconds: 'Approximate length (s)',
+        write: 'Write text',
+        text: 'Script',
+        textPlaceholder: 'Enter the text the voice should speak …',
+        translate: 'Translate into {lang}',
+        restore: 'Restore previous text',
+        voice: 'Voice',
+        loadingVoices: 'Loading voices …',
+        noVoices: 'There are no voices in the ElevenLabs account.',
+        preview: 'Voice sample',
+        reloadVoices: 'Reload voices',
+        speed: 'Speaking rate',
+        stability: 'Stability (%)',
+        stabilityHint:
+          'Low stability sounds livelier, high stability more even. The voice detects the language from the text.',
+        speak: 'Generate and insert',
+        speakHint:
+          'The voice-over goes into the media list and onto an audio track at the playhead ({at}). Each voice-over uses characters from the ElevenLabs quota.',
+        added: '“{name}” ({duration}) is now on an audio track at {at}.',
+        addedPoolOnly:
+          '“{name}” ({duration}) is in the media list but could not be inserted automatically. Insert it with “+ Timeline”.',
+        running: {
+          write: 'Claude is writing the text …',
+          translate: 'Claude is translating the text …',
+          speak: 'ElevenLabs is generating the voice-over …',
         },
       },
       still: {

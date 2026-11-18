@@ -98,6 +98,7 @@ export const SERVER_FEATURES = [
   'aiHighlights',
   'aiPublish',
   'aiBroll',
+  'aiVoice',
   'audioFade',
   'projects',
   'stillClip',

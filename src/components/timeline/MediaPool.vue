@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StillClipForm from './StillClipForm.vue'
+import VoiceOverForm from './VoiceOverForm.vue'
 import VoiceRecorder from './VoiceRecorder.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
@@ -27,6 +28,14 @@ const input = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 /** Formular „Bild-Clip“ aufgeklappt? */
 const stillOpen = ref(false)
+/** KI-Sprecher aufgeklappt? (einmal geöffnet, bleibt er erhalten: Text + laufender Auftrag) */
+const voiceOverOpen = ref(false)
+const voiceOverUsed = ref(false)
+
+function toggleVoiceOver(): void {
+  voiceOverOpen.value = !voiceOverOpen.value
+  voiceOverUsed.value = true
+}
 /** Schlüssel des Mediums, dessen Entfernen zuletzt abgelehnt wurde. */
 const blockedKey = ref<string | null>(null)
 
@@ -156,6 +165,17 @@ const rejectedText = computed(() =>
     </button>
     <StillClipForm v-if="stillOpen" @close="stillOpen = false" />
     <VoiceRecorder />
+    <button
+      type="button"
+      class="add second"
+      :aria-expanded="voiceOverOpen"
+      data-testid="media-pool-voice-over"
+      :title="t('timeline.voiceOver.openHint')"
+      @click="toggleVoiceOver"
+    >
+      {{ t('timeline.voiceOver.open') }}
+    </button>
+    <VoiceOverForm v-if="voiceOverUsed" v-show="voiceOverOpen" />
 
     <p v-if="rejectedText" class="note error" role="alert">{{ rejectedText }}</p>
     <p v-if="showGeneratedHint" class="note warn" data-testid="media-pool-generated-hint">

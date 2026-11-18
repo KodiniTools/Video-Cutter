@@ -49,6 +49,11 @@ export interface AiStatus {
   claude: boolean
   /** Bilderzeugung (Gemini) für Bild-Clips eingerichtet? */
   image: boolean
+  /**
+   * KI-Sprecher (ElevenLabs) eingerichtet? `null` = das Backend kennt den
+   * KI-Sprecher noch nicht (veraltet).
+   */
+  voice: boolean | null
 }
 
 export interface TranscriptInfo {
@@ -84,6 +89,7 @@ export function parseAiStatus(data: unknown): AiStatus | null {
     transcribe: data.ai.transcribe === true,
     claude: data.ai.claude === true,
     image: data.ai.image === true,
+    voice: typeof data.ai.voice === 'boolean' ? data.ai.voice : null,
   }
 }
 
@@ -511,7 +517,9 @@ export function runAiJob<T>(
     | 'image-prompt'
     | 'images'
     | 'video-prompt'
-    | 'video',
+    | 'video'
+    | 'script'
+    | 'voice-over',
   body: Record<string, unknown>,
   parse: (data: unknown) => T,
   onProgress?: (percent: number) => void,
@@ -586,4 +594,66 @@ async function cancelJob(id: string): Promise<void> {
   await fetch(`${API_BASE}/api/ai/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(
     () => {},
   )
+}
+
+// --- KI-Sprecher (Claude schreibt/übersetzt, ElevenLabs spricht) ---------------------
+
+/** Sprachen für Sprechertexte (wie die Transkription, ohne „auto“). */
+export const SCRIPT_LANGUAGES = TRANSCRIBE_LANGUAGES.filter(
+  (l): l is Exclude<TranscribeLanguage, 'auto'> => l !== 'auto',
+)
+export type ScriptLanguage = (typeof SCRIPT_LANGUAGES)[number]
+/** Wie server/src/lib/elevenlabs.ts. */
+export const MAX_SCRIPT_LENGTH = 5000
+export const MAX_SCRIPT_IDEA = 1000
+export const MIN_SCRIPT_SECONDS = 5
+export const MAX_SCRIPT_SECONDS = 300
+export const MIN_VOICE_SPEED = 0.7
+export const MAX_VOICE_SPEED = 1.2
+
+export interface Voice {
+  id: string
+  name: string
+  category: string
+  description: string
+  previewUrl: string
+}
+
+export function parseVoices(data: unknown): Voice[] {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.voices) ? d.voices.filter(isRecord) : []
+  return list.flatMap((v) =>
+    typeof v.id === 'string' && v.id
+      ? [
+          {
+            id: v.id,
+            name: typeof v.name === 'string' && v.name ? v.name : v.id,
+            category: typeof v.category === 'string' ? v.category : '',
+            description: typeof v.description === 'string' ? v.description : '',
+            previewUrl: typeof v.previewUrl === 'string' ? v.previewUrl : '',
+          },
+        ]
+      : [],
+  )
+}
+
+/** Stimmen des ElevenLabs-Kontos (über den Server). */
+export async function fetchVoices(): Promise<Voice[]> {
+  const res = await fetch(`${API_BASE}/api/ai/voices`)
+  if (!res.ok) throw await readError(res)
+  return parseVoices(await res.json())
+}
+
+/** Ergebnis von POST /api/ai/script. */
+export function parseScript(data: unknown): string {
+  const d = isRecord(data) ? data : {}
+  if (typeof d.text !== 'string' || !d.text.trim())
+    throw new Error('Claude hat keinen Text geliefert.')
+  return d.text
+}
+
+/** Ergebnis von POST /api/ai/voice-over: die neue Tondatei der Bibliothek. */
+export function parseVoiceOver(data: unknown): MediaView {
+  const d = isRecord(data) ? data : {}
+  return parseMediaView(d.media)
 }
