@@ -1002,7 +1002,10 @@ const messages = {
         startTitle: 'So verschieben, dass der Anfang genau am Abspielkopf liegt',
         endTitle: 'So verschieben, dass das Ende genau am Abspielkopf liegt',
         wholeTrack: 'Ganze Spur mitverschieben (alle Clips der Spur)',
-        overlap: 'Dort liegt schon ein anderer Clip. Nichts wurde verschoben.',
+        overlap:
+          'Direkt daneben liegt ein anderer Clip, es ist kein Platz frei. Schalte „Nachbarn kürzen“ ein, dann macht der Nachbar Platz.',
+        overlapTrim: 'Der Nachbar lässt sich nicht weiter kürzen. Nichts wurde verschoben.',
+        trimNeighbours: 'Nachbarn kürzen, wenn sie im Weg sind',
         beforeZero: 'Dann würde es vor 0:00 beginnen. Nichts wurde verschoben.',
       },
       hint: {
@@ -2131,7 +2134,10 @@ const messages = {
         startTitle: 'Move so the start sits exactly at the playhead',
         endTitle: 'Move so the end sits exactly at the playhead',
         wholeTrack: 'Move the whole track (all clips on the track)',
-        overlap: 'Another clip is in the way. Nothing was moved.',
+        overlap:
+          'Another clip sits right next to it, there is no room. Turn on “Shorten neighbours” and the neighbour makes room.',
+        overlapTrim: 'The neighbour cannot be shortened any further. Nothing was moved.',
+        trimNeighbours: 'Shorten neighbours that are in the way',
         beforeZero: 'It would then start before 0:00. Nothing was moved.',
       },
       hint: {

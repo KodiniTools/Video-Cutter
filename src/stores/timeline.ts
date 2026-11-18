@@ -558,7 +558,10 @@ export const useTimelineStore = defineStore('timeline', () => {
    * Spuren) zeitlich verschieben: um einen Betrag oder mit Anfang/Ende an eine
    * Zeit. Ein Verlaufsschritt; ohne Wirkung (z. B. schon bei 0) keiner.
    */
-  function nudgeSelection(target: NudgeTarget, opts: { wholeTracks?: boolean } = {}): boolean {
+  function nudgeSelection(
+    target: NudgeTarget,
+    opts: { wholeTracks?: boolean; trimNeighbours?: boolean } = {},
+  ): boolean {
     if (selection.value.length === 0) return false
     return apply((d) => nudgeClipsOp(d, selection.value, target, opts))
   }

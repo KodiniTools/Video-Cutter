@@ -1819,15 +1819,17 @@ export function nudgeSpan(
  * Markierte Clips gemeinsam zeitlich verschieben (Abstände bleiben). `by`
  * wird an 0 begrenzt: Wer schon am Anfang liegt, bleibt dort. Bei `startAt`
  * und `endAt` wird abgelehnt (`invalid-time`), wenn ein Clip vor 0 beginnen
- * müsste. Stößt ein Clip auf einen nicht mitbewegten, bleibt alles, wie es ist
- * (`overlap`). Keyframes und Lautstärke-Kurven hängen am Clip und wandern mit;
+ * müsste. Stößt ein Clip bei `by` auf einen nicht mitbewegten, rückt alles nur
+ * bis an ihn heran; ist gar kein Platz (oder bei `startAt`/`endAt`), bleibt
+ * alles, wie es ist (`overlap`). Mit `trimNeighbours` werden Nachbarn, die im
+ * Weg liegen, stattdessen gekürzt (verknüpfte Clips der Nachbarn bleiben). Keyframes und Lautstärke-Kurven hängen am Clip und wandern mit;
  * Marker-Bindungen bleiben bestehen (wie beim Ziehen).
  */
 export function nudgeClips(
   doc: TimelineDoc,
   clipIds: readonly string[],
   target: NudgeTarget,
-  opts: { wholeTracks?: boolean } = {},
+  opts: { wholeTracks?: boolean; trimNeighbours?: boolean } = {},
 ): OpResult {
   const span = nudgeSpan(doc, clipIds, opts)
   if (!span) return fail('clip-not-found')
@@ -1841,7 +1843,62 @@ export function nudgeClips(
     delta = at - ('startAt' in target ? span.start : span.end)
     if (span.start + delta < 0) return fail('invalid-time')
   }
-  return shiftClips(doc, span.ids, delta)
+  const moved = shiftClips(doc, span.ids, delta)
+  if (moved.ok || moved.error !== 'overlap') return moved
+  if (opts.trimNeighbours) {
+    const trimmed = trimNeighbours(doc, span.ids, delta)
+    return trimmed.ok ? shiftClips(trimmed.doc, span.ids, delta) : fail('overlap')
+  }
+  if (!('by' in target)) return moved
+  // Ein Nachbar liegt im Weg: so weit rücken, wie Platz ist (bis an ihn heran).
+  const room = freeRoom(doc, span.ids, delta > 0 ? 1 : -1)
+  const partial = Math.sign(delta) * Math.min(Math.abs(delta), room)
+  return partial === 0 ? moved : shiftClips(doc, span.ids, partial)
+}
+
+/**
+ * Nachbarn kürzen, die den um `delta` verschobenen Clips im Weg wären: der
+ * Nachbar dahinter beginnt später, der davor endet früher. Abgelehnt, wenn
+ * ein Nachbar dabei verschwände oder ein Clip mitten in einem anderen landete.
+ */
+function trimNeighbours(doc: TimelineDoc, ids: readonly string[], delta: Time): OpResult {
+  const moving = new Set(ids)
+  let next = doc
+  for (const track of doc.tracks) {
+    for (const c of track.clips) {
+      if (!moving.has(c.id)) continue
+      const start = c.start + delta
+      const end = clipEnd(c) + delta
+      for (const k of track.clips) {
+        if (moving.has(k.id) || !(k.start < end && start < clipEnd(k))) continue
+        let result: OpResult
+        if (delta > 0 && k.start >= clipEnd(c)) result = trimClip(next, k.id, 'start', end)
+        else if (delta < 0 && clipEnd(k) <= c.start) result = trimClip(next, k.id, 'end', start)
+        else return fail('overlap')
+        if (!result.ok) return result
+        next = result.doc
+      }
+    }
+  }
+  return ok(next)
+}
+
+/** Freier Platz (µs) bis zum nächsten nicht mitbewegten Clip in Richtung `dir`. */
+function freeRoom(doc: TimelineDoc, ids: readonly string[], dir: -1 | 1): Time {
+  const moving = new Set(ids)
+  let room = Infinity
+  for (const track of doc.tracks) {
+    const kept = track.clips.filter((c) => !moving.has(c.id))
+    for (const c of track.clips) {
+      if (!moving.has(c.id)) continue
+      for (const k of kept) {
+        if (dir > 0 && k.start >= clipEnd(c)) room = Math.min(room, k.start - clipEnd(c))
+        if (dir < 0 && clipEnd(k) <= c.start) room = Math.min(room, c.start - clipEnd(k))
+      }
+      if (dir < 0) room = Math.min(room, c.start)
+    }
+  }
+  return Number.isFinite(room) ? Math.max(0, room) : 0
 }
 
 // --- Einrasten --------------------------------------------------------------
