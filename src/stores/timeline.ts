@@ -117,6 +117,23 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** Grund, warum der letzte Befehl abgelehnt wurde (`null` = angenommen). */
   const lastError = ref<OpError | null>(null)
 
+  /**
+   * Zusätzliche Einrastpunkte, z. B. das Takt-Raster der Musik. Nur
+   * Bedienzustand, wird nicht gespeichert.
+   */
+  const snapGuides = shallowRef<readonly Time[]>([])
+
+  function setSnapGuides(times: readonly Time[]): void {
+    snapGuides.value = times
+  }
+
+  /** Einrastpunkte des Dokuments plus Abspielkopf und `snapGuides`. */
+  function snapPointsWithGuides(opts: { exclude?: readonly string[] }): Time[] {
+    const points = snapPoints(doc.value, { exclude: opts.exclude, playhead: playhead.value })
+    if (snapGuides.value.length === 0) return points
+    return [...new Set([...points, ...snapGuides.value])].sort((a, b) => a - b)
+  }
+
   /** Läuft gerade eine Geste (Ziehen)? Dann zählt alles bis `endGesture` als ein Schritt. */
   let gestureStart: TimelineDoc | null = null
 
@@ -487,7 +504,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     let target = Math.max(floor, Math.round(start))
     let snapped = false
     if (snapping.value) {
-      const points = snapPoints(doc.value, { exclude: members, playhead: playhead.value })
+      const points = snapPointsWithGuides({ exclude: members })
       const tolerance = snapTolerance()
       const head = snapTime(target, points, tolerance)
       const tail = snapTime(target + loc.clip.duration, points, tolerance)
@@ -522,7 +539,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     let target = Math.round(time)
     let snapped = false
     if (snapping.value) {
-      const points = snapPoints(doc.value, { exclude: [clipId], playhead: playhead.value })
+      const points = snapPointsWithGuides({ exclude: [clipId] })
       const hit = snapTime(target, points, snapTolerance())
       if (hit.snapped && hit.time >= range.min && hit.time <= range.max) {
         target = hit.time
@@ -751,7 +768,7 @@ export const useTimelineStore = defineStore('timeline', () => {
   ): Time {
     if (!snapping.value || !isTime(time)) return time
     const tolerance = Math.round(((opts.tolerancePx ?? 8) / zoom.value) * 1_000_000)
-    const points = snapPoints(doc.value, { exclude: opts.exclude, playhead: playhead.value })
+    const points = snapPointsWithGuides({ exclude: opts.exclude })
     return snapTime(time, points, tolerance).time
   }
 
@@ -839,5 +856,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setMarkerEffect,
     addAtMarker,
     jumpToMarker,
+    snapGuides,
+    setSnapGuides,
   }
 })

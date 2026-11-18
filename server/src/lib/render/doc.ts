@@ -290,14 +290,17 @@ export const MAX_MARKERS = 200
 export const MAX_MARKER_LABEL = 60
 
 /**
- * Liest die Marker nachsichtig: Sie beeinflussen das Bild nicht, darum fällt
- * Ungültiges still weg, statt das ganze Dokument abzulehnen.
+ * Liest die Marker (für Kapitel) nachsichtig: Sie beeinflussen das Bild
+ * nicht, darum fällt Ungültiges still weg, statt das ganze Dokument
+ * abzulehnen. Takt-Marker (`beat: true`) zählen nicht als Kapitel.
  */
 export function parseMarkers(raw: unknown): DocMarker[] {
   if (!Array.isArray(raw)) return []
   const byTime = new Map<Time, string>()
   for (const m of raw as unknown[]) {
     if (!isObject(m) || !isTime(m.at) || byTime.has(m.at)) continue
+    // Takt-Marker (vom Takt der Musik gesetzt) sind keine Kapitel.
+    if (m.beat === true) continue
     const label = typeof m.label === 'string' ? m.label : ''
     // Steuerzeichen und Zeilenumbrüche haben in einem Kapitelnamen nichts verloren.
     const clean = label

@@ -9,13 +9,18 @@ export function chapterTime(at: Time): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
 }
 
+/** Marker, die als Kapitel zählen (Takt-Marker nicht). */
+export function chapterMarkers(markers: readonly Marker[]): Marker[] {
+  return markers.filter((m) => !m.beat)
+}
+
 /**
  * Kapitelliste aus den Markern, eine Zeile je Marker („0:00 Name“), so wie
  * Videoplattformen sie in der Beschreibung erwarten. Marker ohne Namen
  * bekommen `fallback` und ihre Nummer.
  */
 export function chapterList(markers: readonly Marker[], fallback = 'Kapitel'): string {
-  return markers
+  return chapterMarkers(markers)
     .slice()
     .sort((a, b) => a.at - b.at)
     .map((m, i) => `${chapterTime(m.at)} ${m.label || `${fallback} ${i + 1}`}`)

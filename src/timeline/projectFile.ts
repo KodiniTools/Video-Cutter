@@ -133,6 +133,7 @@ function parseMarker(v: unknown): Marker {
   const marker: Marker = { id: v.id, at: v.at, label: typeof v.label === 'string' ? v.label : '' }
   // Ein unbekannter oder kaputter Effekt fällt still weg (der Marker bleibt).
   if (isMarkerEffect(v.effect)) marker.effect = { ...v.effect }
+  if (v.beat === true) marker.beat = true
   return marker
 }
 

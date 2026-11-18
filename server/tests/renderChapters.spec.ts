@@ -28,6 +28,16 @@ describe('parseMarkers', () => {
     ])
   })
 
+  it('Takt-Marker zählen nicht als Kapitel', () => {
+    expect(
+      parseMarkers([
+        { at: s(1), label: 'Intro' },
+        { at: s(2), label: '', beat: true },
+        { at: s(3), label: 'Takt', beat: true },
+      ]),
+    ).toEqual([{ at: s(1), label: 'Intro' }])
+  })
+
   it('begrenzt Anzahl und Länge', () => {
     const many = Array.from({ length: MAX_MARKERS + 20 }, (_, i) => ({ at: i, label: 'x' }))
     expect(parseMarkers(many)).toHaveLength(MAX_MARKERS)

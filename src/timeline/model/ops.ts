@@ -1573,17 +1573,16 @@ const sortMarkers = (markers: Marker[]): Marker[] =>
  */
 export function addMarker(
   doc: TimelineDoc,
-  marker: { id?: string; at: Time; label?: string },
+  marker: { id?: string; at: Time; label?: string; beat?: boolean },
 ): OpResult {
   if (!isTime(marker.at)) return fail('invalid-time')
   if (doc.markers.some((m) => m.at === marker.at)) return ok(doc)
   if (doc.markers.length >= MAX_MARKERS) return fail('too-many')
   const id = marker.id ?? createId()
   if (hasId(doc, id)) return fail('duplicate-id')
-  const markers = sortMarkers([
-    ...doc.markers,
-    { id, at: marker.at, label: markerLabel(marker.label) },
-  ])
+  const added: Marker = { id, at: marker.at, label: markerLabel(marker.label) }
+  if (marker.beat) added.beat = true
+  const markers = sortMarkers([...doc.markers, added])
   return ok({ ...doc, markers })
 }
 
@@ -1670,6 +1669,7 @@ export function setMarkerEffect(
     if (m.id !== markerId) return m
     const next: Marker = { id: m.id, at: m.at, label: m.label }
     if (effect) next.effect = effect
+    if (m.beat) next.beat = true
     return next
   })
   return ok({ ...doc, markers })
