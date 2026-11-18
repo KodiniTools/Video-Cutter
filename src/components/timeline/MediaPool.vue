@@ -5,7 +5,8 @@ import StillClipForm from './StillClipForm.vue'
 import VoiceOverForm from './VoiceOverForm.vue'
 import VoiceRecorder from './VoiceRecorder.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
-import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
+import { API_BASE } from '@/lib/apiBase'
+import { DERIVED_MEDIA_GONE, proxyUrl, stripTileStyle } from '@/lib/derivedApi'
 import { MEDIA_AUDIO_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
 import { formatClockDuration } from '@/lib/timeFormat'
 import { generatedAtRisk, useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
@@ -71,6 +72,73 @@ function thumbStyle(item: PoolItem): Record<string, string> {
 }
 
 const isAudio = (item: PoolItem) => item.media?.kind === 'audio'
+
+/**
+ * Abspielen im Vorschaubild: Überfahren spielt stumm in Schleife, ein Klick spielt mit Ton
+ * (nochmals klicken hält an). Es läuft immer höchstens ein Vorschaubild.
+ */
+const playing = ref<{ key: string; sound: boolean } | null>(null)
+/** Abspielstand 0…1 für die dünne Leiste im Vorschaubild. */
+const playProgress = ref(0)
+/** Vorschau-Kopie ließ sich nicht laden: dann das Original vom Server. */
+const useOriginal = ref(false)
+
+/** Nur Videos mit fertiger Vorschau-Kopie lassen sich im Vorschaubild abspielen. */
+const canPlay = (item: PoolItem) =>
+  !!item.media && !isAudio(item) && item.derived?.proxy.state === 'ready'
+
+function playSrc(item: PoolItem): string {
+  const id = item.media!.id
+  return useOriginal.value ? `${API_BASE}/api/media/${encodeURIComponent(id)}/file` : proxyUrl(id)
+}
+
+function startPlay(item: PoolItem, sound: boolean): void {
+  if (playing.value?.key !== item.key) {
+    playProgress.value = 0
+    useOriginal.value = false
+  }
+  playing.value = { key: item.key, sound }
+}
+
+function onHover(item: PoolItem): void {
+  // Ein mit Ton laufendes Vorschaubild wird durch Überfahren nicht unterbrochen.
+  if (!canPlay(item) || playing.value?.sound) return
+  startPlay(item, false)
+}
+
+function onLeave(item: PoolItem): void {
+  if (playing.value?.key === item.key && !playing.value.sound) playing.value = null
+}
+
+function onThumbClick(item: PoolItem): void {
+  if (!canPlay(item)) return
+  if (playing.value?.key === item.key && playing.value.sound) playing.value = null
+  else startPlay(item, true)
+}
+
+function onTimeUpdate(event: Event): void {
+  const el = event.target as HTMLVideoElement
+  playProgress.value = el.duration > 0 ? el.currentTime / el.duration : 0
+}
+
+/** Mit Ton einmal bis zum Ende, dann aus; stumm läuft es per `loop` weiter. */
+function onEnded(): void {
+  playing.value = null
+}
+
+function onVideoError(): void {
+  if (!useOriginal.value) useOriginal.value = true
+  else playing.value = null
+}
+
+function playLabel(item: PoolItem): string {
+  return t(
+    playing.value?.key === item.key && playing.value.sound
+      ? 'mediaPool.stopPreviewNamed'
+      : 'mediaPool.playPreviewNamed',
+    { name: item.name },
+  )
+}
 
 function addLabel(item: PoolItem): string {
   return t(isAudio(item) ? 'mediaPool.addAudioToTimelineNamed' : 'mediaPool.addToTimelineNamed', {
@@ -191,7 +259,43 @@ const rejectedText = computed(() =>
         :data-state="item.state"
         :data-kind="item.media?.kind"
       >
+        <button
+          v-if="canPlay(item)"
+          type="button"
+          class="thumb playable"
+          :class="{ active: playing?.key === item.key }"
+          :style="thumbStyle(item)"
+          :title="t('mediaPool.playPreviewHint')"
+          :aria-label="playLabel(item)"
+          :aria-pressed="playing?.key === item.key && playing.sound"
+          data-testid="media-pool-thumb"
+          @mouseenter="onHover(item)"
+          @mouseleave="onLeave(item)"
+          @click="onThumbClick(item)"
+        >
+          <video
+            v-if="playing?.key === item.key"
+            class="thumb-video"
+            :src="playSrc(item)"
+            :muted="!playing.sound"
+            :loop="!playing.sound"
+            autoplay
+            playsinline
+            preload="auto"
+            data-testid="media-pool-thumb-video"
+            @timeupdate="onTimeUpdate"
+            @ended="onEnded"
+            @error="onVideoError"
+          ></video>
+          <span v-if="playing?.key === item.key" class="thumb-progress">
+            <span :style="{ width: `${Math.round(playProgress * 100)}%` }"></span>
+          </span>
+          <span class="thumb-badge" aria-hidden="true">{{
+            playing?.key === item.key && playing.sound ? '❚❚' : '▶'
+          }}</span>
+        </button>
         <div
+          v-else
           class="thumb"
           :class="{ audio: isAudio(item) }"
           :style="thumbStyle(item)"
@@ -367,6 +471,59 @@ const rejectedText = computed(() =>
   border-radius: var(--ds-radius-sm);
   background-color: var(--ds-surface-3);
   background-repeat: no-repeat;
+}
+.thumb.playable {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.thumb.playable:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+.thumb-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+.thumb-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ds-radius-full);
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.thumb.playable:hover .thumb-badge,
+.thumb.playable:focus-visible .thumb-badge,
+.thumb.playable[aria-pressed='true'] .thumb-badge {
+  opacity: 1;
+}
+.thumb-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgb(0 0 0 / 0.4);
+}
+.thumb-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ds-accent);
 }
 .thumb.audio {
   display: grid;
