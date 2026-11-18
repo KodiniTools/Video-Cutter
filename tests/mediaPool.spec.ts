@@ -357,4 +357,66 @@ describe('Medienliste (Komponente)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Backend ist veraltet')
   })
+  it('spielt das Vorschaubild beim Überfahren stumm und per Klick mit Ton ab', async () => {
+    ensureDerived.mockResolvedValueOnce(status('ready', 'ready', 'running', 10))
+    fetchDerivedStatus.mockResolvedValue(status('ready', 'ready', 'ready'))
+    const wrapper = mountPool()
+    const pool = useMediaPoolStore()
+    pool.add([video('a.mp4')])
+    uploads[0].resolve(media())
+    await flushPromises()
+    // Vorschau-Kopie noch nicht fertig: kein Abspielen.
+    expect(wrapper.find('[data-testid=media-pool-thumb]').exists()).toBe(false)
+
+    // Echte Zeit: Vue verwirft Ereignisse, die älter wirken als der Listener (Fake-Uhr).
+    await new Promise((resolve) => setTimeout(resolve, DERIVED_POLL_MS + 50))
+    await flushPromises()
+    const thumb = wrapper.get('[data-testid=media-pool-thumb]')
+    expect(thumb.attributes('aria-label')).toBe('Vorschau von a.mp4 mit Ton abspielen')
+    expect(thumb.attributes('style')).toContain('/api/media/m1/strip')
+    expect(wrapper.find('video').exists()).toBe(false)
+
+    await thumb.trigger('mouseenter')
+    let el = wrapper.get('video').element as HTMLVideoElement
+    expect(el.getAttribute('src')).toContain('/api/media/m1/proxy')
+    expect(el.muted).toBe(true)
+    expect(el.loop).toBe(true)
+    await thumb.trigger('mouseleave')
+    expect(wrapper.find('video').exists()).toBe(false)
+
+    await thumb.trigger('mouseenter')
+    await thumb.trigger('click')
+    el = wrapper.get('video').element as HTMLVideoElement
+    expect(el.muted).toBe(false)
+    expect(el.loop).toBe(false)
+    expect(thumb.attributes('aria-pressed')).toBe('true')
+    expect(thumb.attributes('aria-label')).toBe('Vorschau von a.mp4 anhalten')
+    // Mit Ton läuft es weiter, auch wenn die Maus das Bild verlässt.
+    await thumb.trigger('mouseleave')
+    expect(wrapper.find('video').exists()).toBe(true)
+    await thumb.trigger('click')
+    expect(wrapper.find('video').exists()).toBe(false)
+
+    // Mit Ton bis zum Ende: danach aus.
+    await thumb.trigger('click')
+    await wrapper.get('video').trigger('ended')
+    expect(wrapper.find('video').exists()).toBe(false)
+
+    // Fehlt die Vorschau-Kopie, wird das Original geladen.
+    await thumb.trigger('mouseenter')
+    await wrapper.get('video').trigger('error')
+    expect(wrapper.get('video').attributes('src')).toContain('/api/media/m1/file')
+  })
+
+  it('zeigt bei Tondateien kein abspielbares Vorschaubild', async () => {
+    ensureDerived.mockResolvedValue(status('ready', 'unavailable', 'unavailable'))
+    const wrapper = mountPool()
+    const pool = useMediaPoolStore()
+    pool.add([new File([new Uint8Array([0])], 'lied.mp3', { type: 'audio/mpeg' })])
+    uploads[0].resolve(
+      media({ name: 'lied.mp3', width: 0, height: 0, fps: 0, duration: 30, kind: 'audio' }),
+    )
+    await flushPromises()
+    expect(wrapper.find('[data-testid=media-pool-thumb]').exists()).toBe(false)
+  })
 })
