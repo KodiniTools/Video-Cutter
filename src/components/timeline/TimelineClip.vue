@@ -6,6 +6,8 @@ import { stripTileStyle } from '@/lib/derivedApi'
 import { getImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTimelineAiStore } from '@/stores/timelineAi'
+import { rangeOnClip } from '@/timeline/cutSuggestions'
 import { envelopeLine, movePoint, visiblePoints } from '@/timeline/envelope'
 import { visibleKeys } from '@/timeline/layoutKeys'
 import { visibleGraphicKeys } from '@/timeline/graphicKeys'
@@ -186,6 +188,37 @@ function removePoint(index: number): void {
   )
 }
 
+// --- Schnittvorschläge der KI als Bereiche auf dem Clip ------------------------
+
+const ai = useTimelineAiStore()
+
+/** Vorschläge, die auf diesem Clip liegen; angehakt = wird herausgeschnitten. */
+const cutMarks = computed(() => {
+  const marks = ai.marks
+  if (!marks.clipIds.includes(props.clip.id)) return []
+  return marks.items.flatMap((m) => {
+    const pos = rangeOnClip(props.clip, m)
+    if (!pos) return []
+    return [
+      {
+        id: m.id,
+        checked: m.checked,
+        kind: m.kind,
+        style: { left: `${pos.left}%`, width: `${pos.width}%` },
+        title: `${t(`ai.kind.${m.kind}`)} – ${t(
+          m.checked ? 'timeline.ai.markChecked' : 'timeline.ai.markUnchecked',
+        )}`,
+      },
+    ]
+  })
+})
+
+/** Klick auf eine Markierung hakt den Vorschlag an bzw. ab. */
+function toggleMark(id: number, checked: boolean): void {
+  if (ai.running) return
+  ai.setSuggestionChecked(id, !checked)
+}
+
 /** Übergang am Anfang: Marke so breit wie der Teil, der in diesem Clip liegt. */
 const transition = computed(() => {
   const clip = props.clip
@@ -251,6 +284,19 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       class="layout-key"
       :style="{ left: key.left }"
       aria-hidden="true"
+    ></span>
+    <span
+      v-for="mark in cutMarks"
+      :key="`cut-${mark.id}`"
+      class="cut-mark"
+      :class="{ off: !mark.checked }"
+      :data-kind="mark.kind"
+      :data-suggestion="mark.id"
+      :style="mark.style"
+      :title="mark.title"
+      data-testid="clip-cut-mark"
+      @pointerdown.stop
+      @click.stop="toggleMark(mark.id, mark.checked)"
     ></span>
     <span
       v-if="transition"
@@ -389,6 +435,30 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   background: var(--ds-surface-0);
   cursor: move;
   touch-action: none;
+}
+/* Schnittvorschlag: rot = wird herausgeschnitten, gestrichelt = abgewählt. */
+.cut-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  min-width: 3px;
+  box-sizing: border-box;
+  border-inline: 1px solid var(--ds-danger, #b3261e);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ds-danger, #b3261e) 55%, transparent) 0 4px,
+    color-mix(in srgb, var(--ds-danger, #b3261e) 30%, transparent) 4px 8px
+  );
+  cursor: pointer;
+}
+.cut-mark.off {
+  border: 1px dashed var(--ds-danger, #b3261e);
+  background: none;
+}
+.cut-mark:hover {
+  outline: 2px solid var(--ds-danger, #b3261e);
+  outline-offset: -2px;
 }
 .layout-key {
   position: absolute;

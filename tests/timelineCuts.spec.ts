@@ -25,7 +25,13 @@ import AiInspector from '@/components/timeline/AiInspector.vue'
 import { i18n } from '@/i18n'
 import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineAiStore } from '@/stores/timelineAi'
-import { sourceRangeOnTimeline } from '@/timeline/cutSuggestions'
+import TimelineClip from '@/components/timeline/TimelineClip.vue'
+import {
+  mergeRanges,
+  rangeOnClip,
+  skipTarget,
+  sourceRangeOnTimeline,
+} from '@/timeline/cutSuggestions'
 import {
   appendMedia,
   createDoc,
@@ -289,5 +295,113 @@ describe('Schnittvorschläge im Timeline-Editor', () => {
       '2 Bereiche herausgeschnitten.',
     )
     expect(wrapper.find('[data-testid=timeline-ai-cut-list]').exists()).toBe(false)
+  })
+
+  it('Markierung auf Clip und Partner, Filter nach Art, Überspringen', async () => {
+    const { clipId } = setup()
+    const timeline = useTimelineStore()
+    const ai = useTimelineAiStore()
+    jobs.results.cuts = {
+      suggestions: [
+        { start: 1, end: 1.4, kind: 'filler', text: 'äh', reason: '' },
+        { start: 1.4, end: 2, kind: 'filler', text: 'ähm', reason: '' },
+        { start: 4, end: 5, kind: 'pause', text: '', reason: '' },
+      ],
+    }
+    await ai.suggestCuts(clipId, 'de', 1.2)
+    const video = lane(timeline.doc, 'video')[0]
+    // Markiert auf dem Ton-Clip und dem verknüpften Bild.
+    expect([...ai.marks.clipIds].sort()).toEqual([clipId, video.id].sort())
+    expect(ai.marks.items.map((m) => [m.kind, m.start / S, m.end / S])).toEqual([
+      ['filler', 1, 1.4],
+      ['filler', 1.4, 2],
+      ['pause', 4, 5],
+    ])
+    // Überspringen nur auf Wunsch; aneinanderstoßende Bereiche zusammengefasst.
+    expect(ai.skipRanges).toEqual([])
+    ai.skipChecked = true
+    expect(ai.skipRanges.map((r) => [r.start / S, r.end / S])).toEqual([
+      [1, 2],
+      [4, 5],
+    ])
+    ai.setKindChecked('filler', false)
+    expect(ai.suggestions!.items.map((s) => s.checked)).toEqual([false, false, true])
+    expect(ai.skipRanges.map((r) => [r.start / S, r.end / S])).toEqual([[4, 5]])
+
+    // Probehören eines Vorschlags: 2 s davor los, nur dieser Bereich, Halt 2 s danach.
+    const pause = ai.suggestions!.items[2]
+    expect(ai.auditionSuggestion(pause.id)).toBe(true)
+    expect(timeline.playhead).toBe(2 * S)
+    expect(timeline.playing).toBe(true)
+    expect(ai.audition?.stopAt).toBe(7 * S)
+    ai.setSuggestionChecked(pause.id, false)
+    expect(ai.skipRanges.map((r) => [r.start / S, r.end / S])).toEqual([[4, 5]])
+    ai.applyCuts()
+    expect(ai.audition).toBeNull()
+  })
+
+  it('Klick auf die Markierung im Clip hakt an bzw. ab', async () => {
+    const { clipId } = setup()
+    const timeline = useTimelineStore()
+    const ai = useTimelineAiStore()
+    await ai.suggestCuts(clipId, 'de', 1.2)
+    const clip = lane(timeline.doc, 'audio')[0]
+    const wrapper = mount(TimelineClip, {
+      props: { clip, zoom: 100, height: 40, selected: false },
+      global: { plugins: [i18n] },
+    })
+    const marks = wrapper.findAll('[data-testid=clip-cut-mark]')
+    expect(marks).toHaveLength(2)
+    // 2–3 s von 8 s Clip-Länge.
+    expect(marks[0].attributes('style')).toContain('left: 25%')
+    expect(marks[0].attributes('style')).toContain('width: 12.5%')
+    await marks[0].trigger('click')
+    expect(ai.suggestions!.items[0].checked).toBe(false)
+    expect(wrapper.findAll('[data-testid=clip-cut-mark]')[0].classes()).toContain('off')
+    // Der Klick wählt den Clip nicht aus und beginnt kein Ziehen.
+    await wrapper.findAll('[data-testid=clip-cut-mark]')[0].trigger('pointerdown')
+    expect(wrapper.emitted('grab')).toBeUndefined()
+  })
+})
+
+describe('Hilfen zum Prüfen der Vorschläge', () => {
+  it('mergeRanges sortiert und fasst zusammen', () => {
+    expect(
+      mergeRanges([
+        { start: 5, end: 6 },
+        { start: 1, end: 3 },
+        { start: 2, end: 4 },
+        { start: 4, end: 4.5 },
+        { start: 7, end: 7 },
+        { start: NaN, end: 9 },
+      ]),
+    ).toEqual([
+      { start: 1, end: 4.5 },
+      { start: 5, end: 6 },
+    ])
+    expect(mergeRanges([])).toEqual([])
+  })
+
+  it('skipTarget springt ans Ende des Bereichs, sonst null', () => {
+    const r = [
+      { start: 10, end: 20 },
+      { start: 30, end: 40 },
+    ]
+    expect(skipTarget(5, r)).toBeNull()
+    expect(skipTarget(10, r)).toBe(20)
+    expect(skipTarget(19, r)).toBe(20)
+    expect(skipTarget(20, r)).toBeNull()
+    expect(skipTarget(35, r)).toBe(40)
+    expect(skipTarget(50, r)).toBeNull()
+    expect(skipTarget(10, [])).toBeNull()
+  })
+
+  it('rangeOnClip rechnet in Prozent und beschneidet auf den Clip', () => {
+    const clip = { start: 100, duration: 200 }
+    expect(rangeOnClip(clip, { start: 150, end: 200 })).toEqual({ left: 25, width: 25 })
+    expect(rangeOnClip(clip, { start: 50, end: 150 })).toEqual({ left: 0, width: 25 })
+    expect(rangeOnClip(clip, { start: 250, end: 400 })).toEqual({ left: 75, width: 25 })
+    expect(rangeOnClip(clip, { start: 300, end: 400 })).toBeNull()
+    expect(rangeOnClip({ start: 0, duration: 0 }, { start: 0, end: 1 })).toBeNull()
   })
 })

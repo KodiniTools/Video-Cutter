@@ -15,8 +15,14 @@ import {
   type TranscribeLanguage,
   type TranslateTarget,
 } from '@/lib/aiApi'
-import { sourceRangeOnTimeline } from '@/timeline/cutSuggestions'
-import { findClip, type OverlayClip, type Time } from '@/timeline/model'
+import { mergeRanges, sourceRangeOnTimeline, type TimeRange } from '@/timeline/cutSuggestions'
+import {
+  findClip,
+  linkGroupIds,
+  MICROS_PER_SECOND,
+  type OverlayClip,
+  type Time,
+} from '@/timeline/model'
 import { cuesToClips, subtitleStyle } from '@/timeline/subtitles'
 import { useTextDefaultStore } from './textDefault'
 import { findSilences, type SilenceOptions } from '@/timeline/silence'
@@ -36,6 +42,18 @@ export interface ClipSuggestions {
   mediaId: string
   items: ClipSuggestion[]
 }
+
+/** Schnittvorschlag mit seiner Lage auf der Timeline (für Markierung und Probehören). */
+export interface SuggestionMark {
+  id: number
+  kind: CutSuggestion['kind']
+  checked: boolean
+  start: Time
+  end: Time
+}
+
+/** So viel wird beim Probehören eines Vorschlags davor und danach abgespielt. */
+export const AUDITION_LEAD: Time = 2 * MICROS_PER_SECOND
 
 export interface CutResult {
   /** Herausgeschnittene Bereiche. */
@@ -249,6 +267,68 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     }
   }
 
+  /** Alle Vorschläge einer Art an- bzw. abhaken (z. B. nur Füllwörter). */
+  function setKindChecked(kind: CutSuggestion['kind'], checked: boolean): void {
+    const current = suggestions.value
+    if (!current) return
+    suggestions.value = {
+      ...current,
+      items: current.items.map((s) => (s.kind === kind ? { ...s, checked } : s)),
+    }
+  }
+
+  /**
+   * Vorschläge mit ihrer Lage auf der Timeline und die Clips, auf denen sie
+   * markiert werden (der untersuchte Clip und sein verknüpfter Partner).
+   */
+  const marks = computed<{ clipIds: string[]; items: SuggestionMark[] }>(() => {
+    const current = suggestions.value
+    if (!current) return { clipIds: [], items: [] }
+    const items = current.items.flatMap((s) => {
+      const r = suggestionRange(s)
+      return r ? [{ id: s.id, kind: s.kind, checked: s.checked, start: r.start, end: r.end }] : []
+    })
+    const ids = linkGroupIds(timeline.doc, current.clipId)
+    return { clipIds: ids.length ? ids : [current.clipId], items }
+  })
+
+  // --- Probehören ---------------------------------------------------------------
+
+  /** Beim Abspielen die angehakten Stellen überspringen (so klingt es geschnitten). */
+  const skipChecked = ref(false)
+  /** Probehören eines einzelnen Vorschlags: übersprungener Bereich + Halt danach. */
+  const audition = ref<{ id: number; skip: TimeRange; stopAt: Time } | null>(null)
+
+  /** Bereiche, die die Vorschau beim Abspielen überspringt (sortiert, zusammengefasst). */
+  const skipRanges = computed<TimeRange[]>(() => {
+    if (audition.value) return [audition.value.skip]
+    if (!skipChecked.value) return []
+    return mergeRanges(marks.value.items.filter((m) => m.checked))
+  })
+
+  /**
+   * Einen Vorschlag probehören: ab kurz davor abspielen, den Bereich
+   * überspringen und kurz danach anhalten. Liefert false, wenn er nicht mehr
+   * im Clip liegt.
+   */
+  function auditionSuggestion(id: number): boolean {
+    const m = marks.value.items.find((s) => s.id === id)
+    if (!m) return false
+    timeline.playing = false
+    audition.value = {
+      id,
+      skip: { start: m.start, end: m.end },
+      stopAt: Math.min(timeline.duration, m.end + AUDITION_LEAD),
+    }
+    timeline.seek(Math.max(0, m.start - AUDITION_LEAD))
+    timeline.playing = true
+    return true
+  }
+
+  function endAudition(): void {
+    audition.value = null
+  }
+
   function setAllSuggestionsChecked(checked: boolean): void {
     const current = suggestions.value
     if (!current) return
@@ -257,6 +337,7 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
 
   function clearSuggestions(): void {
     suggestions.value = null
+    audition.value = null
   }
 
   /**
@@ -276,6 +357,7 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
       throw new Error('Die Bereiche konnten nicht herausgeschnitten werden.')
     }
     suggestions.value = null
+    audition.value = null
     return { cut: ranges.length, dropped: checked.length - ranges.length }
   }
 
@@ -331,6 +413,13 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     suggestionRange,
     setSuggestionChecked,
     setAllSuggestionsChecked,
+    setKindChecked,
+    marks,
+    skipChecked,
+    audition,
+    skipRanges,
+    auditionSuggestion,
+    endAudition,
     clearSuggestions,
     applyCuts,
     translateTexts,
