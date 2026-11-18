@@ -136,6 +136,7 @@ export const LOSSLESS_BLOCKER_TEXT: Record<LosslessBlocker, string> = {
   color: 'Verlustfrei geht nicht mit Farbkorrektur.',
   layout: 'Verlustfrei geht nicht mit Bild-in-Bild.',
   transition: 'Verlustfrei geht nicht mit einem Übergang.',
+  effects: 'Verlustfrei geht nicht mit einem Drop-Effekt an einem Marker.',
   audio: 'Verlustfrei geht nur mit dem unveränderten Ton des Clips oder ganz ohne Ton.',
   format: 'Verlustfrei geht nur, wenn das Projektformat der Größe des Videos entspricht.',
 }
