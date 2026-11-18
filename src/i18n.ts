@@ -664,6 +664,8 @@ const messages = {
         'Das Server-Backend ist veraltet und nimmt noch keine Tondateien an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       inUse: 'Diese Datei wird in der Timeline verwendet. Bitte zuerst die Clips löschen.',
       rejected: 'Weder Video noch Ton, übersprungen: {names}',
+      generatedUnsaved:
+        'Bild-Clips und KI-Videos liegen nur vorübergehend auf dem Server und werden nach etwa 2 Stunden ohne Benutzung gelöscht. Bitte das Projekt speichern, damit sie erhalten bleiben (KI-Bilder und KI-Videos bleiben zusätzlich in der Galerie).',
     },
     timeline: {
       empty:
@@ -1697,6 +1699,8 @@ const messages = {
         'The server backend is outdated and does not accept audio files yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       inUse: 'This file is used in the timeline. Please delete its clips first.',
       rejected: 'Neither video nor audio, skipped: {names}',
+      generatedUnsaved:
+        'Image clips and AI videos are only kept on the server temporarily and are deleted after about 2 hours without use. Please save the project to keep them (AI images and AI videos also stay in the gallery).',
     },
     timeline: {
       empty: 'No clips yet. Put a video from the media list on the timeline with “+ Timeline”.',

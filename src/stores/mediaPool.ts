@@ -47,6 +47,21 @@ export interface PoolItem {
   derived: DerivedStatus | null
   /** Wellenform, sobald geladen. */
   peaks: Uint8Array | null
+  /**
+   * Auf dem Server erzeugt (Bild-Clip, KI-Video, Video aus der Galerie). Solche
+   * Medien hat der Nutzer nicht als Datei bei sich; ohne gespeichertes Projekt
+   * verfallen sie mit dem Auto-Aufräumen der Bibliothek. Fehlt = hochgeladen
+   * oder aus einem gespeicherten Projekt geöffnet.
+   */
+  generated?: boolean
+}
+
+/**
+ * Hinweis „Projekt speichern“ zeigen? Ja, sobald ein auf dem Server erzeugtes
+ * Medium in der Liste liegt und der Stand nicht gespeichert ist.
+ */
+export function generatedAtRisk(items: readonly PoolItem[], unsaved: boolean): boolean {
+  return unsaved && items.some((i) => i.generated === true && i.media !== null)
 }
 
 /** Warum ein Medium nicht entfernt wurde. */
@@ -280,6 +295,7 @@ export const useMediaPoolStore = defineStore('mediaPool', () => {
       prepare: 'idle',
       derived: null,
       peaks: null,
+      generated: true,
     })
     useTimelineStore().putAsset(assetFromMedia(media))
     void prepare(key)
