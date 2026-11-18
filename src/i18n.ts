@@ -738,6 +738,10 @@ const messages = {
       positionFrameTitle:
         'Ziehen zum Verschieben (mit Umschalttaste fein), angeklickt auch mit den Pfeiltasten',
       positionFrameResize: 'Ziehen ändert die Größe',
+      cropFrame: {
+        hint: 'Rechteck ziehen oder an den Punkten in der Größe ändern. Gezeigt wird das ganze Bild des Clips.',
+        outside: 'Abspielkopf liegt außerhalb des Clips: gezeigt wird sein nächstes Bild.',
+      },
       addImage: '+ Bild',
       addImageTitle:
         'Eigenes Bild (JPEG, PNG, WebP) am Abspielkopf einfügen, z. B. ein Logo (liegt über allen Videos)',
@@ -789,6 +793,9 @@ const messages = {
         cropSides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
         cropReset: 'Zuschnitt zurücksetzen',
         cropHint: 'Schneidet Ränder des Videos weg. Der Rest wird ins Projektformat eingepasst.',
+        cropPick: '✂ Bildausschnitt in der Vorschau wählen',
+        cropPickDone: '✓ Ausschnitt fertig',
+        cropSize: 'Ausschnitt: {width} × {height} px',
         color: 'Farbkorrektur',
         colorFields: { brightness: 'Helligkeit', contrast: 'Kontrast', saturation: 'Sättigung' },
         colorReset: 'Farbkorrektur zurücksetzen',
@@ -1852,6 +1859,10 @@ const messages = {
       positionFrameTitle:
         'Drag to move (hold Shift for fine steps), or use the arrow keys once clicked',
       positionFrameResize: 'Drag to resize',
+      cropFrame: {
+        hint: 'Drag the rectangle or resize it using the handles. The whole picture of the clip is shown.',
+        outside: 'The playhead is outside the clip: its nearest frame is shown.',
+      },
       addImage: '+ Image',
       addImageTitle:
         'Insert your own image (JPEG, PNG, WebP) at the playhead, e.g. a logo (shown above all videos)',
@@ -1902,6 +1913,9 @@ const messages = {
         cropSides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },
         cropReset: 'Reset crop',
         cropHint: 'Cuts away edges of the video. The rest is fitted into the project format.',
+        cropPick: '✂ Choose crop in the preview',
+        cropPickDone: '✓ Crop done',
+        cropSize: 'Selection: {width} × {height} px',
         color: 'Colour correction',
         colorFields: { brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation' },
         colorReset: 'Reset colour correction',
