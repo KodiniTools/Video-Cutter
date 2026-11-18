@@ -8,6 +8,7 @@ import { addImageAsset, getImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/l
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
+import { useTextDefaultStore } from '@/stores/textDefault'
 import {
   clipGraphic,
   DEFAULT_GRAPHIC_DURATION,
@@ -261,9 +262,12 @@ function run(command: () => boolean): void {
 const split = () => run(() => store.splitAtPlayhead())
 const remove = (ripple: boolean) => run(() => store.removeSelection({ ripple }))
 
+const textDefault = useTextDefaultStore()
+
 const insertText = (): boolean =>
   store.addText(
-    { ...DEFAULT_TEXT_STYLE, animSpeed: 1, text: t('text.defaultText') },
+    // Gespeicherter Text-Standard des Nutzers geht vor.
+    { ...DEFAULT_TEXT_STYLE, animSpeed: 1, ...textDefault.value, text: t('text.defaultText') },
     secondsToTime(DEFAULT_TEXT_DURATION),
   ) !== null
 
