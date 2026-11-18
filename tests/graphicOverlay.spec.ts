@@ -98,10 +98,29 @@ describe('graphicFrame (wie die FFmpeg-Filter des Servers)', () => {
     expect(graphicFrame(o, 1.6).dy).toBe(0)
   })
 
+  it('nur ein-/ausblenden, hereingleiten aus allen Richtungen, heranzoomen', () => {
+    // Clip 1 … 4 s: fade 400 ms, move 500 ms
+    const fin = g({ animation: 'fadeIn' })
+    expect(graphicFrame(fin, 1.2).opacity).toBeCloseTo(0.5)
+    expect(graphicFrame(fin, 3.9).opacity).toBe(1)
+    const fout = g({ animation: 'fadeOut' })
+    expect(graphicFrame(fout, 1).opacity).toBe(1)
+    expect(graphicFrame(fout, 3.8).opacity).toBeCloseTo(0.5)
+    expect(graphicFrame(g({ animation: 'slideTop' }), 1).dy).toBeCloseTo(-0.06)
+    const left = graphicFrame(g({ animation: 'slideLeft' }), 1.25)
+    expect([left.dx, left.dy]).toEqual([expect.closeTo(-0.03), 0])
+    expect(graphicFrame(g({ animation: 'slideRight' }), 1).dx).toBeCloseTo(0.06)
+    const zoom = g({ animation: 'zoom' })
+    expect(graphicFrame(zoom, 1).scale).toBeCloseTo(1.6)
+    expect(graphicFrame(zoom, 1.25).scale).toBeCloseTo(1.3)
+    expect(graphicFrame(zoom, 2).scale).toBe(1)
+  })
+
   it('none: sofort voll sichtbar', () => {
     expect(graphicFrame(g({ animation: 'none' }), 1)).toEqual({
       visible: true,
       opacity: 1,
+      dx: 0,
       dy: 0,
       scale: 1,
       angle: 0,
@@ -147,7 +166,11 @@ describe('Aufploppen und Dauer-Animationen (wie scale/rotate/enable des Servers)
   })
 
   it('clampGraphic: unbekannte Werte (alte/kaputte Projekte) -> Standard', () => {
-    const bad = clampGraphic({ ...g(), animation: 'zoom', loop: 'jump' } as unknown as GraphicData)
+    const bad = clampGraphic({
+      ...g(),
+      animation: 'wirbel',
+      loop: 'jump',
+    } as unknown as GraphicData)
     expect(bad.animation).toBe('fade')
     expect(bad.loop).toBe('none')
     const { loop: _l, ...old } = g()

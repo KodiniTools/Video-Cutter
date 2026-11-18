@@ -17,7 +17,19 @@ export type TextFont = BuiltinFont | `f:${string}`
 export const TEXT_STYLES = ['outline', 'box', 'shadow', 'none'] as const
 export type TextStyle = (typeof TEXT_STYLES)[number]
 
-export const TEXT_ANIMATIONS = ['none', 'fade', 'slide', 'pop', 'typewriter'] as const
+export const TEXT_ANIMATIONS = [
+  'none',
+  'fade',
+  'fadeIn',
+  'fadeOut',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+  'typewriter',
+] as const
 export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
 
 /**
@@ -137,12 +149,21 @@ export const DEFAULT_TEXT_STYLE: Omit<TextOverlayData, 'text' | 'start' | 'end'>
 // Obergrenze (ein Drittel bzw. 60 % der Einblenddauer) bleibt. Faktor 1 =
 // exakt das bisherige Verhalten.
 
+/**
+ * Obergrenze der Animationszeit: ein Drittel der Einblenddauer. Bei den
+ * langsamen Stufen (unter 0,25×) die Hälfte, damit sie auch bei kurzen
+ * Einblendungen noch langsamer wirken als 0,25×.
+ */
+function animCap(durationSec: number, speed: number): number {
+  return (durationSec * 1000) / (speed < 0.25 ? 2 : 3)
+}
+
 export function fadeMs(durationSec: number, speed = 1): number {
-  return Math.round(Math.min(400 / speed, (durationSec * 1000) / 3))
+  return Math.round(Math.min(400 / speed, animCap(durationSec, speed)))
 }
 
 export function moveMs(durationSec: number, speed = 1): number {
-  return Math.round(Math.min(500 / speed, (durationSec * 1000) / 3))
+  return Math.round(Math.min(500 / speed, animCap(durationSec, speed)))
 }
 
 export function typeStepMs(durationSec: number, chars: number, speed = 1): number {
@@ -151,15 +172,29 @@ export function typeStepMs(durationSec: number, chars: number, speed = 1): numbe
 }
 
 /** Wählbare Tempo-Stufen der Animationen (Faktor). */
-export const ANIM_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
-export const MIN_ANIM_SPEED = 0.25
+export const ANIM_SPEEDS = [0.05, 0.1, 0.15, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
+export const MIN_ANIM_SPEED = 0.05
 export const MAX_ANIM_SPEED = 4
 
-/** Tempo eines Eintrags: fehlend/ungültig = 1, sonst auf [0,25; 4] begrenzt. */
+/** Tempo eines Eintrags: fehlend/ungültig = 1, sonst auf [0,05; 4] begrenzt. */
 export function animSpeedOf(o: { animSpeed?: unknown }): number {
   const v = o.animSpeed
   if (typeof v !== 'number' || !Number.isFinite(v)) return 1
   return Math.min(MAX_ANIM_SPEED, Math.max(MIN_ANIM_SPEED, v))
+}
+
+/** Animationen, die es schon vor der Erweiterung gab (jedes Backend mit Texten kennt sie). */
+const CLASSIC_ANIMATIONS: readonly string[] = ['none', 'fade', 'slide', 'pop', 'typewriter']
+
+/**
+ * Braucht der Eintrag das Backend mit den erweiterten Animationen (Feature
+ * `animations2`)? Das sind die neuen Animationen und Tempo unter 0,25×.
+ */
+export function needsAnimations2(o: { animation?: unknown; animSpeed?: unknown }): boolean {
+  return (
+    (typeof o.animation === 'string' && !CLASSIC_ANIMATIONS.includes(o.animation)) ||
+    animSpeedOf(o) < 0.25
+  )
 }
 
 /** Nächstgelegene Stufe aus ANIM_SPEEDS (Index für den Regler). */
@@ -176,12 +211,36 @@ export function formatAnimSpeed(speed: number, locale: string): string {
   return `${speed.toLocaleString(locale, { maximumFractionDigits: 2 })}×`
 }
 
+/**
+ * Startversatz beim Hereingleiten als Richtung (x, y): `slide` kommt von
+ * unten, die anderen von oben, links und rechts.
+ */
+export function slideVector(
+  animation: 'slide' | 'slideTop' | 'slideLeft' | 'slideRight',
+): [number, number] {
+  switch (animation) {
+    case 'slide':
+      return [0, 1]
+    case 'slideTop':
+      return [0, -1]
+    case 'slideLeft':
+      return [-1, 0]
+    case 'slideRight':
+      return [1, 0]
+  }
+}
+
+/** Versatz beim Hereingleiten (Anteil der Bildhöhe, in alle Richtungen gleich). */
 export const SLIDE_OFFSET = 0.06
+/** Startgröße beim Heranzoomen (Faktor), läuft linear auf 1. */
+export const ZOOM_FROM = 1.6
 
 /** Darstellungszustand eines Textes zu einem Zeitpunkt (für die Vorschau). */
 export interface OverlayFrame {
   visible: boolean
   opacity: number
+  /** Waagerechter Versatz als Anteil der Bild**höhe** (gleicher Weg wie `dy`). */
+  dx: number
   /** Vertikaler Versatz als Anteil der Bildhöhe. */
   dy: number
   scale: number
@@ -202,7 +261,7 @@ function lerp(a: number, b: number, t: number): number {
  */
 export function overlayFrame(o: TextOverlayData, t: number): OverlayFrame {
   if (!(t >= o.start && t < o.end)) {
-    return { visible: false, opacity: 0, dy: 0, scale: 1, chars: 0 }
+    return { visible: false, opacity: 0, dx: 0, dy: 0, scale: 1, chars: 0 }
   }
   const dur = o.end - o.start
   const ms = (t - o.start) * 1000
@@ -212,7 +271,14 @@ export function overlayFrame(o: TextOverlayData, t: number): OverlayFrame {
   const m = moveMs(dur, sp)
   const fadeOut = (outMs: number) => (outMs > 0 ? clamp01(left / outMs) : 1)
   const fadeIn = (inMs: number) => (inMs > 0 ? clamp01(ms / inMs) : 1)
-  const frame: OverlayFrame = { visible: true, opacity: 1, dy: 0, scale: 1, chars: Infinity }
+  const frame: OverlayFrame = {
+    visible: true,
+    opacity: 1,
+    dx: 0,
+    dy: 0,
+    scale: 1,
+    chars: Infinity,
+  }
 
   switch (o.animation) {
     case 'none':
@@ -220,9 +286,26 @@ export function overlayFrame(o: TextOverlayData, t: number): OverlayFrame {
     case 'fade':
       frame.opacity = Math.min(fadeIn(f), fadeOut(f))
       break
+    case 'fadeIn':
+      frame.opacity = fadeIn(f)
+      break
+    case 'fadeOut':
+      frame.opacity = fadeOut(f)
+      break
     case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight': {
+      const [vx, vy] = slideVector(o.animation)
+      const rest = lerp(SLIDE_OFFSET, 0, m > 0 ? ms / m : 1)
       frame.opacity = Math.min(fadeIn(m), fadeOut(f))
-      frame.dy = lerp(SLIDE_OFFSET, 0, m > 0 ? ms / m : 1)
+      frame.dx = vx * rest
+      frame.dy = vy * rest
+      break
+    }
+    case 'zoom':
+      frame.opacity = Math.min(fadeIn(Math.round(m / 2)), fadeOut(f))
+      frame.scale = lerp(ZOOM_FROM, 1, m > 0 ? ms / m : 1)
       break
     case 'pop': {
       const a = Math.round(m * 0.6)

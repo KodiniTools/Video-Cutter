@@ -9,7 +9,7 @@
  * der Mittelpunkt als Anteil von Breite/Höhe. Animations-Zeiten wie bei Texten.
  */
 
-import { animSpeedOf, fadeMs, moveMs, SLIDE_OFFSET } from './textOverlay'
+import { animSpeedOf, fadeMs, moveMs, SLIDE_OFFSET, slideVector, ZOOM_FROM } from './textOverlay'
 import { getImageAsset, hasImageAsset } from './imageAssets'
 
 export const GRAPHIC_KINDS = [
@@ -24,7 +24,18 @@ export const GRAPHIC_KINDS = [
 ] as const
 export type GraphicKind = (typeof GRAPHIC_KINDS)[number]
 
-export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide', 'pop'] as const
+export const GRAPHIC_ANIMATIONS = [
+  'none',
+  'fade',
+  'fadeIn',
+  'fadeOut',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+] as const
 export type GraphicAnimation = (typeof GRAPHIC_ANIMATIONS)[number]
 
 /**
@@ -706,6 +717,8 @@ export function stackOrder<T extends Pick<GraphicData, 'kind'>>(list: readonly T
 export interface GraphicFrame {
   visible: boolean
   opacity: number
+  /** Waagerechter Versatz als Anteil der Bild**höhe** (gleicher Weg wie `dy`). */
+  dx: number
   /** Vertikaler Versatz als Anteil der Bildhöhe (in px gerundet wie der Server). */
   dy: number
   /** Größenfaktor um den Mittelpunkt (Aufploppen/Pulsieren), 1 = unverändert. */
@@ -717,6 +730,7 @@ export interface GraphicFrame {
 /** Ruhende Ansicht (angehalten): keine Animation. */
 export const STILL_FRAME: Readonly<Omit<GraphicFrame, 'visible'>> = {
   opacity: 1,
+  dx: 0,
   dy: 0,
   scale: 1,
   angle: 0,
@@ -736,7 +750,7 @@ export function hasMotion(g: Pick<GraphicData, 'animation' | 'loop'>): boolean {
  */
 export function graphicFrame(g: GraphicData, t: number): GraphicFrame {
   if (!(t >= g.start && t < g.end)) {
-    return { visible: false, opacity: 0, dy: 0, scale: 1, angle: 0 }
+    return { visible: false, opacity: 0, dx: 0, dy: 0, scale: 1, angle: 0 }
   }
   const dur = g.end - g.start
   const u = t - g.start
@@ -746,17 +760,36 @@ export function graphicFrame(g: GraphicData, t: number): GraphicFrame {
   const f = fadeMs(dur, sp)
   const m = moveMs(dur, sp)
   const fadeOut = f > 0 ? clamp01(left / f) : 1
-  const frame: GraphicFrame = { visible: true, opacity: 1, dy: 0, scale: 1, angle: 0 }
+  const frame: GraphicFrame = { visible: true, opacity: 1, dx: 0, dy: 0, scale: 1, angle: 0 }
   switch (g.animation) {
     case 'none':
       break
     case 'fade':
       frame.opacity = Math.min(f > 0 ? clamp01(ms / f) : 1, fadeOut)
       break
-    case 'slide':
-      frame.opacity = Math.min(m > 0 ? clamp01(ms / m) : 1, fadeOut)
-      frame.dy = SLIDE_OFFSET * (m > 0 ? Math.max(0, 1 - ms / m) : 0)
+    case 'fadeIn':
+      frame.opacity = f > 0 ? clamp01(ms / f) : 1
       break
+    case 'fadeOut':
+      frame.opacity = fadeOut
+      break
+    case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight': {
+      const [vx, vy] = slideVector(g.animation)
+      const rest = SLIDE_OFFSET * (m > 0 ? Math.max(0, 1 - ms / m) : 0)
+      frame.opacity = Math.min(m > 0 ? clamp01(ms / m) : 1, fadeOut)
+      frame.dx = vx * rest
+      frame.dy = vy * rest
+      break
+    }
+    case 'zoom': {
+      const inMs = Math.round(m / 2)
+      frame.opacity = Math.min(inMs > 0 ? clamp01(ms / inMs) : 1, fadeOut)
+      if (m > 0) frame.scale = lerp(ZOOM_FROM, 1, ms / m)
+      break
+    }
     case 'pop': {
       const inMs = Math.round(m / 2)
       frame.opacity = Math.min(inMs > 0 ? clamp01(ms / inMs) : 1, fadeOut)

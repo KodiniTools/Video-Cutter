@@ -332,8 +332,14 @@ const messages = {
       animation: 'Animation',
       animations: {
         none: 'Keine',
-        fade: 'Einblenden',
-        slide: 'Hereingleiten',
+        fade: 'Ein- und Ausblenden',
+        fadeIn: 'Nur einblenden',
+        fadeOut: 'Nur ausblenden',
+        slide: 'Hereingleiten von unten',
+        slideTop: 'Hereingleiten von oben',
+        slideLeft: 'Hereingleiten von links',
+        slideRight: 'Hereingleiten von rechts',
+        zoom: 'Heranzoomen (groß → normal)',
         pop: 'Aufploppen',
         typewriter: 'Schreibmaschine',
       },
@@ -630,6 +636,8 @@ const messages = {
         'Das Server-Backend ist veraltet und kann noch keinen Text einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       graphicsUnsupported:
         'Das Server-Backend ist veraltet und kann noch keine Formen/Emojis einbrennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
+      animationsUnsupported:
+        'Das Server-Backend ist veraltet und kennt die neuen Animationen und das Tempo unter 0,25× noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       animSpeedUnsupported:
         'Das Server-Backend ist veraltet und kennt das Tempo von Animationen noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API) oder das Tempo auf 1× stellen.',
       graphicMotionUnsupported:
@@ -1395,8 +1403,14 @@ const messages = {
       animation: 'Animation',
       animations: {
         none: 'None',
-        fade: 'Fade in',
-        slide: 'Slide in',
+        fade: 'Fade in and out',
+        fadeIn: 'Fade in only',
+        fadeOut: 'Fade out only',
+        slide: 'Slide in from below',
+        slideTop: 'Slide in from above',
+        slideLeft: 'Slide in from the left',
+        slideRight: 'Slide in from the right',
+        zoom: 'Zoom in (large → normal)',
         pop: 'Pop',
         typewriter: 'Typewriter',
       },
@@ -1687,6 +1701,8 @@ const messages = {
         'The server backend is outdated and cannot burn in text yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       graphicsUnsupported:
         'The server backend is outdated and cannot burn in shapes/emojis yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
+      animationsUnsupported:
+        'The server backend is outdated and does not know the new animations and speeds below 0.25× yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       animSpeedUnsupported:
         'The server backend is outdated and does not know animation speed yet. Please update the backend (deploy/deploy.sh without SKIP_API) or set the speed to 1×.',
       graphicMotionUnsupported:

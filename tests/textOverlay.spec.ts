@@ -8,6 +8,7 @@ import {
   DEFAULT_TEXT_STYLE,
   MAX_TEXT_OVERLAYS,
   isValidOverlay,
+  needsAnimations2,
   overlayFrame,
   toServerOverlay,
   type TextOverlayData,
@@ -38,12 +39,41 @@ describe('Tempo der Animation', () => {
     expect(overlayFrame(tw, 1.031).chars).toBe(2)
   })
 
+  it('langsame Stufen unter 0,25×: bis zur Hälfte der Dauer', () => {
+    expect(fadeMs(3, 0.1)).toBe(1500)
+    expect(fadeMs(20, 0.1)).toBe(4000)
+    expect(fadeMs(20, 0.05)).toBe(8000)
+    // 0,25× und schneller: unverändert höchstens ein Drittel
+    expect(fadeMs(3, 0.25)).toBe(1000)
+  })
+
+  it('neue Animationen: nur ein-/ausblenden, Richtungen, heranzoomen', () => {
+    expect(overlayFrame(o({ animation: 'fadeIn' }), 1.2).opacity).toBeCloseTo(0.5)
+    expect(overlayFrame(o({ animation: 'fadeIn' }), 3.95).opacity).toBe(1)
+    expect(overlayFrame(o({ animation: 'fadeOut' }), 1).opacity).toBe(1)
+    expect(overlayFrame(o({ animation: 'fadeOut' }), 3.8).opacity).toBeCloseTo(0.5)
+    expect(overlayFrame(o({ animation: 'slideTop' }), 1).dy).toBeCloseTo(-0.06)
+    expect(overlayFrame(o({ animation: 'slideLeft' }), 1).dx).toBeCloseTo(-0.06)
+    expect(overlayFrame(o({ animation: 'slideRight' }), 1.25).dx).toBeCloseTo(0.03)
+    expect(overlayFrame(o({ animation: 'slide' }), 1).dx).toBe(0)
+    expect(overlayFrame(o({ animation: 'zoom' }), 1).scale).toBeCloseTo(1.6)
+    expect(overlayFrame(o({ animation: 'zoom' }), 1.5).scale).toBe(1)
+  })
+
+  it('needsAnimations2: neue Animationen und Tempo unter 0,25×', () => {
+    expect(needsAnimations2({ animation: 'fade', animSpeed: 0.25 })).toBe(false)
+    expect(needsAnimations2({ animation: 'pop' })).toBe(false)
+    expect(needsAnimations2({ animation: 'fadeIn' })).toBe(true)
+    expect(needsAnimations2({ animation: 'fade', animSpeed: 0.1 })).toBe(true)
+  })
+
   it('animSpeedOf/Index/Anzeige', () => {
     expect(animSpeedOf({})).toBe(1)
     expect(animSpeedOf({ animSpeed: 99 })).toBe(4)
     expect(animSpeedOf({ animSpeed: 'x' })).toBe(1)
-    expect(animSpeedIndex(1)).toBe(3)
-    expect(animSpeedIndex(0.6)).toBe(1)
+    expect(animSpeedIndex(1)).toBe(6)
+    expect(animSpeedIndex(0.6)).toBe(4)
+    expect(animSpeedOf({ animSpeed: 0.01 })).toBe(0.05)
     expect(formatAnimSpeed(0.5, 'de')).toBe('0,5×')
   })
 

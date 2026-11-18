@@ -168,7 +168,8 @@ const rendered = computed<Rendered[]>(() => {
         frame,
         url: img.url,
         style: {
-          left: `${o.x * 100}%`,
+          // dx ist ein Anteil der Bildhöhe (gleicher Weg wie dy).
+          left: frame.dx ? `calc(${o.x * 100}% + ${frame.dx * bh}px)` : `${o.x * 100}%`,
           top: `${(o.y + frame.dy) * 100}%`,
           width: `${img.width * scale}px`,
           height: `${img.height * scale}px`,

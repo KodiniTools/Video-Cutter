@@ -18,7 +18,19 @@ export type TextFont = BuiltinFont | `f:${string}`
 export const TEXT_STYLES = ['outline', 'box', 'shadow', 'none'] as const
 export type TextStyle = (typeof TEXT_STYLES)[number]
 
-export const TEXT_ANIMATIONS = ['none', 'fade', 'slide', 'pop', 'typewriter'] as const
+export const TEXT_ANIMATIONS = [
+  'none',
+  'fade',
+  'fadeIn',
+  'fadeOut',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+  'typewriter',
+] as const
 export type TextAnimation = (typeof TEXT_ANIMATIONS)[number]
 
 /**
@@ -207,14 +219,23 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
 
 // Tempo (Faktor): Grundzeiten werden geteilt, Obergrenzen bleiben; 1 = wie bisher.
 
+/**
+ * Obergrenze der Animationszeit: ein Drittel der Einblenddauer. Bei den
+ * langsamen Stufen (unter 0,25×) die Hälfte, damit sie auch bei kurzen
+ * Einblendungen noch langsamer wirken als 0,25×.
+ */
+function animCap(durationSec: number, speed: number): number {
+  return (durationSec * 1000) / (speed < 0.25 ? 2 : 3)
+}
+
 /** Ein-/Ausblendzeit in ms – höchstens ein Drittel der Einblenddauer. */
 export function fadeMs(durationSec: number, speed = 1): number {
-  return Math.round(Math.min(400 / speed, (durationSec * 1000) / 3))
+  return Math.round(Math.min(400 / speed, animCap(durationSec, speed)))
 }
 
 /** Dauer der Bewegung bei 'slide'/'pop' in ms. */
 export function moveMs(durationSec: number, speed = 1): number {
-  return Math.round(Math.min(500 / speed, (durationSec * 1000) / 3))
+  return Math.round(Math.min(500 / speed, animCap(durationSec, speed)))
 }
 
 /** Zeit pro Zeichen bei 'typewriter' in ms (alles nach spätestens 60 % sichtbar). */
@@ -223,10 +244,10 @@ export function typeStepMs(durationSec: number, chars: number, speed = 1): numbe
   return Math.min(60 / speed, (durationSec * 1000 * 0.6) / (chars - 1))
 }
 
-export const MIN_ANIM_SPEED = 0.25
+export const MIN_ANIM_SPEED = 0.05
 export const MAX_ANIM_SPEED = 4
 
-/** Tempo aus der Anfrage: fehlt = 1 (ältere Clients), sonst Zahl in [0,25; 4]. */
+/** Tempo aus der Anfrage: fehlt = 1 (ältere Clients), sonst Zahl in [0,05; 4]. */
 export function parseAnimSpeed(v: unknown, label: string): number {
   if (v === undefined || v === null) return 1
   const n = typeof v === 'string' ? Number(v) : v
@@ -236,8 +257,29 @@ export function parseAnimSpeed(v: unknown, label: string): number {
   return Math.min(MAX_ANIM_SPEED, Math.max(MIN_ANIM_SPEED, n))
 }
 
-/** Versatz nach unten beim Hereingleiten (Anteil der Bildhöhe). */
+/**
+ * Startversatz beim Hereingleiten als Richtung (x, y): `slide` kommt von
+ * unten, die anderen von oben, links und rechts.
+ */
+export function slideVector(
+  animation: 'slide' | 'slideTop' | 'slideLeft' | 'slideRight',
+): [number, number] {
+  switch (animation) {
+    case 'slide':
+      return [0, 1]
+    case 'slideTop':
+      return [0, -1]
+    case 'slideLeft':
+      return [-1, 0]
+    case 'slideRight':
+      return [1, 0]
+  }
+}
+
+/** Versatz beim Hereingleiten (Anteil der Bildhöhe, in alle Richtungen gleich). */
 export const SLIDE_OFFSET = 0.06
+/** Startgröße beim Heranzoomen (Faktor), läuft linear auf 1. */
+export const ZOOM_FROM = 1.6
 
 // --- ASS-Erzeugung ----------------------------------------------------------
 
@@ -424,12 +466,19 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
     case 'none':
     case 'typewriter':
       break
+    case 'fadeOut':
+      break
     case 'fade':
+    case 'fadeIn':
       fadeIn = f
       break
     case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight':
       fadeIn = m
       break
+    case 'zoom':
     case 'pop':
       fadeIn = Math.round(m / 2)
       break
@@ -438,7 +487,7 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
       throw new Error(`Unbekannte Animation: ${String(never)}`)
     }
   }
-  const fadeOut = o.animation === 'none' ? 0 : f
+  const fadeOut = o.animation === 'none' || o.animation === 'fadeIn' ? 0 : f
   const style = o.style === 'box' ? 'Box' : 'Text'
   const breaks = motionBreaks(motion, dur)
   const scaled = motion.keys.some((k) => k.scale !== 1)
@@ -500,9 +549,27 @@ export function buildAssEvent(o: TextOverlay, width: number, height: number): st
     case 'fade':
       anim = `\\pos(${x},${y})\\fad(${f},${f})`
       break
-    case 'slide': {
-      const dy = Math.round(SLIDE_OFFSET * height)
-      anim = `\\move(${x},${y + dy},${x},${y},0,${m})\\fad(${m},${f})`
+    case 'fadeIn':
+      anim = `\\pos(${x},${y})\\fad(${f},0)`
+      break
+    case 'fadeOut':
+      anim = `\\pos(${x},${y})\\fad(0,${f})`
+      break
+    case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight': {
+      // Gleicher Weg in px für alle Richtungen (Anteil der Bildhöhe).
+      const d = Math.round(SLIDE_OFFSET * height)
+      const [dx, dy] = slideVector(o.animation)
+      anim = `\\move(${x + dx * d},${y + dy * d},${x},${y},0,${m})\\fad(${m},${f})`
+      break
+    }
+    case 'zoom': {
+      const from = Math.round(ZOOM_FROM * 100)
+      anim =
+        `\\pos(${x},${y})\\fad(${Math.round(m / 2)},${f})\\fscx${from}\\fscy${from}` +
+        `\\t(0,${m},\\fscx100\\fscy100)`
       break
     }
     case 'pop': {

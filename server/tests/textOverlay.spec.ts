@@ -142,6 +142,23 @@ describe('buildAssEvent', () => {
       '\\move(500,960,500,900,0,500)',
     )
     expect(buildAssEvent(overlay({ animation: 'pop' }), 100, 100)).toContain('\\fscx40')
+    // Neue Animationen
+    expect(buildAssEvent(overlay({ animation: 'fadeIn' }), 100, 100)).toContain('\\fad(400,0)')
+    expect(buildAssEvent(overlay({ animation: 'fadeOut' }), 100, 100)).toContain('\\fad(0,400)')
+    expect(buildAssEvent(overlay({ animation: 'slideTop' }), 1000, 1000)).toContain(
+      '\\move(500,840,500,900,0,500)',
+    )
+    expect(buildAssEvent(overlay({ animation: 'slideLeft' }), 1000, 1000)).toContain(
+      '\\move(440,900,500,900,0,500)',
+    )
+    expect(buildAssEvent(overlay({ animation: 'slideRight' }), 1000, 1000)).toContain(
+      '\\move(560,900,500,900,0,500)',
+    )
+    expect(buildAssEvent(overlay({ animation: 'zoom' }), 100, 100)).toContain(
+      '\\fad(250,400)\\fscx160\\fscy160\\t(0,500,\\fscx100\\fscy100)',
+    )
+    // Tempo unter 0,25×: bis zur Hälfte der Dauer, Untergrenze 0,05
+    expect(parseTextOverlays([{ ...base, animSpeed: 0.01 }], 10)[0]!.animSpeed).toBe(0.05)
     const tw = buildAssEvent(overlay({ text: 'ab\nc', animation: 'typewriter' }), 100, 100)
     // erstes Zeichen sofort, dann je 60 ms; Umbruch ohne Tag
     expect(tw).toMatch(/}a\{[^}]*\\t\(60,61,[^}]*\}b\\N\{[^}]*\\t\(120,121,/)

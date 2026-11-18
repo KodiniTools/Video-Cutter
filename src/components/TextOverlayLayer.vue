@@ -142,7 +142,7 @@ const rendered = computed<Rendered[]>(() => {
     const animated = overlayFrame(o, t)
     const frame: OverlayFrame =
       paused.value && (isSel || animated.visible)
-        ? { visible: animated.visible, opacity: 1, dy: 0, scale: 1, chars: Infinity }
+        ? { visible: animated.visible, opacity: 1, dx: 0, dy: 0, scale: 1, chars: Infinity }
         : animated
     if (!frame.visible && !isSel) return []
     const px = o.size * h
@@ -159,7 +159,8 @@ const rendered = computed<Rendered[]>(() => {
         o,
         frame,
         style: {
-          left: `${o.x * 100}%`,
+          // dx ist ein Anteil der Bildhöhe (gleicher Weg wie dy).
+          left: frame.dx ? `calc(${o.x * 100}% + ${frame.dx * h}px)` : `${o.x * 100}%`,
           top: `${(o.y + frame.dy) * 100}%`,
           opacity: String(frame.visible ? frame.opacity : 0.35),
           transform: `translate(-50%, -50%) scale(${frame.scale})`,

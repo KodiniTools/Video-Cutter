@@ -102,7 +102,7 @@ describe('Grafik-Clips im Dokument', () => {
     expect(errorPath({ png: '../etc/passwd' })).toBe('tracks[0].clips[0].data.png')
     expect(errorPath({ renderHeight: 0 })).toBe('tracks[0].clips[0].data.renderHeight')
     expect(errorPath({ x: 1.5 })).toBe('tracks[0].clips[0].data')
-    expect(errorPath({ animation: 'zoom' })).toBe('tracks[0].clips[0].data.animation')
+    expect(errorPath({ animation: 'wirbel' })).toBe('tracks[0].clips[0].data.animation')
     expect(errorPath({ loop: 'jump' })).toBe('tracks[0].clips[0].data.loop')
     expect(errorPath({ animSpeed: 'schnell' })).toBe('tracks[0].clips[0].data.animSpeed')
   })

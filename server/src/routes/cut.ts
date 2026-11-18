@@ -108,6 +108,7 @@ export const SERVER_FEATURES = [
   'aiVideo',
   'aiModels',
   'animSpeed',
+  'animations2',
   'clipMute',
   'mediaDerived',
   'timelinePreview',
