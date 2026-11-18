@@ -727,6 +727,9 @@ const messages = {
       addVideoTrackTitle: 'Leere Video-Spur oben anlegen (liegt im Bild vorn)',
       addAudioTrack: '+ Ton-Spur',
       addAudioTrackTitle: 'Leere Ton-Spur unten anlegen',
+      removeEmptyTracks: 'Leere Spuren löschen',
+      removeEmptyTracksTitle:
+        'Alle Spuren und Ebenen ohne Inhalt entfernen (gesperrte bleiben). Eine einzelne Spur löscht das ✕ im Spurkopf.',
       addText: '+ Text',
       addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
       addGraphic: '+ Form / Emoji',
@@ -1838,6 +1841,9 @@ const messages = {
       addVideoTrackTitle: 'Add an empty video track on top (in front)',
       addAudioTrack: '+ Audio track',
       addAudioTrackTitle: 'Add an empty audio track at the bottom',
+      removeEmptyTracks: 'Remove empty tracks',
+      removeEmptyTracksTitle:
+        'Remove all tracks and layers without content (locked ones stay). The ✕ in a track header removes a single track.',
       addText: '+ Text',
       addTextTitle: 'Insert text at the playhead (shown above all videos)',
       addGraphic: '+ Shape / emoji',

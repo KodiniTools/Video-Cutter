@@ -26,6 +26,7 @@ import {
   markerClipIds,
   MAX_MARKER_LABEL,
   MICROS_PER_SECOND,
+  emptyTrackIds,
   timeToSeconds,
   type Clip,
   type Marker,
@@ -287,6 +288,9 @@ function run(command: () => boolean): void {
     if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true })
   })
 }
+
+/** Anzahl leerer Spuren, die sich entfernen lassen (Knopf „Leere Spuren löschen“). */
+const emptyTracks = computed(() => emptyTrackIds(store.doc).length)
 
 const split = () => run(() => store.splitAtPlayhead())
 const remove = (ripple: boolean) => run(() => store.removeSelection({ ripple }))
@@ -672,6 +676,16 @@ function onKeydown(event: KeyboardEvent): void {
         @click="run(() => store.newTrack('audio'))"
       >
         {{ t('timeline.addAudioTrack') }}
+      </button>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-remove-empty"
+        :disabled="emptyTracks === 0"
+        :title="t('timeline.removeEmptyTracksTitle')"
+        @click="run(() => store.removeEmptyTracks())"
+      >
+        {{ t('timeline.removeEmptyTracks') }}
       </button>
       <button
         type="button"

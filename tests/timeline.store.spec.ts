@@ -454,6 +454,34 @@ describe('Timeline-Store', () => {
     expect(store.lastError).toBe('track-locked')
   })
 
+  it('entfernt alle leeren Spuren in einem Schritt, gesperrte und belegte bleiben', () => {
+    const store = useTimelineStore()
+    const names = () => store.doc.tracks.map((t) => t.name)
+    store.newTrack('video')
+    store.newTrack('audio')
+    store.newTrack('video')
+    store.newTrack('audio')
+    expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
+    const [v2, v1, a1] = store.doc.tracks.map((t) => t.id)
+    store.putAsset({ id: 'vid', kind: 'video', name: 'a.mp4', duration: s(10) })
+    store.insertClip(v1, video('v', 0, 2))
+    store.updateTrack(a1, { locked: true })
+
+    expect(store.removeEmptyTracks()).toBe(true)
+    expect(names()).toEqual(['V1', 'A1'])
+    expect(store.doc.tracks[0].clips).toHaveLength(1)
+    // Ein Rückgängig-Schritt stellt beide Spuren wieder her.
+    store.undo()
+    expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
+    expect(store.doc.tracks[0].id).toBe(v2)
+    store.redo()
+
+    // Nichts mehr zu entfernen: kein leerer Rückgängig-Schritt.
+    const before = store.doc
+    expect(store.removeEmptyTracks()).toBe(true)
+    expect(store.doc).toBe(before)
+  })
+
   it('legt Text am Abspielkopf an, markiert ihn und fasst Tippen zu einem Schritt zusammen', () => {
     const store = useTimelineStore()
     store.seek(s(2))
