@@ -63,6 +63,12 @@ describe('previewSize / planSegments', () => {
     expect(previewSize({ width: 640, height: 360 })).toEqual({ width: 640, height: 360 })
   })
 
+  it('volle Auflösung: Projektgröße mit geraden Maßen', () => {
+    expect(previewSize({ width: 1920, height: 1080 }, true)).toEqual({ width: 1920, height: 1080 })
+    expect(previewSize({ width: 1080, height: 1080 }, true)).toEqual({ width: 1080, height: 1080 })
+    expect(previewSize({ width: 1081, height: 1921 }, true)).toEqual({ width: 1080, height: 1920 })
+  })
+
   it('teilt lückenlos in 4-s-Abschnitte auf dem Bildraster', () => {
     expect(planSegments(doc(10))).toEqual([
       { index: 0, start: 0, end: s(4) },
@@ -81,7 +87,12 @@ describe('PreviewStore', () => {
   let dir = ''
   let store: PreviewStore
   /** Gestartete Läufe: von Hand beenden, um Reihenfolge und Abbruch zu prüfen. */
-  let runs: Array<{ out: string; finish: (ok?: boolean) => Promise<void>; killed: boolean }>
+  let runs: Array<{
+    out: string
+    args: string[]
+    finish: (ok?: boolean) => Promise<void>
+    killed: boolean
+  }>
   const sources = { [ID_A]: { path: '/m/a.mp4', hasAudio: false } }
   const tick = () => new Promise((r) => setTimeout(r, 10))
 
@@ -94,6 +105,7 @@ describe('PreviewStore', () => {
     })
     const run = {
       out: args[args.length - 1],
+      args,
       killed: false,
       finish: async (ok = true) => {
         if (ok) {
@@ -122,6 +134,25 @@ describe('PreviewStore', () => {
   afterEach(async () => {
     await store.shutdown()
     await rm(dir, { recursive: true, force: true })
+  })
+
+  it('volle Auflösung: eigene Schlüssel, Projektgröße und Bildgüte des Exports', async () => {
+    const small = store.plan(doc(4), sources)
+    expect(small).toMatchObject({ width: 960, height: 540, full: false })
+    await runs[0].finish()
+    const full = store.plan(doc(4), sources, 0, {}, { full: true })
+    expect(full).toMatchObject({ width: 1920, height: 1080, full: true })
+    expect(full.segments[0].key).not.toBe(small.segments[0].key)
+    expect(full.segments[0].state).toBe('rendering')
+    expect(runs).toHaveLength(2)
+    const crf = (args: string[]) => args[args.indexOf('-crf') + 1]
+    expect(crf(runs[0].args)).toBe('27')
+    expect(crf(runs[1].args)).toBe('18')
+    expect(runs[1].args.join(' ')).toContain('1920')
+    await runs[1].finish()
+    // Die kleine Fassung bleibt im Speicher: Zurückschalten rendert nichts neu.
+    expect(store.plan(doc(4), sources).segments[0].state).toBe('ready')
+    expect(runs).toHaveLength(2)
   })
 
   it('plant, rendert ab dem Abspielkopf und liefert fertige Abschnitte aus dem Speicher', async () => {

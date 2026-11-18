@@ -105,6 +105,35 @@ function toggleGrid(): void {
     // Gesperrter Speicher: Auswahl gilt nur für diese Sitzung.
   }
 }
+
+// --- Volle Auflösung (Vorschau in Projektgröße, wie die Ausgabedatei) --------
+
+const FULL_STORAGE_KEY = 'videoCutter.previewFull'
+
+function storedFull(): boolean {
+  try {
+    return localStorage.getItem(FULL_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Gewünscht: Vorschau in voller Auflösung. Normalfall ist die schnelle, kleine Vorschau. */
+const fullRes = ref(storedFull())
+/** Der Server kennt die volle Auflösung nicht (veraltetes Backend). */
+const fullUnsupported = ref(false)
+
+function toggleFull(): void {
+  fullRes.value = !fullRes.value
+  fullUnsupported.value = false
+  try {
+    localStorage.setItem(FULL_STORAGE_KEY, fullRes.value ? '1' : '0')
+  } catch {
+    // Gesperrter Speicher: Auswahl gilt nur für diese Sitzung.
+  }
+  schedulePlan(0)
+}
+
 const timeLabel = computed(
   () =>
     `${formatTimeMs(timeToSeconds(store.playhead))} / ${formatTimeMs(timeToSeconds(store.duration))}`,
@@ -168,6 +197,7 @@ async function requestPlan(): Promise<void> {
     return
   }
   const ctrl = (planCtrl = new AbortController())
+  const full = fullRes.value
   try {
     // Formen und Emojis zeichnet der Browser: Bilder vorab hochladen. Hat der
     // Server eines nicht mehr (Zwischenspeicher geleert), noch einmal.
@@ -175,6 +205,7 @@ async function requestPlan(): Promise<void> {
       await graphicImages.prepare(store.doc),
       store.playhead,
       ctrl.signal,
+      full,
     )
     for (let retry = 0; retry < 2 && plan.missingGraphics.length > 0; retry++) {
       if (ctrl.signal.aborted) return
@@ -183,10 +214,13 @@ async function requestPlan(): Promise<void> {
         await graphicImages.prepare(store.doc),
         store.playhead,
         ctrl.signal,
+        full,
       )
     }
     if (ctrl.signal.aborted || !engine) return
     problem.value = null
+    // Altes Backend übergeht den Wunsch und liefert weiter die kleine Vorschau.
+    fullUnsupported.value = full && !plan.full
     engine.setPlan(plan)
     engine.setPosition(store.playhead)
     refreshBuffered()
@@ -413,6 +447,20 @@ onBeforeUnmount(() => {
       >
         {{ t('timelinePreview.grid') }}
       </button>
+      <button
+        type="button"
+        class="grid-toggle"
+        :class="{ active: fullRes }"
+        :aria-pressed="fullRes"
+        data-testid="preview-full-toggle"
+        :title="t('timelinePreview.fullTitle')"
+        @click="toggleFull"
+      >
+        {{ t('timelinePreview.full') }}
+      </button>
+      <span v-if="fullUnsupported" class="full-note" role="status" data-testid="preview-full-note">
+        {{ t('timelinePreview.fullUnsupported') }}
+      </span>
       <span v-if="speedLabel" class="speed" data-testid="preview-speed">{{ speedLabel }}</span>
     </div>
   </section>
@@ -619,6 +667,11 @@ onBeforeUnmount(() => {
   outline: none;
   box-shadow: var(--ds-focus-ring);
 }
+.full-note {
+  font-size: 0.75rem;
+  color: var(--ds-danger, #c0392b);
+}
+
 .speed {
   margin-left: auto;
   font-size: var(--ds-text-xs, var(--ds-text-sm));
