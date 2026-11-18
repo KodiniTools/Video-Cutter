@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { followScroll } from '@/timeline/follow'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
 import MarkerEffect from './MarkerEffect.vue'
@@ -44,7 +45,7 @@ const store = useTimelineStore()
 
 /** Breite der Spalte mit den Spurnamen (px). */
 const HEADER_WIDTH = 150
-/** Freier Platz hinter dem letzten Clip (px). */
+/** Freier Platz hinter dem letzten Clip (px), mindestens. */
 const TAIL = 240
 const TRACK_HEIGHT: Record<TrackKind, number> = { video: 56, audio: 48, overlay: 48 }
 const ZOOM_STEP = 1.5
@@ -55,8 +56,15 @@ const scrollLeft = ref(0)
 let observer: ResizeObserver | null = null
 
 const laneViewport = computed(() => Math.max(100, viewportWidth.value - HEADER_WIDTH))
+// Hinter dem Ende bleibt eine halbe Ansicht frei, damit der Abspielkopf auch
+// dort in der Mitte stehen kann.
 const contentWidth = computed(() =>
-  Math.ceil(Math.max(timeToPx(store.duration, store.zoom) + TAIL, laneViewport.value)),
+  Math.ceil(
+    Math.max(
+      timeToPx(store.duration, store.zoom) + Math.max(TAIL, laneViewport.value / 2),
+      laneViewport.value,
+    ),
+  ),
 )
 const playheadLeft = computed(() => HEADER_WIDTH + timeToPx(store.playhead, store.zoom))
 
@@ -115,6 +123,27 @@ function onRulerMove(event: PointerEvent): void {
   // Nur bei gedrückter Haupttaste (Ziehen über das Lineal).
   if (event.buttons & 1) seekFromEvent(event)
 }
+
+// Die Timeline folgt dem Abspielkopf: beim Abspielen steht er in der Mitte,
+// pausiert bleibt die Ansicht stehen (siehe followScroll).
+watch(
+  () => [store.playhead, store.playing] as const,
+  () => {
+    const el = scroller.value
+    if (!el) return
+    const target = followScroll({
+      playheadPx: timeToPx(store.playhead, store.zoom),
+      viewport: laneViewport.value,
+      contentWidth: contentWidth.value,
+      scrollLeft: el.scrollLeft,
+      playing: store.playing,
+    })
+    if (target === null) return
+    el.scrollLeft = target
+    measure()
+  },
+  { flush: 'post' },
+)
 
 // --- Zoom ----------------------------------------------------------------------
 
