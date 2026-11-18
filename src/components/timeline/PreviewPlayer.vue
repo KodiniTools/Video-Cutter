@@ -190,11 +190,28 @@ watch(
   },
 )
 
+/** Drop-Effekte der Marker als Vergleichswert (Zeit + Effekt). */
+const effectsOf = new WeakMap<TimelineDoc, string>()
+function markerEffects(doc: TimelineDoc): string {
+  let key = effectsOf.get(doc)
+  if (key === undefined) {
+    key = JSON.stringify(doc.markers.filter((m) => m.effect).map((m) => [m.at, m.effect]))
+    effectsOf.set(doc, key)
+  }
+  return key
+}
+
 watch(
   () => store.doc,
   (next: TimelineDoc, prev: TimelineDoc) => {
-    // Nur angemeldete Medien geändert: Das Bild bleibt gleich.
-    if (next.tracks === prev.tracks && next.settings === prev.settings) return
+    // Nur angemeldete Medien, Marker-Namen o. Ä. geändert: Das Bild bleibt gleich.
+    // Drop-Effekte an Markern ändern das Bild (auch beim Verschieben).
+    if (
+      next.tracks === prev.tracks &&
+      next.settings === prev.settings &&
+      markerEffects(next) === markerEffects(prev)
+    )
+      return
     if (empty.value) store.playing = false
     schedulePlan()
   },

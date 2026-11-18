@@ -2,7 +2,16 @@ import type { Time, TimelineDoc } from './model'
 
 /** Warum der Export nicht verlustfrei geht. */
 export type LosslessBlocker =
-  'clips' | 'overlays' | 'speed' | 'crop' | 'color' | 'layout' | 'transition' | 'audio' | 'format'
+  | 'clips'
+  | 'overlays'
+  | 'speed'
+  | 'crop'
+  | 'color'
+  | 'layout'
+  | 'transition'
+  | 'effects'
+  | 'audio'
+  | 'format'
 
 export type LosslessCheck =
   | {
@@ -46,6 +55,7 @@ export function checkLossless(
   if (clip.color) return no('color')
   if (clip.layout) return no('layout')
   if (clip.transitionIn) return no('transition')
+  if (doc.markers.some((m) => m.effect)) return no('effects')
   const source = info(clip.asset)
   if (
     !source ||
