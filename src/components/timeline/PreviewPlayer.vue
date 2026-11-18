@@ -78,6 +78,33 @@ function nudge(dir: -1 | 1): void {
 }
 const frameSec = computed(() => 1 / store.doc.settings.fps)
 const aspect = computed(() => `${store.doc.settings.width} / ${store.doc.settings.height}`)
+/** Seitenverhältnis als Zahl: Die Bildfläche ist genau so breit, wie ihre Höhe erlaubt. */
+const ratio = computed(() => store.doc.settings.width / store.doc.settings.height || 16 / 9)
+/** Projektformat am Rahmen, z. B. „1080 × 1080“. */
+const formatLabel = computed(() => `${store.doc.settings.width} × ${store.doc.settings.height}`)
+
+// --- Raster (Drittel-Linien, nur Hilfe in der Vorschau – nie in der Datei) ---
+
+const GRID_STORAGE_KEY = 'videoCutter.previewGrid'
+
+function storedGrid(): boolean {
+  try {
+    return localStorage.getItem(GRID_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const showGrid = ref(storedGrid())
+
+function toggleGrid(): void {
+  showGrid.value = !showGrid.value
+  try {
+    localStorage.setItem(GRID_STORAGE_KEY, showGrid.value ? '1' : '0')
+  } catch {
+    // Gesperrter Speicher: Auswahl gilt nur für diese Sitzung.
+  }
+}
 const timeLabel = computed(
   () =>
     `${formatTimeMs(timeToSeconds(store.playhead))} / ${formatTimeMs(timeToSeconds(store.duration))}`,
@@ -293,19 +320,32 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="preview" data-testid="preview-player">
-    <div class="screen" :style="{ aspectRatio: aspect }">
-      <video
-        v-show="!empty"
-        ref="video"
-        playsinline
-        preload="auto"
-        data-testid="preview-video"
-        @click="store.togglePlay()"
-      />
-      <PositionFrame v-if="!empty && !problem" />
-      <p v-if="message" class="message" :class="{ over: !empty && !problem }" role="status">
-        {{ message }}
-      </p>
+    <div class="backdrop" data-testid="preview-backdrop">
+      <span v-if="!empty" class="format" data-testid="preview-format">{{ formatLabel }}</span>
+      <div
+        class="screen"
+        data-testid="preview-screen"
+        :style="{ aspectRatio: aspect, '--screen-ratio': String(ratio) }"
+      >
+        <video
+          v-show="!empty"
+          ref="video"
+          playsinline
+          preload="auto"
+          data-testid="preview-video"
+          @click="store.togglePlay()"
+        />
+        <PositionFrame v-if="!empty && !problem" />
+        <div v-if="showGrid && !empty" class="grid" aria-hidden="true" data-testid="preview-grid">
+          <i class="v" style="left: 33.333%"></i>
+          <i class="v" style="left: 66.667%"></i>
+          <i class="h" style="top: 33.333%"></i>
+          <i class="h" style="top: 66.667%"></i>
+        </div>
+        <p v-if="message" class="message" :class="{ over: !empty && !problem }" role="status">
+          {{ message }}
+        </p>
+      </div>
     </div>
     <div class="controls">
       <button
@@ -362,6 +402,17 @@ onBeforeUnmount(() => {
           +
         </button>
       </div>
+      <button
+        type="button"
+        class="grid-toggle"
+        :class="{ active: showGrid }"
+        :aria-pressed="showGrid"
+        data-testid="preview-grid-toggle"
+        :title="t('timelinePreview.gridTitle')"
+        @click="toggleGrid"
+      >
+        {{ t('timelinePreview.grid') }}
+      </button>
       <span v-if="speedLabel" class="speed" data-testid="preview-speed">{{ speedLabel }}</span>
     </div>
   </section>
@@ -374,15 +425,95 @@ onBeforeUnmount(() => {
   gap: var(--ds-space-2);
   min-width: 0;
 }
-.screen {
+/* Fläche um das Bild: zeigt, wo das gewählte Format endet (auch bei schwarzem
+   Hintergrund). Gehört nur zur Vorschau, nie zur Ausgabedatei. */
+.backdrop {
   position: relative;
-  width: 100%;
-  max-height: 60vh;
-  margin: 0 auto;
-  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  padding: var(--ds-space-3);
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-lg);
+  background-color: var(--ds-surface-2);
+  background-image:
+    linear-gradient(45deg, var(--ds-surface-3) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--ds-surface-3) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--ds-surface-3) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--ds-surface-3) 75%);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+}
+.format {
+  position: absolute;
+  top: var(--ds-space-1);
+  left: var(--ds-space-2);
+  z-index: 1;
+  padding: 0 var(--ds-space-1);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-1);
+  color: var(--ds-text-2);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  pointer-events: none;
+}
+/* Die Bildfläche hat genau das Seitenverhältnis des Formats: so breit wie
+   möglich, aber nie höher als --screen-max-h (keine schwarzen Ränder, die wie
+   Bildinhalt aussehen). Der Rahmen ist ein outline und nimmt dem Bild nichts. */
+.screen {
+  --screen-max-h: 60vh;
+  position: relative;
+  flex: none;
+  width: min(100%, calc(var(--screen-max-h) * var(--screen-ratio, 1.7778)));
+  overflow: hidden;
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 0;
   background: #000;
+}
+.grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.grid i {
+  position: absolute;
+  background: rgb(255 255 255 / 70%);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+}
+.grid .v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.grid .h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.grid-toggle {
+  height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm);
+  cursor: pointer;
+}
+.grid-toggle.active {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent);
+  color: var(--ds-on-accent);
+}
+.grid-toggle:hover:not(.active) {
+  border-color: var(--ds-accent);
+}
+.grid-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .screen video {
   display: block;

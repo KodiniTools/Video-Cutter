@@ -970,6 +970,9 @@ const messages = {
       pause: 'Pause',
       playTitle: 'Abspielen (Leertaste)',
       pauseTitle: 'Pause (Leertaste)',
+      grid: 'Raster',
+      gridTitle:
+        'Drittel-Linien über dem Bild ein- oder ausblenden. Rahmen und Raster sind nur Hilfen in der Vorschau und erscheinen nicht in der Ausgabedatei.',
       nudge: {
         label: 'Abspielkopf genau verschieben',
         backTitle: 'Abspielkopf {ms} ms zurück (nur bei pausierter Wiedergabe)',
@@ -2028,6 +2031,9 @@ const messages = {
       pause: 'Pause',
       playTitle: 'Play (space bar)',
       pauseTitle: 'Pause (space bar)',
+      grid: 'Grid',
+      gridTitle:
+        'Show or hide rule-of-thirds lines over the picture. Frame and grid are preview aids only and never appear in the exported file.',
       nudge: {
         label: 'Move the playhead precisely',
         backTitle: 'Move the playhead back {ms} ms (only while paused)',
