@@ -507,4 +507,69 @@ describe('Timeline-Store', () => {
     store.undo()
     expect(store.doc.tracks).toHaveLength(0)
   })
+
+  it('legt eine leere Ebene an, die Ziel für neue Texte und Grafiken wird', () => {
+    const store = useTimelineStore()
+    store.seek(s(1))
+    const first = store.addText({ text: 'Eins' }, s(4))
+    expect(store.doc.tracks.map((t) => t.name)).toEqual(['T1'])
+
+    // „+ Ebene“: leer, oben, als Ziel gewählt.
+    expect(store.newTrack('overlay')).toBe(true)
+    const layer = store.doc.tracks[0]
+    expect(layer).toMatchObject({ kind: 'overlay', name: 'E1', clips: [] })
+    expect(store.activeOverlayTarget).toBe(layer.id)
+
+    // Neuer Text kommt auf die Ziel-Ebene, nicht auf T1 (dort wäre ab 6 s frei).
+    store.seek(s(6))
+    const second = store.addText({ text: 'Zwei' }, s(2))
+    expect(store.doc.tracks[0].clips.map((c) => c.id)).toEqual([second])
+    // Auch Grafiken/Bilder.
+    store.seek(s(9))
+    const g = store.addGraphic({ kind: 'circle' }, s(1))
+    expect(store.doc.tracks[0].clips.map((c) => c.id)).toEqual([second, g])
+
+    // Ziel belegt: bisherige Regel (oberste freie Ebene, hier T1).
+    store.seek(s(6.5))
+    const third = store.addText({ text: 'Drei' }, s(1))
+    expect(store.doc.tracks[1].clips.map((c) => c.id)).toEqual([first, third])
+
+    // Ziel gesperrt: ebenfalls die bisherige Regel, nichts geht verloren.
+    store.updateTrack(layer.id, { locked: true })
+    store.seek(s(12))
+    const fourth = store.addText({ text: 'Vier' }, s(1))
+    expect(store.doc.tracks[1].clips.map((c) => c.id)).toContain(fourth)
+    store.updateTrack(layer.id, { locked: false })
+
+    // Aufheben und wieder setzen; Video-Spuren können kein Ziel sein.
+    store.setOverlayTarget(null)
+    expect(store.activeOverlayTarget).toBeNull()
+    store.newTrack('video')
+    store.setOverlayTarget(store.doc.tracks[0].id)
+    expect(store.activeOverlayTarget).toBeNull()
+    store.setOverlayTarget(layer.id)
+    expect(store.activeOverlayTarget).toBe(layer.id)
+  })
+
+  it('Ziel-Ebene verfällt mit Rückgängig und „Leere Spuren löschen“', () => {
+    const store = useTimelineStore()
+    store.newTrack('overlay')
+    const id = store.doc.tracks[0].id
+    expect(store.activeOverlayTarget).toBe(id)
+    store.undo()
+    expect(store.doc.tracks).toHaveLength(0)
+    expect(store.activeOverlayTarget).toBeNull()
+    // Ohne Ziel: Text wie bisher auf eine neue Spur T1.
+    expect(store.addText({ text: 'x' }, s(1))).not.toBeNull()
+    expect(store.doc.tracks.map((t) => t.name)).toEqual(['T1'])
+    store.redo()
+
+    store.newTrack('overlay')
+    expect(store.removeEmptyTracks()).toBe(true)
+    expect(store.activeOverlayTarget).toBeNull()
+    expect(store.doc.tracks.map((t) => t.name)).toEqual(['T1'])
+    // Rückgängig holt die leere Ebene samt Ziel zurück (gleiche ID).
+    store.undo()
+    expect(store.activeOverlayTarget).toBe(store.doc.tracks[0].id)
+  })
 })

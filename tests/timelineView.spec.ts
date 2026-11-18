@@ -259,6 +259,19 @@ describe('Timeline-Ansicht', () => {
     await wrapper.get('[data-testid=timeline-add-video]').trigger('click')
     await wrapper.get('[data-testid=timeline-add-audio]').trigger('click')
     expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
+    // „+ Ebene“: leere Ebene oben, als Ziel markiert; 🎯 hebt das Ziel auf.
+    await wrapper.get('[data-testid=timeline-add-overlay]').trigger('click')
+    expect(names()).toEqual(['E1', 'V2', 'V1', 'A1', 'A2'])
+    const target = () => wrapper.findAll('.track')[0].get('[data-action=target]')
+    expect(target().attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findAll('.track')[0].attributes('data-target')).toBe('true')
+    await target().trigger('click')
+    expect(store.activeOverlayTarget).toBeNull()
+    expect(target().attributes('aria-pressed')).toBe('false')
+    expect(wrapper.findAll('.track')[1].find('[data-action=target]').exists()).toBe(false)
+    store.undo()
+    await nextTick()
+    expect(names()).toEqual(['V2', 'V1', 'A1', 'A2'])
 
     // Umbenennen per Doppelklick; Esc verwirft, Enter übernimmt.
     const first = () => wrapper.findAll('.track')[0]

@@ -680,6 +680,15 @@ function onKeydown(event: KeyboardEvent): void {
       <button
         type="button"
         class="tool wide"
+        data-testid="timeline-add-overlay"
+        :title="t('timeline.addOverlayTrackTitle')"
+        @click="run(() => store.newTrack('overlay'))"
+      >
+        {{ t('timeline.addOverlayTrack') }}
+      </button>
+      <button
+        type="button"
+        class="tool wide"
         data-testid="timeline-remove-empty"
         :disabled="emptyTracks === 0"
         :title="t('timeline.removeEmptyTracksTitle')"
@@ -976,6 +985,7 @@ function onKeydown(event: KeyboardEvent): void {
           :data-track="track.id"
           :data-locked="track.locked"
           :data-off="track.kind === 'audio' ? track.muted : track.hidden"
+          :data-target="store.activeOverlayTarget === track.id"
           :style="{ height: `${TRACK_HEIGHT[track.kind]}px` }"
         >
           <div class="head" :style="{ width: `${HEADER_WIDTH}px` }">
@@ -983,6 +993,10 @@ function onKeydown(event: KeyboardEvent): void {
               :track="track"
               :can-move-up="index > 0"
               :can-move-down="index < store.doc.tracks.length - 1"
+              :is-target="store.activeOverlayTarget === track.id"
+              @target="
+                store.setOverlayTarget(store.activeOverlayTarget === track.id ? null : track.id)
+              "
               @update="(patch) => run(() => store.updateTrack(track.id, patch))"
               @move="(delta) => run(() => store.moveTrack(track.id, index + delta))"
               @remove="run(() => store.removeTrack(track.id))"
@@ -1139,6 +1153,10 @@ function onKeydown(event: KeyboardEvent): void {
 }
 .track[data-off='true'] .lane {
   opacity: 0.45;
+}
+/* Ziel-Ebene für neue Texte, Formen und Bilder. */
+.track[data-target='true'] .head {
+  box-shadow: inset 3px 0 0 var(--ds-accent);
 }
 /* Bleibt oben stehen, wenn viele Spuren in der Höhe scrollen. */
 .ruler-row {
