@@ -300,7 +300,7 @@ describe('Medienliste (Komponente)', () => {
     )
     await flushPromises()
     expect(wrapper.get('.item').attributes('data-kind')).toBe('audio')
-    expect(wrapper.get('.thumb').text()).toBe('♪')
+    expect(wrapper.get('.thumb').text()).toContain('♪')
     expect(wrapper.text()).toContain('0:30 · Tondatei')
     expect(wrapper.text()).toContain('Bereit')
     expect(timeline.doc.assets.m1).toMatchObject({ kind: 'audio', hasAudio: true })
@@ -408,7 +408,7 @@ describe('Medienliste (Komponente)', () => {
     expect(wrapper.get('video').attributes('src')).toContain('/api/media/m1/file')
   })
 
-  it('zeigt bei Tondateien kein abspielbares Vorschaubild', async () => {
+  it('spielt Tondateien per Klick ab, nicht beim Überfahren', async () => {
     ensureDerived.mockResolvedValue(status('ready', 'unavailable', 'unavailable'))
     const wrapper = mountPool()
     const pool = useMediaPoolStore()
@@ -417,6 +417,24 @@ describe('Medienliste (Komponente)', () => {
       media({ name: 'lied.mp3', width: 0, height: 0, fps: 0, duration: 30, kind: 'audio' }),
     )
     await flushPromises()
-    expect(wrapper.find('[data-testid=media-pool-thumb]').exists()).toBe(false)
+    const thumb = wrapper.get('[data-testid=media-pool-thumb]')
+    expect(thumb.attributes('aria-label')).toBe('lied.mp3 anhören')
+
+    await thumb.trigger('mouseenter')
+    expect(wrapper.find('audio').exists()).toBe(false)
+
+    await thumb.trigger('click')
+    expect(wrapper.get('audio').attributes('src')).toContain('/api/media/m1/file')
+    expect(wrapper.find('video').exists()).toBe(false)
+    expect(thumb.attributes('aria-label')).toBe('lied.mp3 anhalten')
+    await thumb.trigger('mouseleave')
+    expect(wrapper.find('audio').exists()).toBe(true)
+
+    await thumb.trigger('click')
+    expect(wrapper.find('audio').exists()).toBe(false)
+
+    await thumb.trigger('click')
+    await wrapper.get('audio').trigger('ended')
+    expect(wrapper.find('audio').exists()).toBe(false)
   })
 })
