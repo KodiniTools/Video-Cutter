@@ -1122,6 +1122,12 @@ const messages = {
       back: 'Zum bisherigen Editor',
       open: 'Zum neuen Editor',
     },
+    fullscreen: {
+      enter: 'Vollbild',
+      exit: 'Vollbild beenden',
+      enterTitle: 'Editor im Vollbild anzeigen und weiter bearbeiten',
+      exitTitle: 'Vollbild beenden (Esc)',
+    },
   },
   en: {
     app: {
@@ -2219,6 +2225,12 @@ const messages = {
       title: 'Video editor',
       back: 'Open the classic editor',
       open: 'Open the new editor',
+    },
+    fullscreen: {
+      enter: 'Full screen',
+      exit: 'Exit full screen',
+      enterTitle: 'Show the editor in full screen and keep editing',
+      exitTitle: 'Exit full screen (Esc)',
     },
   },
 } as const

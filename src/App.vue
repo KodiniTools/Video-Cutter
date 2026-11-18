@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import { useFullscreen } from '@/composables/useFullscreen'
 import { useSettingsStore } from '@/stores/settings'
 
 // Settings-Store früh initialisieren: Theme-Watcher und Listener der globalen
@@ -9,10 +11,18 @@ useSettingsStore()
 
 const { t } = useI18n()
 const route = useRoute()
+
+// Vollbild für die ganze App (Kopfzeile + Editor); Esc oder der Knopf beenden es.
+const shell = ref<HTMLElement | null>(null)
+const {
+  supported: fullscreenSupported,
+  active: isFullscreen,
+  toggle: toggleFullscreen,
+} = useFullscreen(shell)
 </script>
 
 <template>
-  <div class="shell">
+  <div ref="shell" class="shell" :class="{ 'is-fullscreen': isFullscreen }">
     <header class="topbar">
       <div class="brand">
         <span class="logo" aria-hidden="true">✂</span>
@@ -21,21 +31,35 @@ const route = useRoute()
           <p data-slot="app.subtitle">{{ t('app.subtitle') }}</p>
         </div>
       </div>
-      <RouterLink
-        v-if="route.name === 'classic'"
-        class="beta-link"
-        :to="{ name: 'timeline' }"
-        data-testid="open-timeline-editor"
-      >
-        {{ t('timelineEditor.open') }}
-      </RouterLink>
+      <span class="top-actions">
+        <RouterLink
+          v-if="route.name === 'classic'"
+          class="beta-link"
+          :to="{ name: 'timeline' }"
+          data-testid="open-timeline-editor"
+        >
+          {{ t('timelineEditor.open') }}
+        </RouterLink>
+        <button
+          v-if="fullscreenSupported"
+          type="button"
+          class="beta-link fullscreen-btn"
+          data-testid="toggle-fullscreen"
+          :aria-pressed="isFullscreen"
+          :title="isFullscreen ? t('fullscreen.exitTitle') : t('fullscreen.enterTitle')"
+          @click="toggleFullscreen"
+        >
+          <span aria-hidden="true">⛶</span>
+          {{ isFullscreen ? t('fullscreen.exit') : t('fullscreen.enter') }}
+        </button>
+      </span>
     </header>
 
     <main class="content">
       <RouterView />
     </main>
 
-    <footer class="footer" data-slot="footer">{{ t('footer') }}</footer>
+    <footer v-if="!isFullscreen" class="footer" data-slot="footer">{{ t('footer') }}</footer>
   </div>
 </template>
 
@@ -54,6 +78,38 @@ const route = useRoute()
   .shell {
     max-width: 1600px;
   }
+}
+/* Vollbild: die ganze Bildschirmfläche nutzen. Die Website-Navigation liegt
+   außerhalb und ist nicht zu sehen, also klebt der Arbeitsbereich ganz oben
+   (--site-nav-offset 0). Das Vollbild-Element ist selbst der Scroll-Container. */
+.shell.is-fullscreen,
+.shell:fullscreen {
+  --site-nav-offset: 0px;
+  max-width: none;
+  margin: 0;
+  padding: var(--ds-space-3) var(--ds-space-5) var(--ds-space-4);
+  overflow-y: auto;
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+}
+.shell::backdrop {
+  background: var(--ds-surface-0);
+}
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--ds-space-3);
+}
+.fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.fullscreen-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .topbar {
   display: flex;
