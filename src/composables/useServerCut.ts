@@ -4,7 +4,7 @@ import type { CutOperation, CropRect } from '@/stores/videoEditor'
 import { API_BASE } from '@/lib/apiBase'
 import { fallbackErrorMessage, retryAfterOf } from '@/lib/httpError'
 import { fetchMediaFile, fetchMediaInfo, MEDIA_UNSUPPORTED, type MediaView } from '@/lib/mediaApi'
-import { animSpeedOf, type TextOverlayData } from '@/lib/textOverlay'
+import { animSpeedOf, needsAnimations2, type TextOverlayData } from '@/lib/textOverlay'
 import { hasMotion, type ServerGraphic } from '@/lib/graphicOverlay'
 import type { AudioFadeInput } from '@/lib/audioFade'
 
@@ -51,6 +51,8 @@ export const GRAPHICS_UNSUPPORTED = 'GRAPHICS_UNSUPPORTED'
 export const GRAPHIC_MOTION_UNSUPPORTED = 'GRAPHIC_MOTION_UNSUPPORTED'
 /** Backend kennt das Tempo von Animationen (Texte/Grafiken) noch nicht. */
 export const ANIM_SPEED_UNSUPPORTED = 'ANIM_SPEED_UNSUPPORTED'
+/** Backend kennt die erweiterten Animationen (neue Arten, Tempo unter 0,25×) noch nicht. */
+export const ANIMATIONS_UNSUPPORTED = 'ANIMATIONS_UNSUPPORTED'
 
 /** Antwort von POST /api/cut. `crop`/`append` fehlen bei alten Backends. */
 export interface JobStartResponse {
@@ -758,7 +760,7 @@ async function mutedCopy(mediaId: string, duration: number): Promise<Blob> {
  */
 async function backendSupportsGraphics(
   signal?: AbortSignal,
-  feature: 'graphics' | 'graphicMotion' | 'animSpeed' = 'graphics',
+  feature: 'graphics' | 'graphicMotion' | 'animSpeed' | 'animations2' = 'graphics',
 ): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/api/health`, { signal })
@@ -797,6 +799,14 @@ export async function startTextJob(
   const speed = [...texts, ...graphics].some((o) => animSpeedOf(o) !== 1)
   if (speed && !(await backendSupportsGraphics(signal, 'animSpeed'))) {
     throw new Error(ANIM_SPEED_UNSUPPORTED)
+  }
+  // Neue Animationen / Tempo unter 0,25×: ein altes Backend lehnt sie ab bzw.
+  // hebt das Tempo stillschweigend auf 0,25× an – vorher klar melden.
+  if (
+    [...texts, ...graphics].some(needsAnimations2) &&
+    !(await backendSupportsGraphics(signal, 'animations2'))
+  ) {
+    throw new Error(ANIMATIONS_UNSUPPORTED)
   }
   const res = await fetch(`${API_BASE}/api/text`, {
     method: 'POST',

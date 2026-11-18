@@ -1,5 +1,5 @@
 import { ValidationError } from './validate'
-import { fadeMs, moveMs, parseAnimSpeed, SLIDE_OFFSET } from './textOverlay'
+import { fadeMs, moveMs, parseAnimSpeed, SLIDE_OFFSET, slideVector, ZOOM_FROM } from './textOverlay'
 
 /**
  * Grafik-Einblendungen (Formen, Linien, Pfeile, Symbole, Emojis, Bilder).
@@ -12,7 +12,18 @@ import { fadeMs, moveMs, parseAnimSpeed, SLIDE_OFFSET } from './textOverlay'
  * brauchen auf dem Server keine eigene Emoji-Schrift.
  */
 
-export const GRAPHIC_ANIMATIONS = ['none', 'fade', 'slide', 'pop'] as const
+export const GRAPHIC_ANIMATIONS = [
+  'none',
+  'fade',
+  'fadeIn',
+  'fadeOut',
+  'slide',
+  'slideTop',
+  'slideLeft',
+  'slideRight',
+  'zoom',
+  'pop',
+] as const
 export type GraphicAnimation = (typeof GRAPHIC_ANIMATIONS)[number]
 
 /**
@@ -233,6 +244,10 @@ export function graphicFilter(
   const u = `(t-${st})`
   const src = [`[${inputIndex}:v]format=rgba`, ...pre]
   let fadeIn = 0
+  /** Ausblendzeit am Ende (s); 0 = hartes Ende. */
+  let fadeOut = g.animation === 'none' ? 0 : f
+  /** Zusätzlicher x-Versatz in px (Ausdruck) – Hereingleiten von links/rechts. */
+  const xParts: string[] = []
   /** Zusätzlicher y-Versatz in px (Ausdruck) – Hereingleiten/Schweben. */
   const yParts: string[] = []
   /** Skalierungsfaktoren (Ausdrücke) – Aufploppen/Pulsieren. */
@@ -243,10 +258,29 @@ export function graphicFilter(
     case 'fade':
       fadeIn = f
       break
-    case 'slide': {
+    case 'fadeIn':
+      fadeIn = f
+      fadeOut = 0
+      break
+    case 'fadeOut':
+      break
+    case 'slide':
+    case 'slideTop':
+    case 'slideLeft':
+    case 'slideRight': {
       fadeIn = m
-      const dy = Math.round(SLIDE_OFFSET * frameH)
-      if (m > 0) yParts.push(`${dy}*max(0,1-${u}/${f3(m)})`)
+      // Gleicher Weg in px für alle Richtungen (Anteil der Bildhöhe).
+      const d = Math.round(SLIDE_OFFSET * frameH)
+      const [dx, dy] = slideVector(g.animation)
+      const rest = `max(0,1-${u}/${f3(m)})`
+      if (m > 0 && dx !== 0) xParts.push(`${dx * d}*${rest}`)
+      if (m > 0 && dy !== 0) yParts.push(`${dy * d}*${rest}`)
+      break
+    }
+    case 'zoom': {
+      fadeIn = Math.round(m * 500) / 1000
+      // Linear von ZOOM_FROM auf 1 (bis m), wie libass \\t.
+      if (m > 0) scales.push(`(1+${f3(ZOOM_FROM - 1)}*max(0,1-${u}/${f3(m)}))`)
       break
     }
     case 'pop': {
@@ -297,7 +331,7 @@ export function graphicFilter(
   }
   if (g.animation !== 'none') {
     if (fadeIn > 0) src.push(`fade=t=in:st=${st}:d=${f3(fadeIn)}:alpha=1`)
-    if (f > 0) src.push(`fade=t=out:st=${f3(g.end - f)}:d=${f3(f)}:alpha=1`)
+    if (fadeOut > 0) src.push(`fade=t=out:st=${f3(g.end - fadeOut)}:d=${f3(fadeOut)}:alpha=1`)
   }
   // Drehen/Skalieren nur rund um den sichtbaren Bereich – sonst liefe es für
   // jedes Bild des ganzen Videos (große Fotos: spürbar langsamer). Außerhalb
@@ -318,22 +352,24 @@ export function graphicFilter(
     const s = `if(${live},${scales.join('*')},1)`
     src.push(`scale=w='max(1,trunc(iw*${s}))':h='max(1,trunc(ih*${s}))':eval=frame`)
   }
-  const extraY = yParts.map((p) => (p.startsWith('-') ? p : `+${p}`)).join('')
+  const signed = (parts: string[]) => parts.map((p) => (p.startsWith('-') ? p : `+${p}`)).join('')
+  const extraX = signed(xParts)
+  const extraY = signed(yParts)
   let x: string
   let y: string
   if (g.motion) {
     // Mitte je Bild aus den Keyframes; bei wechselnder Größe über overlay_w/h.
     const halfW = scales.length ? 'overlay_w/2' : f3(w / 2)
     const halfH = scales.length ? 'overlay_h/2' : f3(h / 2)
-    x = `'round((${g.motion.x})*${frameW}-${halfW})'`
+    x = `'round((${g.motion.x})*${frameW}-${halfW}${extraX})'`
     y = `'round((${g.motion.y})*${frameH}-${halfH}${extraY})'`
   } else if (scales.length) {
     // Größe ändert sich je Bild: Mittelpunkt über die aktuelle Grafikgröße.
-    x = `'${f3(g.x * frameW)}-overlay_w/2'`
+    x = `'${f3(g.x * frameW)}-overlay_w/2${extraX}'`
     y = `'${f3(g.y * frameH)}-overlay_h/2${extraY}'`
   } else {
     const { left, top } = graphicTopLeft({ ...g, width: w, height: h }, frameW, frameH)
-    x = String(left)
+    x = extraX ? `'${left}${extraX}'` : String(left)
     y = extraY ? `'${top}${extraY}'` : String(top)
   }
   const gLabel = `[g${inputIndex}]`

@@ -138,6 +138,27 @@ describe('Grafik-Filter', () => {
     expect(f).toContain('fade=t=in:st=1:d=0.5:alpha=1')
   })
 
+  it('nur ein-/ausblenden', () => {
+    const fin = graphicFilter({ ...g!, animation: 'fadeIn' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(fin).toContain('fade=t=in:st=1:d=0.4:alpha=1')
+    expect(fin).not.toContain('fade=t=out')
+    const fout = graphicFilter({ ...g!, animation: 'fadeOut' }, 1, '[0:v]', '[v1]', 640, 360)
+    expect(fout).not.toContain('fade=t=in')
+    expect(fout).toContain('fade=t=out:st=2.6:d=0.4:alpha=1')
+  })
+
+  it('hereingleiten von oben, links und rechts; heranzoomen', () => {
+    const f = (animation: 'slideTop' | 'slideLeft' | 'slideRight' | 'zoom') =>
+      graphicFilter({ ...g!, animation }, 2, '[v1]', '[v2]', 640, 360)
+    expect(f('slideTop')).toContain("x=300:y='170-22*max(0,1-(t-1)/0.5)'")
+    expect(f('slideLeft')).toContain("x='300-22*max(0,1-(t-1)/0.5)':y=170")
+    expect(f('slideRight')).toContain("x='300+22*max(0,1-(t-1)/0.5)':y=170")
+    const zoom = f('zoom')
+    expect(zoom).toContain('fade=t=in:st=1:d=0.25:alpha=1')
+    expect(zoom).toContain('(1+0.6*max(0,1-(t-1)/0.5))')
+    expect(zoom).toContain('overlay_w/2')
+  })
+
   it('none: kein fade', () => {
     expect(graphicFilter({ ...g!, animation: 'none' }, 1, '[0:v]', '[v1]', 640, 360)).not.toContain(
       'fade',
