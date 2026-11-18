@@ -219,6 +219,29 @@ function toggleMark(id: number, checked: boolean): void {
   ai.setSuggestionChecked(id, !checked)
 }
 
+/** Highlights (kurzer Clip), die auf diesem Clip liegen; angehakt = kommt in den Short. */
+const highlightMarks = computed(() => {
+  const marks = ai.highlightMarks
+  if (!marks.clipIds.includes(props.clip.id)) return []
+  return marks.items.flatMap((m) => {
+    const pos = rangeOnClip(props.clip, m)
+    if (!pos) return []
+    return [
+      {
+        id: m.id,
+        checked: m.checked,
+        style: { left: `${pos.left}%`, width: `${pos.width}%` },
+        title: t('timeline.ai.highlights.mark', { title: m.title }),
+      },
+    ]
+  })
+})
+
+function toggleHighlight(id: number, checked: boolean): void {
+  if (ai.running) return
+  ai.setHighlightChecked(id, !checked)
+}
+
 /** Übergang am Anfang: Marke so breit wie der Teil, der in diesem Clip liegt. */
 const transition = computed(() => {
   const clip = props.clip
@@ -297,6 +320,18 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       data-testid="clip-cut-mark"
       @pointerdown.stop
       @click.stop="toggleMark(mark.id, mark.checked)"
+    ></span>
+    <span
+      v-for="mark in highlightMarks"
+      :key="`hl-${mark.id}`"
+      class="highlight-mark"
+      :class="{ off: !mark.checked }"
+      :data-highlight="mark.id"
+      :style="mark.style"
+      :title="mark.title"
+      data-testid="clip-highlight-mark"
+      @pointerdown.stop
+      @click.stop="toggleHighlight(mark.id, mark.checked)"
     ></span>
     <span
       v-if="transition"
@@ -458,6 +493,26 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
 }
 .cut-mark:hover {
   outline: 2px solid var(--ds-danger, #b3261e);
+  outline-offset: -2px;
+}
+/* Highlight für den kurzen Clip: grün = kommt hinein, gestrichelt = abgewählt. */
+.highlight-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  min-width: 3px;
+  box-sizing: border-box;
+  border-inline: 2px solid var(--ds-success, #2e7d32);
+  background: color-mix(in srgb, var(--ds-success, #2e7d32) 35%, transparent);
+  cursor: pointer;
+}
+.highlight-mark.off {
+  border: 1px dashed var(--ds-success, #2e7d32);
+  background: none;
+}
+.highlight-mark:hover {
+  outline: 2px solid var(--ds-success, #2e7d32);
   outline-offset: -2px;
 }
 .layout-key {

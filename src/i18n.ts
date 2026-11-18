@@ -513,6 +513,7 @@ const messages = {
         subtitles: 'Claude schreibt Untertitel …',
         cuts: 'Claude sucht Schnittstellen …',
         translate: 'Claude übersetzt die Texte …',
+        highlights: 'Claude sucht die besten Stellen …',
       },
       translate: 'Texte übersetzen',
       translateCount: 'Alle {n} Texte übersetzen',
@@ -905,6 +906,37 @@ const messages = {
         markUnchecked: 'bleibt drin (Klick: herausschneiden)',
         cutsAppliedPartly:
           '{n} Bereiche herausgeschnitten, {m} lagen nicht mehr im Clip und wurden ausgelassen.',
+        highlights: {
+          title: 'Highlights als kurzer Clip',
+          hint: 'Claude wählt aus dem Gesprochenen des markierten Clips die besten Stellen für einen Short (Reels, TikTok, YouTube Shorts). Du prüfst sie und übernimmst sie als neuen, kurzen Clip.',
+          target: 'Ziel-Länge (s)',
+          find: 'Beste Stellen finden',
+          refind: 'Neu suchen',
+          none: 'Keine passenden Stellen gefunden.',
+          found: 'Gefundene Stellen: {n}. Alle sind angehakt.',
+          needVideo: 'Für einen kurzen Clip braucht es einen Video-Clip mit Bild.',
+          total: 'Angehakt: {n}, zusammen {s}',
+          outside: 'Ziel: 30–60 s',
+          score: 'Bewertung {n} von 10',
+          play: 'Ansehen: diese Stelle von Anfang bis Ende abspielen',
+          playAll: '▶ Alle angehakten hintereinander ansehen',
+          stop: '■ Anhalten',
+          reviewHint:
+            'Die Stellen sind auf dem Clip grün markiert. Ein Klick auf eine Markierung hakt sie an oder ab, ein Klick auf den Titel setzt den Abspielkopf dorthin.',
+          format: 'Format',
+          formats: {
+            '9:16': 'Hochformat 9:16 (1080 × 1920)',
+            '1:1': 'Quadrat 1:1 (1080 × 1080)',
+            '4:5': 'Hochformat 4:5 (1080 × 1350)',
+            keep: 'Format beibehalten',
+          },
+          apply: 'Als kurzen Clip übernehmen ({n})',
+          applyHint:
+            'Ersetzt die Timeline durch die angehakten Stellen hintereinander, im gewählten Format mittig zugeschnitten. Texte, andere Spuren und Marker fallen weg. Mit Rückgängig kommt die alte Timeline zurück. Ein geöffnetes Projekt bleibt unverändert: Den kurzen Clip speicherst du als neues Projekt.',
+          applied:
+            'Kurzer Clip erstellt: {s}, Stellen: {n}. Den Bildausschnitt jeder Stelle kannst du im Feld „Clip“ unter „Zuschneiden“ verschieben.',
+          mark: 'Highlight: {title}',
+        },
       },
       textDefault: {
         title: 'Text-Standard',
@@ -1677,6 +1709,7 @@ const messages = {
         subtitles: 'Claude is writing subtitles …',
         cuts: 'Claude is looking for cuts …',
         translate: 'Claude is translating the texts …',
+        highlights: 'Claude is picking the best moments …',
       },
       translate: 'Translate texts',
       translateCount: 'Translate all {n} texts',
@@ -2059,6 +2092,37 @@ const messages = {
         markUnchecked: 'stays in (click: cut out)',
         cutsAppliedPartly:
           '{n} ranges cut out, {m} were no longer inside the clip and were skipped.',
+        highlights: {
+          title: 'Highlights as a short clip',
+          hint: 'Claude picks the best moments from the speech of the selected clip for a short (Reels, TikTok, YouTube Shorts). You review them and turn them into a new short clip.',
+          target: 'Target length (s)',
+          find: 'Find best moments',
+          refind: 'Search again',
+          none: 'No suitable moments found.',
+          found: 'Moments found: {n}. All are checked.',
+          needVideo: 'A short clip needs a video clip with a picture.',
+          total: 'Checked: {n}, {s} in total',
+          outside: 'Goal: 30–60 s',
+          score: 'Rating {n} of 10',
+          play: 'Watch: play this moment from start to end',
+          playAll: '▶ Watch all checked one after another',
+          stop: '■ Stop',
+          reviewHint:
+            'The moments are marked green on the clip. Click a mark to check or uncheck it, click a title to move the playhead there.',
+          format: 'Format',
+          formats: {
+            '9:16': 'Portrait 9:16 (1080 × 1920)',
+            '1:1': 'Square 1:1 (1080 × 1080)',
+            '4:5': 'Portrait 4:5 (1080 × 1350)',
+            keep: 'Keep format',
+          },
+          apply: 'Create short clip ({n})',
+          applyHint:
+            'Replaces the timeline with the checked moments one after another, in the chosen format, cropped to the centre. Texts, other tracks and markers are dropped. Undo brings the old timeline back. An opened project stays unchanged: save the short clip as a new project.',
+          applied:
+            'Short clip created: {s}, moments: {n}. You can move the crop of each moment under “Crop” in the “Clip” panel.',
+          mark: 'Highlight: {title}',
+        },
       },
       textDefault: {
         title: 'Text default',

@@ -689,3 +689,139 @@ export async function createVideoPrompt(
   )
   return { prompt: parseImagePrompt(raw) }
 }
+
+// --- Highlights für einen kurzen Clip (Short) ----------------------------------------
+
+/** Ziel-Länge des Shorts in Sekunden (Grenzen). */
+export const MIN_HIGHLIGHT_TARGET = 15
+export const MAX_HIGHLIGHT_TARGET = 90
+export const DEFAULT_HIGHLIGHT_TARGET = 45
+/** So viele Stellen werden höchstens vorgeschlagen. */
+export const MAX_HIGHLIGHTS = 12
+
+export interface Highlight {
+  /** Sekunden der Quelldatei. */
+  start: number
+  end: number
+  /** Kurzer Titel (Sprache des Transkripts). */
+  title: string
+  /** Warum die Stelle stark ist. */
+  reason: string
+  /** Bewertung 1–10 (10 = beste Stelle). */
+  score: number
+}
+
+function highlightTask(target: number): string {
+  return `Pick the best moments of this video for a vertical short (TikTok, Instagram Reels, YouTube Shorts) of about ${target} seconds in total.
+
+Rules:
+- Each highlight covers a contiguous word range "from".."to" (indices) that starts and ends at a sentence or clause boundary, so it is understandable on its own when cut out.
+- Prefer strong statements, key insights, surprising or emotional moments, punchlines and clear tips. Avoid greetings, filler, and passages that only make sense with earlier context.
+- Usually 2 to 6 highlights, each about 3 to 20 seconds long. Together they should add up to about ${target} seconds (at most ${Math.round(target * 1.2)} seconds). The highlights are joined in chronological order, so together they should still make sense.
+- Highlights do not overlap.
+- "title": a short catchy title (max. 6 words), "reason": why this moment is strong (max. 15 words), both in the language of the transcript. "score": 1 to 10, 10 for the strongest moment.
+- Return an empty list if there is no usable speech.`
+}
+
+const HIGHLIGHT_SCHEMA = {
+  type: 'object',
+  properties: {
+    highlights: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          from: { type: 'integer' },
+          to: { type: 'integer' },
+          title: { type: 'string' },
+          reason: { type: 'string' },
+          score: { type: 'integer' },
+        },
+        required: ['from', 'to', 'title', 'reason', 'score'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['highlights'],
+  additionalProperties: false,
+}
+
+/**
+ * Baut Highlights aus Claudes Antwort: Zeiten aus den Wort-Indizes, etwas Luft
+ * vor dem ersten und nach dem letzten Wort (höchstens bis zur Mitte der Lücke),
+ * innerhalb von [rangeStart, rangeEnd], chronologisch, ohne Überlappung.
+ */
+export function buildHighlights(
+  words: Word[],
+  raw: unknown,
+  rangeStart: number,
+  rangeEnd: number,
+  maxCount = MAX_HIGHLIGHTS,
+): Highlight[] {
+  const list = isRecord(raw) && Array.isArray(raw.highlights) ? raw.highlights : []
+  const LEAD = 0.2
+  const TAIL = 0.35
+  const items: Highlight[] = []
+  for (const h of list.filter(isRecord)) {
+    const from = intOr(h.from, -1)
+    const to = intOr(h.to, -1)
+    if (from < 0 || to < from || to >= words.length) continue
+    // Luft höchstens bis zur Mitte der Lücke zum Nachbarwort: So überlappen
+    // sich direkt aufeinanderfolgende Stellen nicht.
+    const prevEnd = from > 0 ? (words[from - 1].end + words[from].start) / 2 : rangeStart
+    const nextStart = to + 1 < words.length ? (words[to].end + words[to + 1].start) / 2 : rangeEnd
+    const start = Math.max(rangeStart, prevEnd, words[from].start - LEAD)
+    const end = Math.min(rangeEnd, nextStart, words[to].end + TAIL)
+    if (end - start < 0.5) continue
+    const text = (v: unknown, max: number) =>
+      typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : ''
+    items.push({
+      start: round3(start),
+      end: round3(end),
+      title: text(h.title, 80),
+      reason: text(h.reason, 200),
+      score: Math.min(10, Math.max(1, intOr(h.score, 5))),
+    })
+  }
+  items.sort((a, b) => a.start - b.start)
+  const out: Highlight[] = []
+  for (const h of items) {
+    const prev = out[out.length - 1]
+    if (prev && h.start < prev.end) {
+      // Überlappung: die besser bewertete Stelle behalten.
+      if (h.score > prev.score) out[out.length - 1] = h
+      continue
+    }
+    out.push(h)
+  }
+  if (out.length <= maxCount) return out
+  // Zu viele: die besten behalten, wieder chronologisch.
+  return out
+    .slice()
+    .sort((a, b) => b.score - a.score || a.start - b.start)
+    .slice(0, maxCount)
+    .sort((a, b) => a.start - b.start)
+}
+
+/**
+ * Highlights im Bereich [rangeStart, rangeEnd] (Sekunden der Quelle, z. B. der
+ * verwendete Teil eines Clips). Claude sieht nur die Wörter darin.
+ */
+export async function createHighlights(
+  allWords: Word[],
+  target: number,
+  rangeStart: number,
+  rangeEnd: number,
+  signal: AbortSignal,
+): Promise<Highlight[]> {
+  const words = allWords.filter((w) => w.start >= rangeStart - 0.05 && w.end <= rangeEnd + 0.05)
+  if (words.length < 3) return []
+  const raw = await askClaudeWith(
+    SYSTEM,
+    `<transcript>\n${formatWords(words)}\n</transcript>`,
+    highlightTask(target),
+    HIGHLIGHT_SCHEMA,
+    signal,
+  )
+  return buildHighlights(words, raw, rangeStart, rangeEnd)
+}

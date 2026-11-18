@@ -23,6 +23,10 @@ import {
   claudeReady,
   IMAGE_STYLES,
   createCutSuggestions,
+  createHighlights,
+  DEFAULT_HIGHLIGHT_TARGET,
+  MAX_HIGHLIGHT_TARGET,
+  MIN_HIGHLIGHT_TARGET,
   createImagePrompt,
   createVideoPrompt,
   createSubtitles,
@@ -51,6 +55,7 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  * - POST /api/ai/subtitles  { mediaId, target }    -> Untertitel (Claude)
  * - POST /api/ai/cuts       { mediaId, minPause }  -> Schnittvorschläge (Claude + Pausen)
  * - POST /api/ai/translate  { texts, target }      -> vorhandene Texte übersetzen (Claude)
+ * - POST /api/ai/highlights { mediaId, target, from?, to? } -> beste Stellen für einen Short (Claude)
  * - POST /api/ai/image-prompt { idea, style, width, height, language, before?, after? }
  *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
  * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
@@ -176,6 +181,42 @@ aiRouter.post('/ai/cuts', json, (req: Request, res: Response) => {
   if (!capacity('claude', res)) return
   const job = aiJobs.start('claude', async (signal) => ({
     suggestions: await createCutSuggestions(t.words, item.info.duration, minPause, signal),
+  }))
+  started(res, job)
+})
+
+/**
+ * Ziel-Länge und Bereich (Sekunden der Quelle) für die Highlights. Ohne
+ * Bereich gilt das ganze Video; ein Bereich außerhalb wird abgelehnt.
+ */
+export function parseHighlightRequest(
+  body: Record<string, unknown>,
+  duration: number,
+): { target: number; from: number; to: number } {
+  const rawTarget = Number(body.target)
+  const target = Number.isFinite(rawTarget)
+    ? Math.round(Math.min(MAX_HIGHLIGHT_TARGET, Math.max(MIN_HIGHLIGHT_TARGET, rawTarget)))
+    : DEFAULT_HIGHLIGHT_TARGET
+  const total = duration > 0 ? duration : Infinity
+  const num = (v: unknown, def: number) => {
+    const n = v === undefined || v === null ? NaN : Number(v)
+    return Number.isFinite(n) ? n : def
+  }
+  const from = Math.max(0, num(body.from, 0))
+  const to = Math.min(total, num(body.to, total))
+  if (!(to - from >= 1)) throw new ValidationError('Der Bereich ist zu kurz für Highlights.')
+  return { target, from, to }
+}
+
+aiRouter.post('/ai/highlights', json, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const item = requireMedia(body)
+  const t = requireTranscript(item)
+  requireClaude()
+  const { target, from, to } = parseHighlightRequest(body, item.info.duration)
+  if (!capacity('claude', res)) return
+  const job = aiJobs.start('claude', async (signal) => ({
+    highlights: await createHighlights(t.words, target, from, to, signal),
   }))
   started(res, job)
 })

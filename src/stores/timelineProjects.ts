@@ -311,6 +311,18 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     incomplete.value = false
   }
 
+  /**
+   * Die Timeline vom geöffneten Projekt lösen (z. B. nachdem daraus ein kurzer
+   * Clip wurde): Das Projekt auf dem Server bleibt unverändert, das automatische
+   * Speichern greift nicht, und „Speichern“ legt ein neues Projekt an.
+   */
+  function detach(name: string): void {
+    current.value = null
+    savedDoc.value = null
+    suggestedName.value = name
+    incomplete.value = false
+  }
+
   async function remove(id: string): Promise<void> {
     if (busy.value) throw new Error(TIMELINE_PROJECT_BUSY)
     busy.value = 'delete'
@@ -408,6 +420,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     save,
     open,
     startNew,
+    detach,
     remove,
   }
 })

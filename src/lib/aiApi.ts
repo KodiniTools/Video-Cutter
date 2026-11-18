@@ -141,6 +141,39 @@ export function parseSuggestions(data: unknown): CutSuggestion[] {
     }))
 }
 
+// --- Highlights für einen Short ----------------------------------------------------
+
+/** Ziel-Länge eines Shorts in Sekunden (wie server/src/lib/claude.ts). */
+export const MIN_HIGHLIGHT_TARGET = 15
+export const MAX_HIGHLIGHT_TARGET = 90
+export const DEFAULT_HIGHLIGHT_TARGET = 45
+
+/** Von Claude ausgewählte Stelle für einen Short; Zeiten in Sekunden der Quelle. */
+export interface Highlight {
+  start: number
+  end: number
+  title: string
+  reason: string
+  /** 1–10, 10 = stärkste Stelle. */
+  score: number
+}
+
+export function parseHighlights(data: unknown): Highlight[] {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.highlights) ? d.highlights : []
+  return list
+    .filter(isRecord)
+    .filter((h) => finite(h.start) && finite(h.end) && h.end > h.start)
+    .map((h) => ({
+      start: h.start as number,
+      end: h.end as number,
+      title: typeof h.title === 'string' ? h.title : '',
+      reason: typeof h.reason === 'string' ? h.reason : '',
+      score: finite(h.score) ? Math.min(10, Math.max(1, Math.round(h.score))) : 5,
+    }))
+    .sort((a, b) => a.start - b.start)
+}
+
 // --- KI-Bilder für Bild-Clips ----------------------------------------------------
 
 /** Stilvorlagen (wie server/src/lib/claude.ts IMAGE_STYLES). */
@@ -389,6 +422,7 @@ export function runAiJob<T>(
     | 'subtitles'
     | 'cuts'
     | 'translate'
+    | 'highlights'
     | 'image-prompt'
     | 'images'
     | 'video-prompt'
