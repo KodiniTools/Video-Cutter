@@ -61,6 +61,19 @@ describe('fetchPreviewPlan', () => {
     })
   })
 
+  it('volle Auflösung: schickt den Wunsch und liest die Antwort des Servers', async () => {
+    const fetchMock = vi.fn(async () =>
+      json(200, { ...plan, width: 1920, height: 1080, full: true }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const p = await fetchPreviewPlan(createDoc(), 0, undefined, true)
+    expect(p.full).toBe(true)
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(init.body as string).full).toBe(true)
+    // Altes Backend antwortet ohne das Feld: gilt als kleine Vorschau.
+    expect(parsePreviewPlan(plan).full).toBe(false)
+  })
+
   it('erkennt ein veraltetes Backend', async () => {
     vi.stubGlobal(
       'fetch',

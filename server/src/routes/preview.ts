@@ -56,17 +56,19 @@ export async function resolvePreviewSources(
 export const previewRouter = Router()
 
 /**
- * POST /api/preview/plan  { doc, at? }
+ * POST /api/preview/plan  { doc, at?, full? }
  * Prüft das Timeline-Dokument, teilt es in Abschnitte und reiht fehlende ab
  * der Zeit `at` (µs) zum Rendern ein. Antwort: Größe, Länge und je Abschnitt
  * Schlüssel + Stand (ready | queued | rendering | error) sowie `missingGraphics`
  * (IDs von Grafiken, deren Bild der Server nicht mehr hat).
+ * `full: true`: Vorschau in Projektgröße aus den Originaldateien (wie die
+ * Ausgabedatei) statt klein und aus den Vorschau-Kopien.
  */
 previewRouter.post(
   '/preview/plan',
   express.json({ limit: '2mb' }),
   asyncHandler(async (req, res) => {
-    const body = req.body as { doc?: unknown; at?: unknown } | undefined
+    const body = req.body as { doc?: unknown; at?: unknown; full?: unknown } | undefined
     const parsed = parseTimelineDoc(body?.doc)
     if (!parsed.ok) {
       res.status(422).json({ error: 'Ungültiges Timeline-Dokument.', details: parsed.errors })
@@ -74,15 +76,17 @@ previewRouter.post(
     }
     const at =
       typeof body?.at === 'number' && Number.isSafeInteger(body.at) && body.at >= 0 ? body.at : 0
+    const full = body?.full === true
     const sources = await resolvePreviewSources(parsed.doc, {
       get: (id) => mediaStore.get(id),
-      proxy: (id) => derivedStore.file(id, 'proxy'),
+      // Volle Auflösung: Originale, die kleine Kopie wäre hochskaliert unscharf.
+      proxy: full ? async () => null : (id) => derivedStore.file(id, 'proxy'),
     })
     // Fehlende Grafiken werden ausgelassen und gemeldet: Der Editor lädt sie
     // erneut hoch und fragt dann noch einmal.
     const { graphics, missing } = resolveDocGraphics(parsed.doc, (id) => graphicStore.get(id))
     res.json({
-      ...previewStore.plan(parsed.doc, sources, at, graphics),
+      ...previewStore.plan(parsed.doc, sources, at, graphics, { full }),
       missingGraphics: missing,
     })
   }),

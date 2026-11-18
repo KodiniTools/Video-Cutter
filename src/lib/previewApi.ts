@@ -24,6 +24,8 @@ export interface PreviewSegment {
 export interface PreviewPlan {
   width: number
   height: number
+  /** Der Server hat in voller Auflösung geplant (fehlt bei altem Backend: false). */
+  full: boolean
   fps: number
   /** Länge der Timeline in µs. */
   duration: number
@@ -59,6 +61,7 @@ export function parsePreviewPlan(data: unknown): PreviewPlan {
   return {
     width: num(d.width),
     height: num(d.height),
+    full: d.full === true,
     fps: num(d.fps),
     duration: num(d.duration),
     segments,
@@ -81,17 +84,18 @@ async function errorFrom(res: Response): Promise<Error> {
 
 /**
  * Plan für das Dokument holen. Der Server beginnt, fehlende Abschnitte ab der
- * Zeit `at` (µs) zu rendern.
+ * Zeit `at` (µs) zu rendern. `full`: Projektgröße statt kleiner Vorschau.
  */
 export async function fetchPreviewPlan(
   doc: TimelineDoc,
   at: number,
   signal?: AbortSignal,
+  full = false,
 ): Promise<PreviewPlan> {
   const res = await fetch(`${API_BASE}/api/preview/plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ doc, at: Math.max(0, Math.round(at)) }),
+    body: JSON.stringify({ doc, at: Math.max(0, Math.round(at)), ...(full ? { full: true } : {}) }),
     signal,
   })
   if (!res.ok) throw await errorFrom(res)

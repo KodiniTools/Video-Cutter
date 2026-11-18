@@ -112,6 +112,7 @@ export const SERVER_FEATURES = [
   'clipMute',
   'mediaDerived',
   'timelinePreview',
+  'timelinePreviewFull',
   'timelineRender',
   'timelineNormalize',
   'timelineText',

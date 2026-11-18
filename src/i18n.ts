@@ -973,6 +973,10 @@ const messages = {
       grid: 'Raster',
       gridTitle:
         'Drittel-Linien über dem Bild ein- oder ausblenden. Rahmen und Raster sind nur Hilfen in der Vorschau und erscheinen nicht in der Ausgabedatei.',
+      full: 'Volle Auflösung',
+      fullTitle:
+        'Vorschau in der Größe der Ausgabedatei aus den Originalvideos rendern (Bildgüte wie Export „Hoch“). Das Rendern dauert deutlich länger; ausgeschaltet läuft die schnelle Vorschau mit höchstens 540 px Höhe.',
+      fullUnsupported: 'Backend veraltet: volle Auflösung nicht verfügbar.',
       nudge: {
         label: 'Abspielkopf genau verschieben',
         backTitle: 'Abspielkopf {ms} ms zurück (nur bei pausierter Wiedergabe)',
@@ -2034,6 +2038,10 @@ const messages = {
       grid: 'Grid',
       gridTitle:
         'Show or hide rule-of-thirds lines over the picture. Frame and grid are preview aids only and never appear in the exported file.',
+      full: 'Full resolution',
+      fullTitle:
+        'Render the preview at the size of the exported file from the original videos (picture quality like export “High”). Rendering takes noticeably longer; switched off, the fast preview with at most 540 px height is used.',
+      fullUnsupported: 'Backend outdated: full resolution not available.',
       nudge: {
         label: 'Move the playhead precisely',
         backTitle: 'Move the playhead back {ms} ms (only while paused)',

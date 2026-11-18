@@ -40,6 +40,12 @@ const ENCODE = {
   movflags: 'frag_keyframe+empty_moov+default_base_moof',
   seamless: true,
 } as const
+/**
+ * Vorschau in voller Auflösung: Projektgröße, Originaldateien und die Bildgüte
+ * des Exports („Hoch“). Dauert deutlich länger und ist deshalb nur auf Wunsch aktiv.
+ */
+const ENCODE_FULL = { ...ENCODE, crf: 18 } as const
+type PreviewEncode = typeof ENCODE | typeof ENCODE_FULL
 
 const KEY_RE = /^[0-9a-f]{32}$/
 
@@ -47,12 +53,18 @@ export function isPreviewKey(v: unknown): v is string {
   return typeof v === 'string' && KEY_RE.test(v)
 }
 
-/** Vorschaugröße: höchstens 540 px hoch, Seitenverhältnis des Projekts, gerade Maße, nie größer. */
-export function previewSize(settings: Pick<DocSettings, 'width' | 'height'>): {
+/**
+ * Vorschaugröße: höchstens 540 px hoch, Seitenverhältnis des Projekts, gerade Maße, nie größer.
+ * `full`: Projektgröße (wie die Ausgabedatei).
+ */
+export function previewSize(
+  settings: Pick<DocSettings, 'width' | 'height'>,
+  full = false,
+): {
   width: number
   height: number
 } {
-  const scale = Math.min(1, PREVIEW_MAX_HEIGHT / settings.height)
+  const scale = full ? 1 : Math.min(1, PREVIEW_MAX_HEIGHT / settings.height)
   const even = (v: number) => Math.max(2, Math.floor((v * scale) / 2) * 2)
   return { width: even(settings.width), height: even(settings.height) }
 }
@@ -92,6 +104,8 @@ export interface SegmentView {
 export interface PreviewPlan {
   width: number
   height: number
+  /** Volle Auflösung (Projektgröße) statt der kleinen Vorschau. */
+  full: boolean
   fps: number
   duration: Time
   segments: SegmentView[]
@@ -112,6 +126,7 @@ export interface PreviewStats {
 interface Job {
   key: string
   compiled: CompiledTimeline
+  encode: PreviewEncode
   state: 'queued' | 'rendering' | 'error'
   error?: string
   handle?: RunHandle
@@ -190,8 +205,11 @@ export class PreviewStore {
     sources: Record<string, RenderSource>,
     at: Time = 0,
     graphics: Record<string, RenderGraphic> = {},
+    opts: { full?: boolean } = {},
   ): PreviewPlan {
-    const size = previewSize(doc.settings)
+    const full = opts.full === true
+    const encode: PreviewEncode = full ? ENCODE_FULL : ENCODE
+    const size = previewSize(doc.settings, full)
     const ranges = planSegments(doc)
     const gop = Math.max(1, Math.round(doc.settings.fps))
     const wanted = new Map<string, CompiledTimeline>()
@@ -205,7 +223,7 @@ export class PreviewStore {
             compiled.inputs,
             compiled.filter,
             compiled.ass ?? '',
-            ENCODE,
+            encode,
             gop,
           ]),
         )
@@ -228,7 +246,7 @@ export class PreviewStore {
       const cached = this.cache.get(key)
       if (cached) cached.lastUsed = now
       else if (!this.jobs.has(key))
-        this.jobs.set(key, { key, compiled, state: 'queued', waiters: [] })
+        this.jobs.set(key, { key, compiled, encode, state: 'queued', waiters: [] })
     }
 
     // Reihenfolge: ab dem Abspielkopf vorwärts, begrenzt auf ein Fenster.
@@ -243,6 +261,7 @@ export class PreviewStore {
     return {
       width: size.width,
       height: size.height,
+      full,
       fps: doc.settings.fps,
       duration: docDuration(doc),
       segments: ranges.map((r, i) => this.view(r, keys[i])),
@@ -324,7 +343,7 @@ export class PreviewStore {
     try {
       if (assPath) await writeFile(assPath, job.compiled.ass ?? '', 'utf8')
       const args = buildRenderArgs(job.compiled, {
-        ...ENCODE,
+        ...job.encode,
         ...(assPath ? { assPath, fontsDir: config.fontsDir } : {}),
         output: tmp,
         threads: this.threads,
