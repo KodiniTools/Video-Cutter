@@ -2,17 +2,16 @@
 import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RangeSpinner from './RangeSpinner.vue'
+import FontSelect from '@/components/FontSelect.vue'
 import {
   ANIM_SPEEDS,
   DEFAULT_TEXT_STYLE,
-  FONT_OPTIONS,
   formatAnimSpeed,
   MAX_TEXT_LENGTH,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
   POSITION_PRESETS,
   TEXT_ANIMATIONS,
-  TEXT_FONTS,
   TEXT_STYLES,
   type PositionPreset,
 } from '@/lib/textOverlay'
@@ -30,6 +29,7 @@ import { graphicMotionAt, withGraphicChange } from '@/timeline/graphicKeys'
 const MAX_TEXT_LINES = 6
 
 const { t, locale } = useI18n()
+const fontLabelId = `text-font-label-${Math.random().toString(36).slice(2, 9)}`
 const store = useTimelineStore()
 
 /** Der Text-Clip, wenn genau einer markiert ist. */
@@ -134,12 +134,15 @@ onBeforeUnmount(commit)
       ></textarea>
     </label>
     <div class="row">
-      <label class="field">
-        <span>{{ t('text.font') }}</span>
-        <select :value="font" data-testid="text-font" @change="set({ font: value($event) })">
-          <option v-for="f in TEXT_FONTS" :key="f" :value="f">{{ FONT_OPTIONS[f].label }}</option>
-        </select>
-      </label>
+      <div class="field">
+        <span :id="fontLabelId">{{ t('text.font') }}</span>
+        <FontSelect
+          :value="font"
+          :aria-labelledby="fontLabelId"
+          data-testid="text-font"
+          @change="set({ font: $event })"
+        />
+      </div>
       <label class="field">
         <span>{{ t('text.size') }} {{ percent(size) }} %</span>
         <RangeSpinner

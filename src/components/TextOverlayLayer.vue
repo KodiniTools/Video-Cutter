@@ -262,35 +262,6 @@ function onPointerUp(): void {
   </div>
 </template>
 
-<style>
-/* Dieselben Schriften wie der Server (server/fonts) – Vorschau = Ergebnis. */
-@font-face {
-  font-family: 'VC Roboto';
-  src: url('../../server/fonts/Roboto-Bold.ttf') format('truetype');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'VC Montserrat';
-  src: url('../../server/fonts/Montserrat-ExtraBold.ttf') format('truetype');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'VC Bebas Neue';
-  src: url('../../server/fonts/BebasNeue-Regular.ttf') format('truetype');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'VC Lora';
-  src: url('../../server/fonts/Lora-Bold.ttf') format('truetype');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'VC Pacifico';
-  src: url('../../server/fonts/Pacifico-Regular.ttf') format('truetype');
-  font-display: swap;
-}
-</style>
-
 <style scoped>
 .text-layer {
   position: absolute;

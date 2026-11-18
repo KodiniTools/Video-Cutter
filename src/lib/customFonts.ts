@@ -90,6 +90,8 @@ const byKey = new Map<string, CustomFont>()
 let loading: Promise<void> | null = null
 
 export function getCustomFont(key: string): CustomFont | undefined {
+  // `fonts` lesen, damit computed-Werte (Vorschau-Rahmen) nach dem Laden neu rechnen.
+  void fonts.value
   return byKey.get(key)
 }
 

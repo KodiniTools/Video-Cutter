@@ -6,6 +6,8 @@
  */
 
 import { ensureFontFace, getCustomFont } from './customFonts'
+// Mitgelieferte Schriften (@font-face) für Vorschau und Schriftauswahl, in beiden Editoren.
+import './textFonts.css'
 
 export const TEXT_FONTS = ['roboto', 'montserrat', 'bebas', 'lora', 'pacifico'] as const
 export type BuiltinFont = (typeof TEXT_FONTS)[number]
