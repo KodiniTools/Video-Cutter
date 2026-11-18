@@ -9,12 +9,15 @@ const props = defineProps<{
   /** Lässt sich die Spur nach oben/unten schieben? */
   canMoveUp: boolean
   canMoveDown: boolean
+  /** Ist die Spur Ziel-Ebene für neue Texte, Formen und Bilder? (nur Ebenen-Spuren) */
+  isTarget?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'update', patch: TrackPatch): void
   (e: 'move', delta: -1 | 1): void
   (e: 'remove'): void
+  (e: 'target'): void
 }>()
 
 const { t } = useI18n()
@@ -170,6 +173,18 @@ function cancelRename(): void {
         @click="emit('update', { hidden: !track.hidden })"
       >
         🚫
+      </button>
+      <button
+        v-if="track.kind === 'overlay'"
+        type="button"
+        class="mini"
+        data-action="target"
+        :aria-pressed="!!isTarget"
+        :title="t(isTarget ? 'timeline.track.untarget' : 'timeline.track.target')"
+        :aria-label="t('timeline.track.targetNamed', { name: track.name })"
+        @click="emit('target')"
+      >
+        🎯
       </button>
       <button
         type="button"

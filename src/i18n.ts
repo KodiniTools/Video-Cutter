@@ -727,6 +727,9 @@ const messages = {
       addVideoTrackTitle: 'Leere Video-Spur oben anlegen (liegt im Bild vorn)',
       addAudioTrack: '+ Ton-Spur',
       addAudioTrackTitle: 'Leere Ton-Spur unten anlegen',
+      addOverlayTrack: '+ Ebene',
+      addOverlayTrackTitle:
+        'Leere Ebene oben anlegen (für Texte, Formen/Emojis und Bilder); neue Elemente kommen dann auf diese Ebene',
       removeEmptyTracks: 'Leere Spuren löschen',
       removeEmptyTracksTitle:
         'Alle Spuren und Ebenen ohne Inhalt entfernen (gesperrte bleiben). Eine einzelne Spur löscht das ✕ im Spurkopf.',
@@ -931,6 +934,9 @@ const messages = {
         hide: 'Ausblenden',
         show: 'Wieder einblenden',
         hideNamed: '{name} ausblenden',
+        target: 'Neue Texte, Formen und Bilder auf diese Ebene legen',
+        untarget: 'Ziel-Ebene aufheben (neue Elemente kommen wieder auf die oberste freie Ebene)',
+        targetNamed: '{name} als Ziel für neue Elemente',
         remove: 'Spur samt Clips entfernen',
         removeNamed: '{name} entfernen',
       },
@@ -1865,6 +1871,9 @@ const messages = {
       addVideoTrackTitle: 'Add an empty video track on top (in front)',
       addAudioTrack: '+ Audio track',
       addAudioTrackTitle: 'Add an empty audio track at the bottom',
+      addOverlayTrack: '+ Layer',
+      addOverlayTrackTitle:
+        'Add an empty layer on top (for texts, shapes/emojis and images); new elements then go onto this layer',
       removeEmptyTracks: 'Remove empty tracks',
       removeEmptyTracksTitle:
         'Remove all tracks and layers without content (locked ones stay). The ✕ in a track header removes a single track.',
@@ -2064,6 +2073,9 @@ const messages = {
         hide: 'Hide',
         show: 'Show again',
         hideNamed: 'Hide {name}',
+        target: 'Put new texts, shapes and images on this layer',
+        untarget: 'Clear target layer (new elements go to the topmost free layer again)',
+        targetNamed: '{name} as target for new elements',
         remove: 'Remove track and its clips',
         removeNamed: 'Remove {name}',
       },

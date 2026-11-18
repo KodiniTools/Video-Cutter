@@ -109,6 +109,11 @@ export const useTimelineStore = defineStore('timeline', () => {
   const playing = ref(false)
   /** Clip, dessen Bildausschnitt gerade in der Vorschau gewählt wird (`null` = keiner). */
   const cropEditing = ref<string | null>(null)
+  /**
+   * Ebenen-Spur, auf die neue Texte, Formen/Emojis und Bilder kommen (`null` =
+   * automatisch die oberste freie). Nur Bedienzustand, wird nicht gespeichert.
+   */
+  const overlayTarget = ref<string | null>(null)
   /** Grund, warum der letzte Befehl abgelehnt wurde (`null` = angenommen). */
   const lastError = ref<OpError | null>(null)
 
@@ -226,6 +231,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     selection.value = []
     playhead.value = 0
     lastError.value = null
+    overlayTarget.value = null
     return []
   }
 
@@ -284,17 +290,40 @@ export const useTimelineStore = defineStore('timeline', () => {
     apply((d) => updateTrackOp(d, trackId, patch))
   const moveTrack = (trackId: string, index: number) => apply((d) => moveTrackOp(d, trackId, index))
 
-  /** Leere Spur anlegen: Bild-Spuren oben (Vordergrund), Ton-Spuren unten. */
+  /**
+   * Leere Spur anlegen: Bild-Spuren oben (Vordergrund), Ton-Spuren unten. Eine
+   * neue Ebenen-Spur wird zugleich Ziel für neue Texte, Formen und Bilder.
+   */
   function newTrack(kind: TrackKind): boolean {
     const prefix = kind === 'video' ? 'V' : kind === 'audio' ? 'A' : 'E'
-    return apply((d) =>
+    const id = createId()
+    const done = apply((d) =>
       addTrackOp(
         d,
-        { kind, name: nextTrackName(d, prefix) },
+        { id, kind, name: nextTrackName(d, prefix) },
         kind === 'audio' ? d.tracks.length : 0,
       ),
     )
+    if (done && kind === 'overlay') overlayTarget.value = id
+    return done
   }
+
+  /** Ziel-Ebene für neue Elemente setzen (`null` = automatisch). Nur Ebenen-Spuren. */
+  function setOverlayTarget(trackId: string | null): void {
+    if (trackId === null) {
+      overlayTarget.value = null
+      return
+    }
+    const track = doc.value.tracks.find((t) => t.id === trackId)
+    if (track?.kind === 'overlay') overlayTarget.value = trackId
+  }
+
+  /** Gültige Ziel-Ebene (existiert noch, ist eine Ebenen-Spur) oder `null`. */
+  const activeOverlayTarget = computed(() => {
+    const id = overlayTarget.value
+    if (id === null) return null
+    return doc.value.tracks.some((t) => t.id === id && t.kind === 'overlay') ? id : null
+  })
 
   const insertClip = (trackId: string, clip: Clip) => apply((d) => insertClipOp(d, trackId, clip))
   const moveClip = (clipId: string, to: MoveTarget, opts?: { linked?: boolean }) =>
@@ -329,13 +358,17 @@ export const useTimelineStore = defineStore('timeline', () => {
     prefix: string,
   ): string | null {
     const id = createId()
-    const done = apply((d) =>
-      insertOverlayClip(
-        d,
-        { id, kind, start: playhead.value, duration, data },
-        nextTrackName(d, prefix),
-      ),
-    )
+    const target = activeOverlayTarget.value
+    const done = apply((d) => {
+      const clip: OverlayClip = { id, kind, start: playhead.value, duration, data }
+      // Gewählte Ziel-Ebene zuerst; ist sie gesperrt oder an der Stelle belegt,
+      // gilt die bisherige Regel (oberste freie Ebene, sonst eine neue).
+      if (target !== null) {
+        const placed = insertClipOp(d, target, clip)
+        if (placed.ok) return placed
+      }
+      return insertOverlayClip(d, clip, nextTrackName(d, prefix))
+    })
     if (!done) return null
     select([id])
     return id
@@ -751,6 +784,9 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateTrack,
     moveTrack,
     newTrack,
+    overlayTarget,
+    activeOverlayTarget,
+    setOverlayTarget,
     insertClip,
     moveClip,
     trimClip,
