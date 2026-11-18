@@ -62,6 +62,21 @@ describe('Vorschau-Player: Schrittknöpfe und Formatrahmen', () => {
     return { w, store }
   }
 
+  it('⏮ und ⏭ spulen zum Anfang und zum Ende', async () => {
+    const { w, store } = await player()
+    const start = w.get('[data-testid="preview-to-start"]')
+    const end = w.get('[data-testid="preview-to-end"]')
+    await end.trigger('click')
+    expect(store.playhead).toBe(store.duration)
+    expect(store.playing).toBe(false)
+    expect(end.attributes('disabled')).toBeDefined()
+    expect(start.attributes('disabled')).toBeUndefined()
+    await start.trigger('click')
+    expect(store.playhead).toBe(0)
+    expect(start.attributes('disabled')).toBeDefined()
+    w.unmount()
+  })
+
   it('− und + verschieben um den gewählten Schritt; Auswahl wird gemerkt', async () => {
     const { w, store } = await player()
     expect(store.doc.settings.fps).toBe(30)
