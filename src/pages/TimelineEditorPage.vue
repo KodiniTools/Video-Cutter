@@ -219,30 +219,33 @@ function openProjects(): void {
 }
 /* Hoch und breit genug: Vorschau und Timeline bleiben beim Scrollen stehen –
    direkt unter der fixierten Website-Navigation (--site-nav-offset). Die
-   Seitenleiste (Medien, Einstellungen) scrollt für sich. Vorschau und Spuren
-   sind in der Höhe so begrenzt, dass beides zusammen ins Fenster passt. */
+   Seitenleiste (Medien, Einstellungen) scrollt für sich, der Arbeitsbereich
+   ebenfalls: Die Vorschau darf gut die Hälfte der Fensterhöhe füllen, und
+   passt die Timeline mit vielen Spuren nicht mehr darunter, lässt sich der
+   Arbeitsbereich nach unten scrollen. Sehr viele Spuren scrollen zusätzlich
+   in der Spurliste (das Lineal bleibt oben stehen). */
 @media (min-width: 1100px) and (min-height: 640px) {
   .stage,
   .side {
     position: sticky;
     top: calc(var(--site-nav-offset, 0px) + var(--ds-space-3));
-  }
-  .side {
     max-height: calc(100dvh - var(--site-nav-offset, 0px) - 2 * var(--ds-space-3));
     padding-right: var(--ds-space-1, 4px);
     overflow-y: auto;
-    overscroll-behavior: contain;
     scrollbar-gutter: stable;
   }
+  .side {
+    overscroll-behavior: contain;
+  }
   .stage {
-    /* Freie Höhe ohne Bedienleisten, Ränder und Abstände (zusammen rund 230 px). */
-    --stage-free: calc(100dvh - var(--site-nav-offset, 0px) - 230px);
+    /* Sichtbare Höhe unter der Navigation. */
+    --stage-room: calc(100dvh - var(--site-nav-offset, 0px));
   }
   .stage :deep(.screen) {
-    max-height: max(180px, calc(var(--stage-free) * 0.6));
+    max-height: max(220px, calc(var(--stage-room) * 0.56));
   }
   .stage :deep(.scroller) {
-    max-height: max(140px, calc(var(--stage-free) * 0.4));
+    max-height: max(180px, calc(var(--stage-room) * 0.5));
     overflow-y: auto;
   }
 }
