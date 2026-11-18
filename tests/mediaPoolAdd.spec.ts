@@ -11,7 +11,7 @@ vi.mock('@/lib/derivedApi', async (importOriginal) => {
 })
 
 import type { MediaView } from '@/lib/mediaApi'
-import { useMediaPoolStore } from '@/stores/mediaPool'
+import { generatedAtRisk, useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 
 const media = (id: string, over: Partial<MediaView> = {}): MediaView => ({
@@ -42,5 +42,27 @@ describe('Medienliste: vorhandenes Server-Medium aufnehmen', () => {
     expect(timeline.appendMedia('a')).toBe(true)
     expect(timeline.doc.tracks.map((t) => [t.kind, t.clips.length])).toEqual([['video', 1]])
     pool.dispose()
+  })
+})
+
+describe('Medienliste: Hinweis auf ungespeicherte Server-Medien', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('kennzeichnet Bild-Clips/KI-Videos als erzeugt, Uploads und geöffnete Projekte nicht', () => {
+    const pool = useMediaPoolStore()
+    pool.addMedia(media('a'))
+    expect(pool.items[0].generated).toBe(true)
+    expect(generatedAtRisk(pool.items, true)).toBe(true)
+    // Gespeichert: kein Hinweis.
+    expect(generatedAtRisk(pool.items, false)).toBe(false)
+    // Projekt geöffnet: Die Medien liegen im Projekt, also nicht mehr gefährdet.
+    pool.replaceAll([media('a')])
+    expect(pool.items[0].generated).toBeUndefined()
+    expect(generatedAtRisk(pool.items, true)).toBe(false)
+    pool.dispose()
+  })
+
+  it('leere Liste: kein Hinweis', () => {
+    expect(generatedAtRisk([], true)).toBe(false)
   })
 })

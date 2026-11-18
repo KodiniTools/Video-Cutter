@@ -7,13 +7,18 @@ import WaveformCanvas from './WaveformCanvas.vue'
 import { DERIVED_MEDIA_GONE, stripTileStyle } from '@/lib/derivedApi'
 import { MEDIA_AUDIO_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
 import { formatClockDuration } from '@/lib/timeFormat'
-import { useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
+import { generatedAtRisk, useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTimelineProjectStore } from '@/stores/timelineProjects'
 
 /** Medienliste des Timeline-Editors: Videos und Tondateien hochladen, ansehen, entfernen. */
 const { t } = useI18n()
 const pool = useMediaPoolStore()
 const timeline = useTimelineStore()
+const projects = useTimelineProjectStore()
+
+/** Bild-Clips/KI-Videos liegen nur im Zwischenspeicher, solange kein Projekt gespeichert ist. */
+const showGeneratedHint = computed(() => generatedAtRisk(pool.items, projects.dirty))
 
 /** Breite des Vorschaubilds in px (Höhe folgt dem Seitenverhältnis des Filmstreifens). */
 const THUMB_WIDTH = 96
@@ -153,6 +158,9 @@ const rejectedText = computed(() =>
     <VoiceRecorder />
 
     <p v-if="rejectedText" class="note error" role="alert">{{ rejectedText }}</p>
+    <p v-if="showGeneratedHint" class="note warn" data-testid="media-pool-generated-hint">
+      {{ t('mediaPool.generatedUnsaved') }}
+    </p>
     <p v-if="!pool.items.length" class="note">{{ t('mediaPool.empty') }}</p>
 
     <ul v-else class="items">
@@ -310,6 +318,13 @@ const rejectedText = computed(() =>
 }
 .note.error {
   color: var(--ds-danger);
+}
+.note.warn {
+  color: var(--ds-text);
+  padding: 6px 8px;
+  border-left: 3px solid var(--ds-warning);
+  background: color-mix(in srgb, var(--ds-warning) 10%, transparent);
+  border-radius: 4px;
 }
 .items {
   list-style: none;
