@@ -388,7 +388,8 @@ const messages = {
     },
     graphics: {
       entry: 'Animation (Ein-/Ausblenden)',
-      animInSpeed: 'Tempo Einblenden + Dauer-Animation',
+      animInSpeed: 'Tempo Einblenden',
+      loopSpeed: 'Tempo Dauer-Animation',
       loop: 'Dauer-Animation',
       loops: {
         none: 'Keine',
@@ -1539,7 +1540,8 @@ const messages = {
     },
     graphics: {
       entry: 'Animation (in/out)',
-      animInSpeed: 'Fade-in + continuous speed',
+      animInSpeed: 'Fade-in speed',
+      loopSpeed: 'Continuous speed',
       loop: 'Continuous animation',
       loops: {
         none: 'None',

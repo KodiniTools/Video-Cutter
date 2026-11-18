@@ -1,4 +1,4 @@
-import { animParts, OUT_ANIMATIONS } from '@/lib/textOverlay'
+import { animParts, animSpeedOf, OUT_ANIMATIONS } from '@/lib/textOverlay'
 import {
   clampGraphic,
   defaultGraphic,
@@ -68,6 +68,19 @@ export function clipGraphic(data: Record<string, unknown>): GraphicData {
     if (key !== 'kind' && typeof value === typeof merged[key]) merged[key] = value
   }
   return clampGraphic({ ...(merged as unknown as GraphicData), start: 0, end: 1 })
+}
+
+/** Steht in den Daten ein eigenes Tempo für die Dauer-Animation? */
+export function hasLoopSpeed(data: Record<string, unknown>): boolean {
+  return typeof data.loopSpeed === 'number' && Number.isFinite(data.loopSpeed)
+}
+
+/**
+ * Tempo der Dauer-Animation: das eigene (`loopSpeed`), sonst – wie bisher –
+ * das Tempo des Einblendens (`animSpeed`).
+ */
+export function loopSpeedOf(data: Record<string, unknown>): number {
+  return animSpeedOf(hasLoopSpeed(data) ? { animSpeed: data.loopSpeed } : data)
 }
 
 /** Hat die Grafik etwas zu zeigen? (Emoji ohne Zeichen, Bild nicht geladen: nein.) */
@@ -174,6 +187,10 @@ export class GraphicImages {
                       animOut: clip.data.animOut,
                       animOutSpeed: animParts(clip.data).outSpeed,
                     }
+                  : {}),
+                // Eigenes Tempo der Dauer-Animation (fehlt = Tempo des Einblendens).
+                ...(g.loop !== 'none' && hasLoopSpeed(clip.data)
+                  ? { loopSpeed: loopSpeedOf(clip.data) }
                   : {}),
                 png,
                 renderHeight: height,

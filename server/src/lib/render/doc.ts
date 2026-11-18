@@ -187,6 +187,8 @@ export interface DocGraphic {
   /** Eigene Animation zum Ausblenden (fehlt = wie bisher über `animation`). */
   animOut?: OutAnimation
   animOutSpeed?: number
+  /** Eigenes Tempo der Dauer-Animation; fehlt es, gilt `animSpeed`. */
+  loopSpeed?: number
   /** Keyframes (nach Zeit sortiert): Mitte und Größe ändern sich über die Zeit. */
   keys?: DocGraphicKey[]
   /** Weiche Bewegung zwischen den Keyframes. */
@@ -591,6 +593,14 @@ export function parseTimelineDoc(
                 e instanceof Error ? e.message : 'Ungültiges Ausblenden.',
               )
             }
+            let loopSpeed: number | undefined
+            if (data.loopSpeed !== undefined && data.loopSpeed !== null) {
+              try {
+                loopSpeed = parseAnimSpeed(data.loopSpeed, 'Tempo der Dauer-Animation')
+              } catch (e) {
+                return fail(`${gp}.loopSpeed`, e instanceof Error ? e.message : 'Ungültiges Tempo.')
+              }
+            }
             const keys = parseOverlayKeys(data.keys)
             if (!keys) return fail(`${gp}.keys`, 'Ungültige Keyframes.')
             if (data.ease !== undefined && data.ease !== null && data.ease !== 'smooth')
@@ -607,6 +617,7 @@ export function parseTimelineDoc(
                 loop: loop as GraphicLoop,
                 animSpeed,
                 ...(animOut !== undefined ? { animOut, animOutSpeed } : {}),
+                ...(loopSpeed !== undefined ? { loopSpeed } : {}),
                 ...(keys.length > 0 ? { keys } : {}),
                 ...(keys.length > 0 && data.ease === 'smooth' ? { ease: 'smooth' as const } : {}),
               },

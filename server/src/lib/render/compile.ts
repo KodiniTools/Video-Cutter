@@ -669,6 +669,7 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
         ...(g.animOut !== undefined
           ? { animOut: g.animOut, animOutSpeed: g.animOutSpeed ?? 1 }
           : {}),
+        ...(g.loopSpeed !== undefined ? { loopSpeed: g.loopSpeed } : {}),
         ...(g.keys?.length ? { motion: graphicMotion(g.keys, start, g.ease === 'smooth') } : {}),
       }
       graphics.push({

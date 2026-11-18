@@ -31,7 +31,7 @@ import {
   type OutAnimation,
 } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
-import { clipGraphic } from '@/timeline/graphics'
+import { clipGraphic, loopSpeedOf } from '@/timeline/graphics'
 import OverlayKeys from './OverlayKeys.vue'
 import { graphicMotionAt, withGraphicChange, type GraphicMotion } from '@/timeline/graphicKeys'
 
@@ -106,9 +106,16 @@ const GRAPHIC_IN_ANIMATIONS = IN_ANIMATIONS.filter((a) => a !== 'typewriter')
 /** Ein- und Ausblenden getrennt (ältere Grafiken werden passend gedeutet). */
 const anim = computed(() => animParts(clip.value?.data ?? {}))
 
-/** Schreibt immer alle vier Felder, damit Ein- und Ausblenden unabhängig bleiben. */
+/** Tempo der Dauer-Animation (ohne eigenes: das Tempo des Einblendens, wie bisher). */
+const loopSpeed = computed(() => loopSpeedOf(clip.value?.data ?? {}))
+
+/**
+ * Schreibt immer alle vier Felder, damit Ein- und Ausblenden unabhängig
+ * bleiben – und hält das Tempo der Dauer-Animation fest, damit es sich mit
+ * dem Tempo des Einblendens nicht mehr mitändert.
+ */
 function setAnim(change: Partial<AnimParts>): void {
-  set(animPatch({ ...anim.value, ...change }))
+  set({ ...animPatch({ ...anim.value, ...change }), loopSpeed: loopSpeed.value })
 }
 
 const value = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement).value
@@ -405,7 +412,7 @@ onBeforeUnmount(commit)
         <span>{{ t('graphics.animInSpeed') }}</span>
         <select
           :value="anim.inSpeed"
-          :disabled="anim.in === 'none' && g.loop === 'none'"
+          :disabled="anim.in === 'none'"
           data-testid="graphic-anim-speed"
           @change="setAnim({ inSpeed: number($event) })"
         >
@@ -421,6 +428,19 @@ onBeforeUnmount(commit)
           :disabled="anim.out === 'none'"
           data-testid="graphic-anim-out-speed"
           @change="setAnim({ outSpeed: number($event) })"
+        >
+          <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
+            {{ formatAnimSpeed(s, locale) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('graphics.loopSpeed') }}</span>
+        <select
+          :value="loopSpeed"
+          :disabled="g.loop === 'none'"
+          data-testid="graphic-loop-speed"
+          @change="set({ loopSpeed: number($event) })"
         >
           <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
             {{ formatAnimSpeed(s, locale) }}
