@@ -825,3 +825,158 @@ export async function createHighlights(
   )
   return buildHighlights(words, raw, rangeStart, rangeEnd)
 }
+
+// --- Titel, Beschreibung, Hashtags und Kapitel ----------------------------------------
+
+/** Ausgabesprache für Titel/Beschreibung (wie die Untertitel). */
+export const PUBLISH_TARGETS = SUBTITLE_TARGETS
+export type PublishTarget = SubtitleTarget
+
+/** Grenzen wie bei YouTube: Titel 100 Zeichen, Beschreibung 5000 Zeichen. */
+export const MAX_TITLE_LENGTH = 100
+export const MAX_DESCRIPTION_LENGTH = 5000
+export const MAX_HASHTAGS = 15
+export const MAX_CHAPTERS = 50
+/** YouTube verlangt Kapitel von mindestens 10 Sekunden. */
+export const MIN_CHAPTER_GAP = 10
+
+export interface PublishChapter {
+  /** Sekunden auf der Timeline (das erste Kapitel beginnt bei 0). */
+  at: number
+  title: string
+}
+
+export interface PublishTexts {
+  /** Titelvorschläge, der beste zuerst. */
+  titles: string[]
+  description: string
+  /** Mit führendem „#“, ohne Leerzeichen. */
+  hashtags: string[]
+  chapters: PublishChapter[]
+}
+
+function publishTask(target: PublishTarget, language: string, duration: number): string {
+  const lang =
+    target === 'original'
+      ? `the spoken language${LANG_NAMES[language] ? ` (${LANG_NAMES[language]})` : ''}`
+      : LANG_NAMES[target]
+  return `The transcript is the complete video in playback order (times are seconds of the finished video, about ${Math.round(duration)} seconds long). Write the texts for publishing it on YouTube or social media, in ${lang}.
+
+Rules:
+- "titles": 3 alternative video titles, the best first. Catchy but honest, no clickbait, max. ${MAX_TITLE_LENGTH} characters, no hashtags.
+- "description": a video description of 2 to 4 short paragraphs (separate paragraphs with "\\n\\n"): what the video is about and what viewers learn or see, written for viewers. No chapter list, no hashtags, no links, no invented facts.
+- "hashtags": 5 to 10 relevant hashtags without "#", single words or CamelCase, no spaces.
+- "chapters": chapters for the description. Each chapter starts at the word with index "from" where a new topic or section begins; "title" is a short chapter title (max. 6 words). The first chapter starts at the first word. Chapters are in order and at least ${MIN_CHAPTER_GAP} seconds apart. Use 3 to 12 chapters for videos with distinct sections; return an empty list if the video is too short (under about 1 minute) or has no distinct sections.
+- Ignore hallucinated phrases of the recognizer. If there is no usable speech, return empty texts and lists.`
+}
+
+const PUBLISH_SCHEMA = {
+  type: 'object',
+  properties: {
+    titles: { type: 'array', items: { type: 'string' } },
+    description: { type: 'string' },
+    hashtags: { type: 'array', items: { type: 'string' } },
+    chapters: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { from: { type: 'integer' }, title: { type: 'string' } },
+        required: ['from', 'title'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['titles', 'description', 'hashtags', 'chapters'],
+  additionalProperties: false,
+}
+
+/** Hashtag säubern: ohne „#“ und Leer-/Satzzeichen; leer = unbrauchbar. */
+export function cleanHashtag(v: unknown): string {
+  if (typeof v !== 'string') return ''
+  const tag = v
+    .replace(/^#+/, '')
+    .replace(/[\s#.,;:!?"'()[\]{}<>/\\]+/gu, '')
+    .slice(0, 60)
+  return tag ? `#${tag}` : ''
+}
+
+/**
+ * Baut die Texte aus Claudes Antwort. Kapitelzeiten kommen aus den
+ * Wort-Indizes (Timeline-Zeit des Wortanfangs). Das erste Kapitel beginnt bei
+ * 0, Kapitel unter `MIN_CHAPTER_GAP` Sekunden werden mit dem vorigen
+ * zusammengelegt (das vorige bleibt), ebenso eines, das zu nah am Ende liegt.
+ */
+export function buildPublishTexts(words: Word[], raw: unknown, duration: number): PublishTexts {
+  const r = isRecord(raw) ? raw : {}
+  const line = (v: unknown, max: number) =>
+    typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : ''
+
+  const seen = new Set<string>()
+  const titles = (Array.isArray(r.titles) ? r.titles : [])
+    .map((v) => line(v, MAX_TITLE_LENGTH))
+    .filter((v) => v !== '' && !seen.has(v) && seen.add(v))
+    .slice(0, 5)
+
+  const description =
+    typeof r.description === 'string'
+      ? r.description
+          .replace(/\r\n?/g, '\n')
+          .split('\n')
+          .map((l) => l.replace(/[ \t]+/g, ' ').trim())
+          .join('\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+          .slice(0, MAX_DESCRIPTION_LENGTH)
+      : ''
+
+  const tags = new Map<string, string>()
+  for (const v of Array.isArray(r.hashtags) ? r.hashtags : []) {
+    const tag = cleanHashtag(v)
+    if (tag && !tags.has(tag.toLowerCase())) tags.set(tag.toLowerCase(), tag)
+  }
+  const hashtags = [...tags.values()].slice(0, MAX_HASHTAGS)
+
+  const total = duration > 0 ? duration : Infinity
+  const candidates = (Array.isArray(r.chapters) ? r.chapters : [])
+    .filter(isRecord)
+    .flatMap((c) => {
+      const i = intOr(c.from, -1)
+      if (i < 0 || i >= words.length) return []
+      return [{ at: words[i].start, title: line(c.title, 80) }]
+    })
+    .filter((c) => c.at < total)
+    .sort((a, b) => a.at - b.at)
+  const chapters: PublishChapter[] = []
+  for (const c of candidates) {
+    const prev = chapters[chapters.length - 1]
+    if (!prev) {
+      chapters.push({ at: 0, title: c.title })
+      continue
+    }
+    if (c.at - prev.at < MIN_CHAPTER_GAP || total - c.at < MIN_CHAPTER_GAP) continue
+    chapters.push({ at: round3(c.at), title: c.title })
+    if (chapters.length >= MAX_CHAPTERS) break
+  }
+  return { titles, description, hashtags, chapters }
+}
+
+/**
+ * Titel, Beschreibung, Hashtags und Kapitel für das ganze Video. `words`
+ * liegen schon in Timeline-Zeit (siehe timelineWords in routes/ai.ts).
+ */
+export async function createPublishTexts(
+  words: Word[],
+  language: string,
+  target: PublishTarget,
+  duration: number,
+  signal: AbortSignal,
+): Promise<PublishTexts> {
+  if (words.length < 3) return { titles: [], description: '', hashtags: [], chapters: [] }
+  const raw = await askClaude(
+    words,
+    publishTask(target, language, duration),
+    PUBLISH_SCHEMA,
+    signal,
+  )
+  return buildPublishTexts(words, raw, duration)
+}

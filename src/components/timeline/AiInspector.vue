@@ -17,12 +17,14 @@ import { useTimelineAiStore } from '@/stores/timelineAi'
 import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
 import { SILENCE_LEVELS, type SilenceLevel } from '@/timeline/silence'
 import HighlightsPanel from './HighlightsPanel.vue'
+import PublishPanel from './PublishPanel.vue'
 
 /**
  * KI-Assistent des Timeline-Editors: Untertitel für den markierten Clip
  * (Sprache erkennen + Claude) als Text-Clips auf einer Ebenen-Spur, alle
  * Texte übersetzen, Schnittvorschläge und Highlights (kurzer Clip) für den
- * markierten Clip. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
+ * markierten Clip sowie Titel, Beschreibung, Hashtags und Kapitel für die
+ * ganze Timeline. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
  */
 const { t } = useI18n()
 const store = useTimelineStore()
@@ -222,6 +224,15 @@ async function onTranslate(): Promise<void> {
       <p v-if="!canTranscribe" class="hint warn">{{ t('ai.noWhisper') }}</p>
       <p v-else-if="!canClaude" class="hint warn">{{ t('ai.noClaude') }}</p>
 
+      <label v-if="hasMedia" class="field">
+        <span>{{ t('ai.language') }}</span>
+        <select v-model="language" :disabled="running" data-testid="timeline-ai-language">
+          <option v-for="code in TRANSCRIBE_LANGUAGES" :key="code" :value="code">
+            {{ t(`ai.lang.${code}`) }}
+          </option>
+        </select>
+      </label>
+
       <div class="block">
         <span class="label">{{ t('ai.subtitles') }}</span>
         <p v-if="!clip" class="hint" data-testid="timeline-ai-pick">
@@ -231,14 +242,6 @@ async function onTranslate(): Promise<void> {
           <p class="hint name" :title="clipName">
             {{ t('timeline.ai.forClip', { name: clipName }) }}
           </p>
-          <label class="field">
-            <span>{{ t('ai.language') }}</span>
-            <select v-model="language" :disabled="running" data-testid="timeline-ai-language">
-              <option v-for="code in TRANSCRIBE_LANGUAGES" :key="code" :value="code">
-                {{ t(`ai.lang.${code}`) }}
-              </option>
-            </select>
-          </label>
           <label class="field">
             <span>{{ t('timeline.ai.subtitleLanguage') }}</span>
             <select v-model="target" :disabled="running" data-testid="timeline-ai-target">
@@ -395,6 +398,8 @@ async function onTranslate(): Promise<void> {
         :language="language"
         :ready="canTranscribe && canClaude"
       />
+
+      <PublishPanel v-if="hasMedia" :language="language" :ready="canTranscribe && canClaude" />
 
       <div v-if="textClips.length" class="block">
         <span class="label">{{ t('ai.translate') }}</span>

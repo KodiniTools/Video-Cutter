@@ -16,6 +16,7 @@ import {
   whisperReady,
   type TranscribeLanguage,
   type Transcript,
+  type Word,
 } from '../lib/whisper'
 import {
   SUBTITLE_TARGETS,
@@ -24,6 +25,9 @@ import {
   IMAGE_STYLES,
   createCutSuggestions,
   createHighlights,
+  createPublishTexts,
+  PUBLISH_TARGETS,
+  type PublishTarget,
   DEFAULT_HIGHLIGHT_TARGET,
   MAX_HIGHLIGHT_TARGET,
   MIN_HIGHLIGHT_TARGET,
@@ -56,6 +60,8 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  * - POST /api/ai/cuts       { mediaId, minPause }  -> Schnittvorschläge (Claude + Pausen)
  * - POST /api/ai/translate  { texts, target }      -> vorhandene Texte übersetzen (Claude)
  * - POST /api/ai/highlights { mediaId, target, from?, to? } -> beste Stellen für einen Short (Claude)
+ * - POST /api/ai/publish    { segments, target, duration } -> Titel, Beschreibung, Hashtags,
+ *                                                  Kapitel für die ganze Timeline (Claude)
  * - POST /api/ai/image-prompt { idea, style, width, height, language, before?, after? }
  *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
  * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
@@ -218,6 +224,98 @@ aiRouter.post('/ai/highlights', json, (req: Request, res: Response) => {
   const job = aiJobs.start('claude', async (signal) => ({
     highlights: await createHighlights(t.words, target, from, to, signal),
   }))
+  started(res, job)
+})
+
+/** Höchstens so viele Ton-Abschnitte der Timeline gehen an Claude. */
+export const MAX_PUBLISH_SEGMENTS = 300
+
+/**
+ * Ein Ton-Abschnitt der Timeline: Quelle `mediaId` von `from` bis `to`
+ * (Sekunden der Quelle) liegt ab `at` (Sekunden der Timeline) mit Tempo `speed`.
+ */
+export interface PublishSegment {
+  mediaId: string
+  from: number
+  to: number
+  at: number
+  speed: number
+}
+
+/** Prüft die Abschnitte und die Länge des Videos für POST /api/ai/publish. */
+export function parsePublishRequest(body: Record<string, unknown>): {
+  segments: PublishSegment[]
+  target: PublishTarget
+  duration: number
+} {
+  const list = body.segments
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new ValidationError('Keine Abschnitte mit Ton angegeben.')
+  }
+  if (list.length > MAX_PUBLISH_SEGMENTS) {
+    throw new ValidationError(`Maximal ${MAX_PUBLISH_SEGMENTS} Abschnitte.`)
+  }
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN)
+  const segments = list.map((raw, i): PublishSegment => {
+    const s = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+    const from = num(s.from)
+    const to = num(s.to)
+    const at = num(s.at)
+    const speed = num(s.speed)
+    if (!isMediaId(s.mediaId) || !(from >= 0) || !(to > from) || !(at >= 0)) {
+      throw new ValidationError(`Abschnitt ${i + 1} ist ungültig.`)
+    }
+    if (!(speed >= 0.1 && speed <= 16))
+      throw new ValidationError(`Abschnitt ${i + 1}: Tempo ungültig.`)
+    return { mediaId: s.mediaId, from, to, at, speed }
+  })
+  const end = Math.max(...segments.map((s) => s.at + (s.to - s.from) / s.speed))
+  const rawDuration = num(body.duration)
+  const duration = rawDuration > 0 ? Math.max(rawDuration, end) : end
+  const target = (PUBLISH_TARGETS as readonly unknown[]).includes(body.target)
+    ? (body.target as PublishTarget)
+    : 'original'
+  return { segments, target, duration }
+}
+
+/**
+ * Wörter der Abschnitte in Timeline-Zeit, nach Anfang sortiert. Ein Wort zählt,
+ * wenn es im verwendeten Teil der Quelle liegt (50 ms Spielraum wie bei den
+ * Highlights). Liegen Abschnitte übereinander, kommen beide Wörter vor.
+ */
+export function timelineWords(
+  segments: readonly PublishSegment[],
+  transcriptOf: (mediaId: string) => Transcript,
+): Word[] {
+  const out: Word[] = []
+  for (const s of segments) {
+    for (const w of transcriptOf(s.mediaId).words) {
+      if (w.start < s.from - 0.05 || w.end > s.to + 0.05) continue
+      const map = (t: number) =>
+        Math.round((s.at + (Math.min(s.to, Math.max(s.from, t)) - s.from) / s.speed) * 1000) / 1000
+      out.push({ start: map(w.start), end: map(w.end), text: w.text })
+    }
+  }
+  return out.sort((a, b) => a.start - b.start || a.end - b.end)
+}
+
+aiRouter.post('/ai/publish', express.json({ limit: '128kb' }), (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const { segments, target, duration } = parsePublishRequest(body)
+  const items = new Map<string, MediaItem>()
+  for (const s of segments) {
+    if (items.has(s.mediaId)) continue
+    items.set(s.mediaId, requireMedia({ mediaId: s.mediaId }))
+  }
+  const transcriptOf = new Map<string, Transcript>()
+  for (const item of items.values()) transcriptOf.set(item.id, requireTranscript(item))
+  requireClaude()
+  const words = timelineWords(segments, (id) => transcriptOf.get(id) as Transcript)
+  const language = transcriptOf.get(segments[0].mediaId)?.language ?? 'auto'
+  if (!capacity('claude', res)) return
+  const job = aiJobs.start('claude', (signal) =>
+    createPublishTexts(words, language, target, duration, signal),
+  )
   started(res, job)
 })
 
