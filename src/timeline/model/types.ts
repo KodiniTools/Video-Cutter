@@ -134,6 +134,11 @@ export interface ClipColor {
   saturation: number
 }
 
+/** Ausblenden des Bildes am Ende eines Video-Clips; `duration` auf der Timeline. */
+export interface ClipFadeOut {
+  duration: Time
+}
+
 export interface VideoClip extends MediaClipBase {
   /** `still` = Standbild (Bild-Asset) mit frei wählbarer Dauer. */
   kind: 'video' | 'still'
@@ -142,6 +147,8 @@ export interface VideoClip extends MediaClipBase {
   color?: ClipColor
   /** Übergang vom vorigen Clip derselben Spur (oder aus dem Hintergrund). */
   transitionIn?: ClipTransition
+  /** Bild am Clip-Ende ausblenden (in den Hintergrund bzw. auf die Spuren darunter). */
+  fadeOut?: ClipFadeOut
   /** Letztes Bild halten, bis der nächste Clip der Spur beginnt (Standbild in der Lücke). */
   hold?: boolean
 }

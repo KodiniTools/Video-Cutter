@@ -1,5 +1,15 @@
 import { ValidationError } from './validate'
-import { fadeMs, moveMs, parseAnimSpeed, SLIDE_OFFSET, slideVector, ZOOM_FROM } from './textOverlay'
+import {
+  fadeMs,
+  moveMs,
+  parseAnimOut,
+  parseAnimSpeed,
+  SLIDE_OFFSET,
+  slideVector,
+  splitAnimation,
+  ZOOM_FROM,
+  type OutAnimation,
+} from './textOverlay'
 
 /**
  * Grafik-Einblendungen (Formen, Linien, Pfeile, Symbole, Emojis, Bilder).
@@ -75,6 +85,10 @@ export interface GraphicOverlay {
   loop: GraphicLoop
   /** Tempo von Ein-/Ausblenden und Dauer-Animation (Faktor 0,25–4). */
   animSpeed: number
+  /** Eigene Animation zum Ausblenden; fehlt sie, blendet `animation` wie bisher mit aus. */
+  animOut?: OutAnimation
+  /** Tempo des Ausblendens (nur mit `animOut`). */
+  animOutSpeed?: number
   /**
    * Bewegung über Keyframes (Timeline-Editor): fertige FFmpeg-Ausdrücke in `t`
    * für die Mitte (Anteil 0…1 des Bildes) und optional die Größe (Faktor).
@@ -167,6 +181,7 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
     if (typeof loop !== 'string' || !(GRAPHIC_LOOPS as readonly string[]).includes(loop)) {
       throw new ValidationError(`Ungültige Dauer-Animation von Grafik ${n}.`)
     }
+    const animOut = parseAnimOut(item.animOut, `Ausblenden von Grafik ${n}`)
     return {
       ...img,
       x: clamp(num(item.x, `Position von Grafik ${n}`), 0, 1),
@@ -176,6 +191,15 @@ export function parseGraphicOverlays(raw: unknown, videoDuration: number): Graph
       animation: animation as GraphicAnimation,
       loop: loop as GraphicLoop,
       animSpeed: parseAnimSpeed(item.animSpeed, `Tempo von Grafik ${n}`),
+      ...(animOut !== undefined
+        ? {
+            animOut,
+            animOutSpeed: parseAnimSpeed(
+              item.animOutSpeed,
+              `Tempo des Ausblendens von Grafik ${n}`,
+            ),
+          }
+        : {}),
     }
   })
 }
@@ -244,8 +268,9 @@ export function graphicFilter(
   const u = `(t-${st})`
   const src = [`[${inputIndex}:v]format=rgba`, ...pre]
   let fadeIn = 0
+  const end = splitAnimation(g)
   /** Ausblendzeit am Ende (s); 0 = hartes Ende. */
-  let fadeOut = g.animation === 'none' ? 0 : f
+  let fadeOut = end.out === 'none' ? 0 : end.legacy ? f : fadeMs(dur, end.outSpeed) / 1000
   /** Zusätzlicher x-Versatz in px (Ausdruck) – Hereingleiten von links/rechts. */
   const xParts: string[] = []
   /** Zusätzlicher y-Versatz in px (Ausdruck) – Hereingleiten/Schweben. */
@@ -260,7 +285,6 @@ export function graphicFilter(
       break
     case 'fadeIn':
       fadeIn = f
-      fadeOut = 0
       break
     case 'fadeOut':
       break
@@ -304,6 +328,43 @@ export function graphicFilter(
       throw new Error(`Unbekannte Animation: ${String(never)}`)
     }
   }
+  // Eigenes Ausblenden mit Bewegung: läuft in den letzten `mo` Sekunden.
+  if (!end.legacy && end.out !== 'none' && end.out !== 'fade') {
+    const mo = moveMs(dur, end.outSpeed) / 1000
+    /** 0 bis zum Beginn des Ausblendens, dann linear auf 1 am Ende. */
+    const gone = `min(1,max(0,(t-${f3(g.end - mo)})/${f3(mo)}))`
+    if (mo > 0)
+      switch (end.out) {
+        case 'slide':
+        case 'slideTop':
+        case 'slideLeft':
+        case 'slideRight': {
+          fadeOut = mo
+          const d = Math.round(SLIDE_OFFSET * frameH)
+          const [dx, dy] = slideVector(end.out)
+          if (dx !== 0) xParts.push(`${dx * d}*${gone}`)
+          if (dy !== 0) yParts.push(`${dy * d}*${gone}`)
+          break
+        }
+        case 'zoom':
+          fadeOut = Math.round(mo * 500) / 1000
+          scales.push(`(1+${f3(ZOOM_FROM - 1)}*${gone})`)
+          break
+        case 'pop': {
+          fadeOut = Math.round(mo * 500) / 1000
+          // Linear 1 -> 1,12 (erste 40 %), dann 1,12 -> 0,4, gespiegelt zum Aufploppen.
+          const up = `1+${f3(POP_PEAK - 1)}*min(1,${gone}/0.4)`
+          const down = `${POP_PEAK}-${f3(POP_PEAK - POP_FROM)}*min(1,(${gone}-0.4)/0.6)`
+          scales.push(`if(lt(${gone},0.4),${up},${down})`)
+          break
+        }
+        default: {
+          const never: never = end.out
+          throw new Error(`Unbekannte Ausblend-Animation: ${String(never)}`)
+        }
+      }
+    else fadeOut = 0
+  }
   let angle = ''
   let blink = ''
   switch (loop) {
@@ -329,10 +390,8 @@ export function graphicFilter(
       throw new Error(`Unbekannte Dauer-Animation: ${String(never)}`)
     }
   }
-  if (g.animation !== 'none') {
-    if (fadeIn > 0) src.push(`fade=t=in:st=${st}:d=${f3(fadeIn)}:alpha=1`)
-    if (fadeOut > 0) src.push(`fade=t=out:st=${f3(g.end - fadeOut)}:d=${f3(fadeOut)}:alpha=1`)
-  }
+  if (fadeIn > 0) src.push(`fade=t=in:st=${st}:d=${f3(fadeIn)}:alpha=1`)
+  if (fadeOut > 0) src.push(`fade=t=out:st=${f3(g.end - fadeOut)}:d=${f3(fadeOut)}:alpha=1`)
   // Drehen/Skalieren nur rund um den sichtbaren Bereich – sonst liefe es für
   // jedes Bild des ganzen Videos (große Fotos: spürbar langsamer). Außerhalb
   // ist die Grafik ohnehin ausgeblendet (overlay enable).

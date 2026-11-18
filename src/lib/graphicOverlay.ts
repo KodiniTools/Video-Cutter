@@ -9,7 +9,15 @@
  * der Mittelpunkt als Anteil von Breite/Höhe. Animations-Zeiten wie bei Texten.
  */
 
-import { animSpeedOf, fadeMs, moveMs, SLIDE_OFFSET, slideVector, ZOOM_FROM } from './textOverlay'
+import {
+  animSpeedOf,
+  fadeMs,
+  moveMs,
+  SLIDE_OFFSET,
+  slideVector,
+  ZOOM_FROM,
+  type OutAnimation,
+} from './textOverlay'
 import { getImageAsset, hasImageAsset } from './imageAssets'
 
 export const GRAPHIC_KINDS = [
@@ -154,6 +162,10 @@ export interface GraphicData {
   loop: GraphicLoop
   /** Tempo von Ein-/Ausblenden und Dauer-Animation (Faktor, fehlt = 1). */
   animSpeed?: number
+  /** Eigene Animation zum Ausblenden (Timeline-Editor); fehlt = wie bisher über `animation`. */
+  animOut?: OutAnimation
+  /** Tempo des Ausblendens (nur mit `animOut`). */
+  animOutSpeed?: number
   /** Nur Bilder: ID des hochgeladenen Bildes (siehe imageAssets). */
   image: string
   /** Nur Bilder: Deckkraft des ganzen Bildes 0..1. */

@@ -237,6 +237,11 @@ function checkClip(doc: TimelineDoc, clip: Clip): OpError | null {
     )
       return 'invalid-settings'
   }
+  if ((clip.kind === 'video' || clip.kind === 'still') && clip.fadeOut !== undefined) {
+    const f = clip.fadeOut
+    if (!f || !isTime(f.duration) || f.duration < MIN_TRANSITION || f.duration > MAX_TRANSITION)
+      return 'invalid-settings'
+  }
   if (clip.kind === 'audio') {
     for (const fade of [clip.fadeIn, clip.fadeOut]) {
       if (fade === undefined) continue
@@ -945,6 +950,37 @@ export function setClipTransition(
 }
 
 /**
+ * Bild am Ende eines Video-Clips ausblenden; `null` hebt es auf. Die Dauer
+ * wird auf den erlaubten Bereich begrenzt; ohne `duration` bleibt die
+ * bisherige (sonst 1 s).
+ */
+export function setClipFadeOut(
+  doc: TimelineDoc,
+  clipId: string,
+  fade: { duration?: Time } | null,
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.locked) return fail('track-locked')
+  const clip = loc.clip
+  if (clip.kind !== 'video' && clip.kind !== 'still') return fail('kind-mismatch')
+  const before = clip.fadeOut
+  const changed: Clip = { ...clip }
+  if (fade === null) {
+    if (!before) return ok(doc)
+    delete changed.fadeOut
+  } else {
+    const wanted = fade.duration ?? before?.duration ?? MICROS_PER_SECOND
+    if (!Number.isFinite(wanted)) return fail('invalid-time')
+    const duration = Math.min(MAX_TRANSITION, Math.max(MIN_TRANSITION, Math.round(wanted)))
+    if (before && before.duration === duration) return ok(doc)
+    changed.fadeOut = { duration }
+  }
+  const clips = loc.track.clips.map((c) => (c.id === clipId ? changed : c))
+  return ok(withClips(doc, loc.trackIndex, clips as Clip[]))
+}
+
+/**
  * Letztes Bild eines Video-Clips halten, bis der nächste Clip derselben Spur
  * beginnt: Die Lücke dazwischen zeigt dann ein Standbild statt des Hintergrunds.
  */
@@ -1125,7 +1161,7 @@ export function splitClip(
       right = { ...right, sourceIn: right.sourceIn + sourceSpan(left.duration, right.speed) }
     right = shiftDataKeys(right, -left.duration)
     // Die Einblendung bleibt am Anfang, die Ausblendung am Ende.
-    if (left.kind === 'audio') delete left.fadeOut
+    if (left.kind === 'audio' || left.kind === 'video' || left.kind === 'still') delete left.fadeOut
     if (right.kind === 'audio') delete right.fadeIn
     // Der Übergang gehört zum Anfang und bleibt am ersten Teil.
     if (right.kind === 'video' || right.kind === 'still') delete right.transitionIn

@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import RangeSpinner from './RangeSpinner.vue'
 import {
   EMOJI_PRESETS,
-  GRAPHIC_ANIMATIONS,
   GRAPHIC_LOOPS,
   hasColors,
   hasFill,
@@ -20,7 +19,17 @@ import {
   SYMBOL_NAMES,
 } from '@/lib/graphicOverlay'
 import { hasImageAsset } from '@/lib/imageAssets'
-import { ANIM_SPEEDS, formatAnimSpeed } from '@/lib/textOverlay'
+import {
+  ANIM_SPEEDS,
+  animParts,
+  animPatch,
+  formatAnimSpeed,
+  IN_ANIMATIONS,
+  OUT_ANIMATIONS,
+  type AnimParts,
+  type InAnimation,
+  type OutAnimation,
+} from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
 import { clipGraphic } from '@/timeline/graphics'
 import OverlayKeys from './OverlayKeys.vue'
@@ -89,6 +98,17 @@ function set(patch: Record<string, unknown>): void {
   commit()
   const id = clip.value?.id
   if (id) store.updateClipData(id, patch)
+}
+
+/** Grafiken kennen keine Schreibmaschine. */
+const GRAPHIC_IN_ANIMATIONS = IN_ANIMATIONS.filter((a) => a !== 'typewriter')
+
+/** Ein- und Ausblenden getrennt (ältere Grafiken werden passend gedeutet). */
+const anim = computed(() => animParts(clip.value?.data ?? {}))
+
+/** Schreibt immer alle vier Felder, damit Ein- und Ausblenden unabhängig bleiben. */
+function setAnim(change: Partial<AnimParts>): void {
+  set(animPatch({ ...anim.value, ...change }))
 }
 
 const value = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement).value
@@ -348,14 +368,26 @@ onBeforeUnmount(commit)
 
     <div class="row">
       <label class="field">
-        <span>{{ t('graphics.entry') }}</span>
+        <span>{{ t('text.animIn') }}</span>
         <select
-          :value="g.animation"
+          :value="anim.in"
           data-testid="graphic-animation"
-          @change="set({ animation: value($event) })"
+          @change="setAnim({ in: value($event) as InAnimation })"
         >
-          <option v-for="a in GRAPHIC_ANIMATIONS" :key="a" :value="a">
-            {{ t(`text.animations.${a}`) }}
+          <option v-for="a in GRAPHIC_IN_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.inAnimations.${a}`) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('text.animOut') }}</span>
+        <select
+          :value="anim.out"
+          data-testid="graphic-anim-out"
+          @change="setAnim({ out: value($event) as OutAnimation })"
+        >
+          <option v-for="a in OUT_ANIMATIONS" :key="a" :value="a">
+            {{ t(`text.outAnimations.${a}`) }}
           </option>
         </select>
       </label>
@@ -367,13 +399,28 @@ onBeforeUnmount(commit)
           </option>
         </select>
       </label>
+    </div>
+    <div class="row">
       <label class="field">
-        <span>{{ t('text.animSpeed') }}</span>
+        <span>{{ t('graphics.animInSpeed') }}</span>
         <select
-          :value="g.animSpeed ?? 1"
-          :disabled="g.animation === 'none' && g.loop === 'none'"
+          :value="anim.inSpeed"
+          :disabled="anim.in === 'none' && g.loop === 'none'"
           data-testid="graphic-anim-speed"
-          @change="set({ animSpeed: number($event) })"
+          @change="setAnim({ inSpeed: number($event) })"
+        >
+          <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
+            {{ formatAnimSpeed(s, locale) }}
+          </option>
+        </select>
+      </label>
+      <label class="field">
+        <span>{{ t('text.animOutSpeed') }}</span>
+        <select
+          :value="anim.outSpeed"
+          :disabled="anim.out === 'none'"
+          data-testid="graphic-anim-out-speed"
+          @change="setAnim({ outSpeed: number($event) })"
         >
           <option v-for="s in ANIM_SPEEDS" :key="s" :value="s">
             {{ formatAnimSpeed(s, locale) }}

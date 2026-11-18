@@ -1,5 +1,6 @@
 import {
   ANIM_SPEEDS,
+  OUT_ANIMATIONS,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
   TEXT_ANIMATIONS,
@@ -23,6 +24,9 @@ export interface TextDefault {
   accent: string
   animation: string
   animSpeed: number
+  /** Eigenes Ausblenden (fehlt bei älteren Standards: wie bisher über `animation`). */
+  animOut?: string
+  animOutSpeed?: number
 }
 
 export const TEXT_DEFAULT_KEYS = [
@@ -35,6 +39,8 @@ export const TEXT_DEFAULT_KEYS = [
   'accent',
   'animation',
   'animSpeed',
+  'animOut',
+  'animOutSpeed',
 ] as const satisfies readonly (keyof TextDefault)[]
 
 const HEX = /^#[0-9a-f]{6}$/i
@@ -61,7 +67,18 @@ export function parseTextDefault(raw: unknown): TextDefault | null {
     return null
   if (typeof animSpeed !== 'number' || !(ANIM_SPEEDS as readonly number[]).includes(animSpeed))
     return null
-  return { x, y, font, size, color, style, accent, animation, animSpeed }
+  const base = { x, y, font, size, color, style, accent, animation, animSpeed }
+  const animOut = d.animOut
+  if (animOut === undefined || animOut === null) return base
+  if (typeof animOut !== 'string' || !(OUT_ANIMATIONS as readonly string[]).includes(animOut))
+    return null
+  const animOutSpeed = d.animOutSpeed === undefined ? 1 : d.animOutSpeed
+  if (
+    typeof animOutSpeed !== 'number' ||
+    !(ANIM_SPEEDS as readonly number[]).includes(animOutSpeed)
+  )
+    return null
+  return { ...base, animOut, animOutSpeed }
 }
 
 /** Entsprechen die Daten eines Text-Clips dem Standard? (Keyframes: Position zählt nicht.) */
@@ -84,8 +101,11 @@ export function textDefaultPatch(
   const keyed = hasKeys(data)
   for (const key of TEXT_DEFAULT_KEYS) {
     if (keyed && (key === 'x' || key === 'y')) continue
-    const cur = key === 'animSpeed' && data[key] === undefined ? 1 : data[key]
-    if (cur !== def[key]) patch[key] = def[key]
+    // Tempo: fehlt = 1. Ohne eigenes Ausblenden spielt dessen Tempo keine Rolle.
+    const speed = key === 'animSpeed' || (key === 'animOutSpeed' && def.animOut !== undefined)
+    const cur = speed && data[key] === undefined ? 1 : (data[key] ?? undefined)
+    const want = key === 'animOutSpeed' && def.animOut === undefined ? cur : def[key]
+    if (cur !== want) patch[key] = want
   }
   return patch
 }
