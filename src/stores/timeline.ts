@@ -30,6 +30,7 @@ import {
   removeClip as removeClipOp,
   removeMarker as removeMarkerOp,
   setMarkerEffect as setMarkerEffectOp,
+  removeEmptyTracks as removeEmptyTracksOp,
   removeTrack as removeTrackOp,
   setClipColor as setClipColorOp,
   setClipCrop as setClipCropOp,
@@ -267,6 +268,8 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   const addTrack = (track: NewTrack, index?: number) => apply((d) => addTrackOp(d, track, index))
   const removeTrack = (trackId: string) => apply((d) => removeTrackOp(d, trackId))
+  /** Alle leeren, nicht gesperrten Spuren entfernen (ein Rückgängig-Schritt). */
+  const removeEmptyTracks = () => apply(removeEmptyTracksOp)
   const updateTrack = (trackId: string, patch: TrackPatch) =>
     apply((d) => updateTrackOp(d, trackId, patch))
   const moveTrack = (trackId: string, index: number) => apply((d) => moveTrackOp(d, trackId, index))
@@ -720,6 +723,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     removeAsset,
     addTrack,
     removeTrack,
+    removeEmptyTracks,
     updateTrack,
     moveTrack,
     newTrack,

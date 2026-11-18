@@ -352,6 +352,18 @@ export function removeTrack(doc: TimelineDoc, trackId: string): OpResult {
   return ok({ ...doc, tracks: doc.tracks.filter((t) => t.id !== trackId) })
 }
 
+/** Spuren ohne Clips, die sich entfernen lassen (gesperrte bleiben). */
+export function emptyTrackIds(doc: TimelineDoc): string[] {
+  return doc.tracks.filter((t) => t.clips.length === 0 && !t.locked).map((t) => t.id)
+}
+
+/** Alle leeren, nicht gesperrten Spuren in einem Schritt entfernen. */
+export function removeEmptyTracks(doc: TimelineDoc): OpResult {
+  const empty = new Set(emptyTrackIds(doc))
+  if (empty.size === 0) return ok(doc)
+  return ok({ ...doc, tracks: doc.tracks.filter((t) => !empty.has(t.id)) })
+}
+
 /** Spur an eine andere Stelle der Reihenfolge setzen (`index` 0 = ganz oben). */
 export function moveTrack(doc: TimelineDoc, trackId: string, index: number): OpResult {
   const from = doc.tracks.findIndex((t) => t.id === trackId)
