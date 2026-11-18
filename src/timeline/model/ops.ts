@@ -1549,13 +1549,114 @@ export function updateMarker(
   if (doc.markers.some((m) => m.id !== markerId && m.at === at)) return fail('overlap')
   const label = patch.label === undefined ? before.label : markerLabel(patch.label)
   if (at === before.at && label === before.label) return ok(doc)
-  const markers = sortMarkers(doc.markers.map((m) => (m.id === markerId ? { ...m, at, label } : m)))
-  return ok({ ...doc, markers })
+  // Gebundene Clips (samt verknüpften) wandern um denselben Betrag mit.
+  let next = doc
+  if (at !== before.at) {
+    const moved = shiftClips(doc, markerClipIds(doc, markerId), at - before.at)
+    if (!moved.ok) return moved
+    next = moved.doc
+  }
+  const markers = sortMarkers(
+    next.markers.map((m) => (m.id === markerId ? { ...m, at, label } : m)),
+  )
+  return ok({ ...next, markers })
 }
 
+/** Marker löschen; seine Clips bleiben liegen und sind danach nicht mehr gebunden. */
 export function removeMarker(doc: TimelineDoc, markerId: string): OpResult {
   if (!doc.markers.some((m) => m.id === markerId)) return fail('marker-not-found')
-  return ok({ ...doc, markers: doc.markers.filter((m) => m.id !== markerId) })
+  const unbound = setClipMarker(doc, markerClipIds(doc, markerId), undefined)
+  return ok({ ...unbound, markers: unbound.markers.filter((m) => m.id !== markerId) })
+}
+
+/** IDs der an den Marker gebundenen Clips (Reihenfolge der Spuren). */
+export function markerClipIds(doc: TimelineDoc, markerId: string): string[] {
+  return doc.tracks
+    .flatMap((t) => (t.clips as Clip[]).filter((c) => c.marker === markerId))
+    .map((c) => c.id)
+}
+
+/** Bindung der Clips setzen (`undefined` = lösen); unbekannte IDs werden übergangen. */
+function setClipMarker(doc: TimelineDoc, clipIds: readonly string[], markerId: string | undefined) {
+  const ids = new Set(clipIds)
+  let next = doc
+  doc.tracks.forEach((track, i) => {
+    const clips = track.clips as Clip[]
+    if (!clips.some((c) => ids.has(c.id) && c.marker !== markerId)) return
+    next = withClips(
+      next,
+      i,
+      clips.map((c) => {
+        if (!ids.has(c.id) || c.marker === markerId) return c
+        const copy = { ...c }
+        if (markerId === undefined) delete copy.marker
+        else copy.marker = markerId
+        return copy
+      }),
+    )
+  })
+  return next
+}
+
+/**
+ * Clips (samt verknüpften) gemeinsam um `delta` verschieben, jeder auf seiner
+ * Spur. Abgelehnt, wenn eine Spur gesperrt ist, ein Clip vor 0 rutschen oder
+ * auf einen nicht mitbewegten Clip stoßen würde.
+ */
+function shiftClips(doc: TimelineDoc, clipIds: readonly string[], delta: Time): OpResult {
+  if (delta === 0 || clipIds.length === 0) return ok(doc)
+  const moving = new Set<string>()
+  for (const id of clipIds) {
+    const loc = findClip(doc, id)
+    if (loc) for (const m of linkedClips(doc, loc, true)) moving.add(m.clip.id)
+  }
+  let next = doc
+  for (let i = 0; i < doc.tracks.length; i++) {
+    const track = doc.tracks[i]
+    const clips = track.clips as Clip[]
+    if (!clips.some((c) => moving.has(c.id))) continue
+    if (track.locked) return fail('track-locked')
+    const kept = clips.filter((c) => !moving.has(c.id))
+    const lane = [...kept]
+    for (const c of clips) {
+      if (!moving.has(c.id)) continue
+      const start = c.start + delta
+      if (!isTime(start)) return fail('invalid-time')
+      if (overlaps(kept, start, start + c.duration)) return fail('overlap')
+      lane.push({ ...c, start })
+    }
+    next = withClips(next, i, lane)
+  }
+  return ok(next)
+}
+
+/**
+ * Clips an einen Marker binden. Die Clips rücken als Gruppe so, dass der
+ * früheste genau am Marker beginnt (Abstände untereinander bleiben); danach
+ * wandern sie mit dem Marker.
+ */
+export function bindClipsToMarker(
+  doc: TimelineDoc,
+  markerId: string,
+  clipIds: readonly string[],
+): OpResult {
+  const marker = doc.markers.find((m) => m.id === markerId)
+  if (!marker) return fail('marker-not-found')
+  const locs = clipIds.map((id) => findClip(doc, id))
+  if (locs.length === 0) return ok(doc)
+  if (locs.some((l) => l === null)) return fail('clip-not-found')
+  const first = Math.min(...locs.map((l) => (l as ClipLocation).clip.start))
+  const moved = shiftClips(doc, clipIds, marker.at - first)
+  if (!moved.ok) return moved
+  return ok(setClipMarker(moved.doc, clipIds, markerId))
+}
+
+/** Bindung eines Clips an seinen Marker lösen (der Clip bleibt, wo er ist). */
+export function unbindClip(doc: TimelineDoc, clipId: string): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.clip.marker === undefined) return ok(doc)
+  return ok(setClipMarker(doc, [clipId], undefined))
 }
 
 // --- Einrasten --------------------------------------------------------------

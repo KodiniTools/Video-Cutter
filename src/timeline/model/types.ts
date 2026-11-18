@@ -51,6 +51,11 @@ interface ClipBase {
   duration: Time
   /** Clips mit gleicher Gruppe (z. B. Bild + Ton eines Videos) bewegen sich gemeinsam. */
   linkGroup?: string
+  /**
+   * An diesen Marker gebunden (wie ein Beat-Drop-Marker im Visualizer): Wird
+   * der Marker verschoben, wandert der Clip mit; sein Abstand zum Marker bleibt.
+   */
+  marker?: string
 }
 
 interface MediaClipBase extends ClipBase {

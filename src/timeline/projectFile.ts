@@ -90,6 +90,7 @@ function parseAsset(key: string, v: unknown): AssetRef {
 function parseClip(v: unknown): Clip {
   if (!isObj(v) || !isId(v.id) || !isNum(v.start) || !isNum(v.duration)) invalid()
   if (v.linkGroup !== undefined && typeof v.linkGroup !== 'string') invalid()
+  if (v.marker !== undefined && typeof v.marker !== 'string') invalid()
   switch (v.kind) {
     case 'video':
     case 'still':

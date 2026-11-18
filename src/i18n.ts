@@ -888,6 +888,25 @@ const messages = {
         copied: 'Kapitelliste kopiert.',
         copyFailed: 'Kopieren war nicht möglich.',
         chapter: 'Kapitel',
+        elements: {
+          add: '+ Am Marker …',
+          addTitle:
+            'Text, Form, Bild oder Ton genau am Marker einsetzen. Es hängt am Marker und wandert beim Verschieben mit.',
+          text: 'Text',
+          graphics: 'Form, Symbol, Emoji',
+          image: 'Bild …',
+          audio: 'Ton aus der Medienliste',
+          bind: 'Markierte anbinden',
+          bindTitle:
+            'Markierte Clips an den Marker setzen und anbinden: Sie beginnen am Marker und wandern mit ihm.',
+          title: 'Am Marker:',
+          pick: 'Clip markieren',
+          unbind: 'Vom Marker lösen (Clip bleibt liegen)',
+          unbindNamed: '„{name}“ vom Marker lösen',
+          removeKeeps: 'Die angebundenen Clips bleiben liegen und sind danach nicht mehr gebunden.',
+          count: '{count} Clip(s) am Marker',
+          boundClip: 'Am Marker angebunden: wandert beim Verschieben des Markers mit',
+        },
       },
       hint: {
         locked: 'Die Spur ist gesperrt.',
@@ -1878,6 +1897,25 @@ const messages = {
         copied: 'Chapter list copied.',
         copyFailed: 'Copying was not possible.',
         chapter: 'Chapter',
+        elements: {
+          add: '+ At marker …',
+          addTitle:
+            'Place text, a shape, an image or a sound exactly at the marker. It is attached to the marker and moves with it.',
+          text: 'Text',
+          graphics: 'Shape, symbol, emoji',
+          image: 'Image …',
+          audio: 'Sound from the media list',
+          bind: 'Attach selected',
+          bindTitle:
+            'Move the selected clips to the marker and attach them: they start at the marker and move with it.',
+          title: 'At marker:',
+          pick: 'Select clip',
+          unbind: 'Detach from marker (clip stays in place)',
+          unbindNamed: 'Detach “{name}” from marker',
+          removeKeeps: 'Attached clips stay in place and are no longer attached.',
+          count: '{count} clip(s) at the marker',
+          boundClip: 'Attached to a marker: moves when the marker is moved',
+        },
       },
       hint: {
         locked: 'The track is locked.',
