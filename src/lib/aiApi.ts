@@ -174,6 +174,51 @@ export function parseHighlights(data: unknown): Highlight[] {
     .sort((a, b) => a.start - b.start)
 }
 
+// --- Titel, Beschreibung, Hashtags und Kapitel -------------------------------------
+
+/**
+ * Ton-Abschnitt der Timeline für `/api/ai/publish`: Quelle von `from` bis `to`
+ * (Sekunden der Quelle) liegt ab `at` (Sekunden der Timeline) mit Tempo `speed`.
+ */
+export interface PublishSegment {
+  mediaId: string
+  from: number
+  to: number
+  at: number
+  speed: number
+}
+
+/** Kapitel; `at` in Sekunden der Timeline. */
+export interface PublishChapter {
+  at: number
+  title: string
+}
+
+export interface PublishTexts {
+  titles: string[]
+  description: string
+  /** Mit führendem „#“. */
+  hashtags: string[]
+  chapters: PublishChapter[]
+}
+
+export function parsePublishTexts(data: unknown): PublishTexts {
+  const d = isRecord(data) ? data : {}
+  const strings = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : []
+  const chapters = (Array.isArray(d.chapters) ? d.chapters : [])
+    .filter(isRecord)
+    .filter((c) => finite(c.at) && c.at >= 0)
+    .map((c) => ({ at: c.at as number, title: typeof c.title === 'string' ? c.title : '' }))
+    .sort((a, b) => a.at - b.at)
+  return {
+    titles: strings(d.titles),
+    description: typeof d.description === 'string' ? d.description : '',
+    hashtags: strings(d.hashtags).map((h) => (h.startsWith('#') ? h : `#${h}`)),
+    chapters,
+  }
+}
+
 // --- KI-Bilder für Bild-Clips ----------------------------------------------------
 
 /** Stilvorlagen (wie server/src/lib/claude.ts IMAGE_STYLES). */
@@ -423,6 +468,7 @@ export function runAiJob<T>(
     | 'cuts'
     | 'translate'
     | 'highlights'
+    | 'publish'
     | 'image-prompt'
     | 'images'
     | 'video-prompt'

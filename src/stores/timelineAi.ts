@@ -4,6 +4,7 @@ import {
   AI_CANCELLED,
   fetchAiStatus,
   parseHighlights,
+  parsePublishTexts,
   parseSubtitles,
   parseSuggestions,
   parseTranscript,
@@ -13,6 +14,7 @@ import {
   type AiStatus,
   type CutSuggestion,
   type Highlight,
+  type PublishTexts,
   type SubtitleTarget,
   type TranscribeLanguage,
   type TranslateTarget,
@@ -30,9 +32,17 @@ import {
 import { cuesToClips, subtitleStyle } from '@/timeline/subtitles'
 import { useTextDefaultStore } from './textDefault'
 import { findSilences, type SilenceOptions } from '@/timeline/silence'
+import {
+  applyChapterMarkers,
+  MAX_PUBLISH_MEDIA,
+  segmentMedia,
+  speechSegments,
+  type ChapterMarkerResult,
+} from '@/timeline/publish'
 import { useTimelineStore } from './timeline'
 
-export type TimelineAiTask = 'transcribe' | 'subtitles' | 'translate' | 'cuts' | 'highlights'
+export type TimelineAiTask =
+  'transcribe' | 'subtitles' | 'translate' | 'cuts' | 'highlights' | 'publish'
 
 /** Schnittvorschlag mit Häkchen; Zeiten in Sekunden der Quelldatei. */
 export interface ClipSuggestion extends CutSuggestion {
@@ -79,6 +89,10 @@ export interface Audition {
 
 /** Kennung beim Ansehen aller angehakten Highlights hintereinander. */
 export const ALL_HIGHLIGHTS = -1
+
+/** Fehler-Kennungen beim Erzeugen von Titel/Beschreibung (Text kommt aus i18n). */
+export const NO_SPEECH = 'NO_SPEECH'
+export const TOO_MANY_MEDIA = 'TOO_MANY_MEDIA'
 
 /** So viel wird beim Probehören eines Vorschlags davor und danach abgespielt. */
 export const AUDITION_LEAD: Time = 2 * MICROS_PER_SECOND
@@ -559,6 +573,67 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     return ranges.length
   }
 
+  // --- Titel, Beschreibung, Hashtags und Kapitel ---------------------------------
+
+  /** Zuletzt erzeugte Texte für das ganze Video (bis zum nächsten Erzeugen). */
+  const publish = ref<PublishTexts | null>(null)
+
+  /**
+   * Titel, Beschreibung, Hashtags und Kapitel für die ganze Timeline erzeugen.
+   * Transkribiert vorher jedes gesprochene Medium, für das noch kein
+   * Transkript in der gewählten Sprache vorliegt.
+   */
+  function suggestPublish(
+    language: TranscribeLanguage,
+    target: SubtitleTarget,
+  ): Promise<PublishTexts> {
+    return guarded(async () => {
+      const segments = speechSegments(timeline.doc)
+      if (segments.length === 0) throw new Error(NO_SPEECH)
+      const media = segmentMedia(segments)
+      if (media.length > MAX_PUBLISH_MEDIA) throw new Error(TOO_MANY_MEDIA)
+      const duration = timeToSeconds(timeline.duration)
+      const job = () =>
+        step('publish', () =>
+          runAiJob('publish', { segments, target, duration }, parsePublishTexts, onProgress),
+        )
+      const missing = media.filter((id) => transcribed.value[id] !== language)
+      for (const id of missing) await transcribe(id, language)
+      let result: PublishTexts
+      try {
+        result = await job()
+      } catch (e) {
+        // Fehlt dem Server ein schon bekanntes Transkript (z. B. Neustart), neu erkennen.
+        if ((e instanceof Error && e.message === AI_CANCELLED) || missing.length === media.length) {
+          throw e
+        }
+        for (const id of media) if (!missing.includes(id)) await transcribe(id, language)
+        result = await job()
+      }
+      publish.value = result
+      return result
+    })
+  }
+
+  /** Kapitel als Marker übernehmen (ein Verlaufsschritt). */
+  function applyChapters(
+    chapters: PublishTexts['chapters'],
+    replace: boolean,
+  ): ChapterMarkerResult {
+    let info: ChapterMarkerResult = { added: 0, renamed: 0, removed: 0 }
+    const ok = timeline.apply((d) => {
+      const r = applyChapterMarkers(d, chapters, replace)
+      if (r.ok && r.info) info = r.info
+      return r
+    })
+    if (!ok) throw new Error('Die Kapitel konnten nicht als Marker gesetzt werden.')
+    return info
+  }
+
+  function clearPublish(): void {
+    publish.value = null
+  }
+
   function cancel(): void {
     run.value?.cancel()
   }
@@ -598,6 +673,10 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     playAllHighlights,
     clearHighlights,
     applyHighlights,
+    publish,
+    suggestPublish,
+    applyChapters,
+    clearPublish,
     translateTexts,
     cancel,
   }
