@@ -110,11 +110,62 @@ describe('Zeitlich verschieben (Knopfleiste)', () => {
       ['v2', s(2) + ms(110)],
     ])
     expect(starts(store.doc, 'T1')).toEqual([['t', s(1) + ms(100)]])
-    // v2 würde v1 überlappen: nichts bewegt sich.
+    // v2 würde v1 überlappen: alles rückt nur bis an v1 heran (110 ms).
+    expect(store.nudgeSelection({ by: -ms(1000) })).toBe(true)
+    expect(starts(store.doc, 'V1')).toEqual([
+      ['v1', 0],
+      ['v2', s(2)],
+    ])
+    expect(starts(store.doc, 'T1')).toEqual([['t', s(1) - ms(10)]])
+    // Kein Platz mehr: abgelehnt, nichts bewegt sich.
     const before = store.doc
-    expect(store.nudgeSelection({ by: -ms(1000) })).toBe(false)
+    expect(store.nudgeSelection({ by: -ms(5) })).toBe(false)
     expect(store.lastError).toBe('overlap')
     expect(store.doc).toBe(before)
+  })
+
+  it('rückt vorwärts bis an den nächsten Clip heran', () => {
+    const store = setup()
+    store.insertClip('T1', text('t1', s(1), s(1)))
+    store.insertClip('T1', text('t2', s(2) + ms(30), s(1)))
+    store.select(['t1'])
+    expect(store.nudgeSelection({ by: ms(100) })).toBe(true)
+    expect(starts(store.doc, 'T1')[0]).toEqual(['t1', s(1) + ms(30)])
+    expect(store.nudgeSelection({ by: ms(5) })).toBe(false)
+  })
+
+  it('kürzt mit „Nachbarn kürzen“ lückenlos angrenzende Clips', () => {
+    const store = setup()
+    store.insertClip('T1', text('t1', s(1), s(1)))
+    store.insertClip('T1', text('t2', s(2), s(1)))
+    store.insertClip('T1', text('t3', s(3), s(1)))
+    store.select(['t2'])
+    expect(store.nudgeSelection({ by: -ms(100) })).toBe(false)
+    const span = () =>
+      store.doc.tracks.find((t) => t.id === 'T1')!.clips.map((c) => [c.id, c.start, c.duration])
+    expect(store.nudgeSelection({ by: -ms(100) }, { trimNeighbours: true })).toBe(true)
+    expect(span()).toEqual([
+      ['t1', s(1), s(1) - ms(100)],
+      ['t2', s(2) - ms(100), s(1)],
+      ['t3', s(3), s(1)],
+    ])
+    expect(store.nudgeSelection({ by: ms(300) }, { trimNeighbours: true })).toBe(true)
+    expect(span()).toEqual([
+      ['t1', s(1), s(1) - ms(100)],
+      ['t2', s(2) + ms(200), s(1)],
+      ['t3', s(3) + ms(200), s(1) - ms(200)],
+    ])
+    // Keyframes des vorn gekürzten Nachbarn bleiben an ihrer Stelle auf der Timeline.
+    const t3 = store.doc.tracks.find((t) => t.id === 'T1')!.clips[2] as OverlayClip
+    expect(t3.data.keys).toEqual([{ at: s(1) - ms(200), x: 0.2, y: 0.3, scale: 1 }])
+    store.undo()
+    expect(span()[2]).toEqual(['t3', s(3), s(1)])
+    // Der Nachbar würde verschwinden: abgelehnt.
+    const before = store.doc
+    expect(store.nudgeSelection({ by: ms(2000) }, { trimNeighbours: true })).toBe(false)
+    expect(store.lastError).toBe('overlap')
+    expect(store.doc).toBe(before)
+    expect(validateDoc(store.doc)).toEqual([])
   })
 
   it('richtet Anfang oder Ende am Abspielkopf aus', () => {

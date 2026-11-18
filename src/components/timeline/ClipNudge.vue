@@ -21,6 +21,8 @@ const back = STEPS_MS.map((ms) => -ms)
 const forward = [...STEPS_MS].reverse()
 
 const wholeTracks = ref(false)
+/** Nachbarn kürzen, statt an ihnen hängen zu bleiben (z. B. lückenlose Untertitel). */
+const trimNeighbours = ref(false)
 const error = ref<OpError | null>(null)
 
 const span = computed(() =>
@@ -47,14 +49,14 @@ const ERRORS: Partial<Record<OpError, string>> = {
   'invalid-time': 'timeline.nudge.beforeZero',
 }
 const errorText = computed(() => {
+  if (error.value === 'overlap' && trimNeighbours.value) return t('timeline.nudge.overlapTrim')
   const key = error.value ? ERRORS[error.value] : undefined
   return key ? t(key) : ''
 })
 
 function run(target: NudgeTarget): void {
-  error.value = store.nudgeSelection(target, { wholeTracks: wholeTracks.value })
-    ? null
-    : store.lastError
+  const opts = { wholeTracks: wholeTracks.value, trimNeighbours: trimNeighbours.value }
+  error.value = store.nudgeSelection(target, opts) ? null : store.lastError
 }
 
 const label = (ms: number) => `${ms > 0 ? '+' : '−'}${Math.abs(ms)}`
@@ -115,6 +117,10 @@ const label = (ms: number) => `${ms > 0 ? '+' : '−'}${Math.abs(ms)}`
     <label class="check">
       <input v-model="wholeTracks" type="checkbox" data-testid="clip-nudge-whole-track" />
       <span>{{ t('timeline.nudge.wholeTrack') }}</span>
+    </label>
+    <label class="check">
+      <input v-model="trimNeighbours" type="checkbox" data-testid="clip-nudge-trim-neighbours" />
+      <span>{{ t('timeline.nudge.trimNeighbours') }}</span>
     </label>
     <p v-if="errorText" class="hint warn" role="alert" data-testid="clip-nudge-error">
       {{ errorText }}
