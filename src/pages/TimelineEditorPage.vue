@@ -242,7 +242,7 @@ function openProjects(): void {
     --stage-room: calc(100dvh - var(--site-nav-offset, 0px));
   }
   .stage :deep(.screen) {
-    max-height: max(220px, calc(var(--stage-room) * 0.56));
+    --screen-max-h: max(220px, calc(var(--stage-room) * 0.56));
   }
   .stage :deep(.scroller) {
     max-height: max(180px, calc(var(--stage-room) * 0.5));

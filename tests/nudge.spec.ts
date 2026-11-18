@@ -44,7 +44,7 @@ describe('nudgeTime', () => {
   })
 })
 
-describe('Schrittknöpfe im Vorschau-Player', () => {
+describe('Vorschau-Player: Schrittknöpfe und Formatrahmen', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
@@ -80,6 +80,22 @@ describe('Schrittknöpfe im Vorschau-Player', () => {
       'true',
     )
     again.w.unmount()
+  })
+
+  it('Formatrahmen: Bildfläche im Seitenverhältnis des Formats, Raster nur auf Wunsch', async () => {
+    const { w, store } = await player()
+    const { width, height } = store.doc.settings
+    const screen = w.get('[data-testid="preview-screen"]')
+    expect(screen.attributes('style')).toContain(`--screen-ratio: ${width / height}`)
+    expect(w.get('[data-testid="preview-format"]').text()).toBe(`${width} × ${height}`)
+    // Raster: aus, bis es eingeschaltet wird; die Wahl wird gemerkt
+    expect(w.find('[data-testid="preview-grid"]').exists()).toBe(false)
+    await w.get('[data-testid="preview-grid-toggle"]').trigger('click')
+    expect(w.find('[data-testid="preview-grid"]').exists()).toBe(true)
+    expect(localStorage.getItem('videoCutter.previewGrid')).toBe('1')
+    await w.get('[data-testid="preview-grid-toggle"]').trigger('click')
+    expect(w.find('[data-testid="preview-grid"]').exists()).toBe(false)
+    w.unmount()
   })
 
   it('am Anfang und am Ende gesperrt', async () => {
