@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from 'vue'
 import {
   AI_CANCELLED,
   fetchAiStatus,
+  parseBrollSuggestions,
   parseHighlights,
   parsePublishTexts,
   parseSubtitles,
@@ -12,6 +13,9 @@ import {
   runAiJob,
   type AiRun,
   type AiStatus,
+  type BrollMode,
+  type BrollSuggestion,
+  type ImageStyle,
   type CutSuggestion,
   type Highlight,
   type PublishTexts,
@@ -42,7 +46,7 @@ import {
 import { useTimelineStore } from './timeline'
 
 export type TimelineAiTask =
-  'transcribe' | 'subtitles' | 'translate' | 'cuts' | 'highlights' | 'publish'
+  'transcribe' | 'subtitles' | 'translate' | 'cuts' | 'highlights' | 'publish' | 'broll'
 
 /** Schnittvorschlag mit Häkchen; Zeiten in Sekunden der Quelldatei. */
 export interface ClipSuggestion extends CutSuggestion {
@@ -615,6 +619,64 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     })
   }
 
+  /**
+   * Gesprochenes aller Medien der Timeline transkribieren (soweit nötig) und
+   * danach `job` ausführen. Fehlt dem Server ein schon bekanntes Transkript
+   * (z. B. nach einem Neustart), wird neu erkannt und einmal wiederholt.
+   */
+  async function withSpeech<T>(
+    language: TranscribeLanguage,
+    job: (segments: ReturnType<typeof speechSegments>, duration: number) => Promise<T>,
+  ): Promise<T> {
+    const segments = speechSegments(timeline.doc)
+    if (segments.length === 0) throw new Error(NO_SPEECH)
+    const media = segmentMedia(segments)
+    if (media.length > MAX_PUBLISH_MEDIA) throw new Error(TOO_MANY_MEDIA)
+    const duration = timeToSeconds(timeline.duration)
+    const missing = media.filter((id) => transcribed.value[id] !== language)
+    for (const id of missing) await transcribe(id, language)
+    try {
+      return await job(segments, duration)
+    } catch (e) {
+      if ((e instanceof Error && e.message === AI_CANCELLED) || missing.length === media.length) {
+        throw e
+      }
+      for (const id of media) if (!missing.includes(id)) await transcribe(id, language)
+      return job(segments, duration)
+    }
+  }
+
+  /**
+   * Zwischenbilder (B-Roll) für die ganze Timeline vorschlagen lassen: Claude
+   * sucht Stellen im Gesprochenen und schreibt je Stelle einen Prompt.
+   */
+  function suggestBroll(
+    language: TranscribeLanguage,
+    opts: { mode: BrollMode; style: ImageStyle; count: number; promptLanguage: 'de' | 'en' },
+  ): Promise<BrollSuggestion[]> {
+    return guarded(() =>
+      withSpeech(language, (segments, duration) =>
+        step('broll', () =>
+          runAiJob(
+            'broll',
+            {
+              segments,
+              duration,
+              mode: opts.mode,
+              style: opts.style,
+              count: opts.count,
+              language: opts.promptLanguage,
+              width: timeline.doc.settings.width,
+              height: timeline.doc.settings.height,
+            },
+            parseBrollSuggestions,
+            onProgress,
+          ),
+        ),
+      ),
+    )
+  }
+
   /** Kapitel als Marker übernehmen (ein Verlaufsschritt). */
   function applyChapters(
     chapters: PublishTexts['chapters'],
@@ -677,6 +739,7 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
     suggestPublish,
     applyChapters,
     clearPublish,
+    suggestBroll,
     translateTexts,
     cancel,
   }

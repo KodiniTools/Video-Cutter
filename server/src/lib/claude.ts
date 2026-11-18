@@ -980,3 +980,163 @@ export async function createPublishTexts(
   )
   return buildPublishTexts(words, raw, duration)
 }
+
+// --- Zwischenbilder (B-Roll) zum Gesprochenen -----------------------------------------
+
+/** Art eines Zwischenbilds: Standbild oder kurzer Video-Clip. */
+export const BROLL_KINDS = ['image', 'video'] as const
+export type BrollKind = (typeof BROLL_KINDS)[number]
+/** Welche Art Claude vorschlagen darf (`auto` = Claude entscheidet je Stelle). */
+export const BROLL_MODES = ['auto', 'image', 'video'] as const
+export type BrollMode = (typeof BROLL_MODES)[number]
+
+/** Länge eines Zwischenbilds auf der Timeline (Sekunden). */
+export const MIN_BROLL_DURATION = 2
+export const MAX_BROLL_DURATION = 10
+/** So viele Zwischenbilder werden höchstens vorgeschlagen. */
+export const MAX_BROLLS = 12
+export const DEFAULT_BROLLS = 5
+/** Mindestabstand zwischen zwei Zwischenbildern (Sekunden). */
+export const MIN_BROLL_GAP = 1
+
+export interface BrollSuggestion {
+  /** Anfang und Ende in Sekunden der Timeline. */
+  at: number
+  end: number
+  kind: BrollKind
+  /** Kurzer Name der Stelle. */
+  title: string
+  /** Warum hier ein Zwischenbild passt. */
+  reason: string
+  /** Prompt für Gemini (Sprache wie gewünscht). */
+  prompt: string
+}
+
+export interface BrollRequest {
+  mode: BrollMode
+  style: ImageStyle
+  /** Seitenverhältnis des Projekts, z. B. „16:9“. */
+  aspect: string
+  /** Sprache der Prompts und Titel. */
+  language: 'de' | 'en'
+  /** Gewünschte Höchstzahl. */
+  count: number
+}
+
+const BROLL_KIND_HINT: Record<BrollMode, string> = {
+  auto: 'For each moment choose "image" (a still picture, cheap and fast) or "video" (a short moving shot, only where motion clearly adds something, e.g. a process, a place, an action).',
+  image: 'Every suggestion must have "kind": "image" (a still picture).',
+  video: 'Every suggestion must have "kind": "video" (a short moving shot without cuts).',
+}
+
+function brollTask(r: BrollRequest, duration: number): string {
+  const lang = r.language === 'de' ? 'German' : 'English'
+  return `The transcript is the complete video in playback order (times are seconds of the finished video, about ${Math.round(duration)} seconds long). Suggest B-roll: AI-generated cutaway pictures that are shown full-screen over the video while the speaker keeps talking, to illustrate what is being said.
+
+Rules:
+- Suggest at most ${r.count} moments, fewer if the speech offers fewer concrete, visual topics. Prefer concrete things, places, objects, actions, examples and comparisons; skip greetings, calls to action and abstract talk.
+- Each moment covers a contiguous word range "from".."to" (indices) of the sentence or phrase it illustrates, ${MIN_BROLL_DURATION} to ${MAX_BROLL_DURATION} seconds long. Moments must not overlap and should be spread over the video. Leave the first few seconds without B-roll so the speaker is seen first.
+- ${BROLL_KIND_HINT[r.mode]}
+- "title": what the picture shows (max. 6 words), "reason": why it fits here (max. 15 words), both in ${lang}.
+- "prompt": a self-contained prompt for an AI image or video generator (Google Gemini) in ${lang}: subject, setting, composition, lighting, colors and mood in 2 to 4 sentences. For "video" also describe what moves and a simple camera movement, one continuous shot, no speech. Style: ${STYLE_HINTS[r.style]} Aspect ratio: ${r.aspect}. All moments should share one consistent look. Do not show the speaker or real, identifiable people. End each prompt with: no text, no letters, no logos, no watermark.
+- Ignore hallucinated phrases of the recognizer. Return an empty list if there is no usable speech.`
+}
+
+const BROLL_SCHEMA = {
+  type: 'object',
+  properties: {
+    suggestions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          from: { type: 'integer' },
+          to: { type: 'integer' },
+          kind: { type: 'string', enum: [...BROLL_KINDS] },
+          title: { type: 'string' },
+          reason: { type: 'string' },
+          prompt: { type: 'string' },
+        },
+        required: ['from', 'to', 'kind', 'title', 'reason', 'prompt'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['suggestions'],
+  additionalProperties: false,
+}
+
+/**
+ * Baut die Zwischenbilder aus Claudes Antwort. Zeiten kommen aus den
+ * Wort-Indizes (Timeline-Zeit): vom ersten bis zum letzten Wort, auf
+ * MIN/MAX_BROLL_DURATION gebracht und innerhalb des Videos. Überlappende oder
+ * zu nahe Stellen fallen weg (die frühere bleibt), ebenso solche ohne Prompt.
+ */
+export function buildBrollSuggestions(
+  words: Word[],
+  raw: unknown,
+  duration: number,
+  mode: BrollMode,
+  maxCount = MAX_BROLLS,
+  maxPrompt = 2000,
+): BrollSuggestion[] {
+  const list = isRecord(raw) && Array.isArray(raw.suggestions) ? raw.suggestions : []
+  const total = duration > 0 ? duration : Infinity
+  const line = (v: unknown, max: number) =>
+    typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : ''
+  const items: BrollSuggestion[] = []
+  for (const s of list.filter(isRecord)) {
+    const from = intOr(s.from, -1)
+    const to = intOr(s.to, -1)
+    if (from < 0 || to < from || to >= words.length) continue
+    const prompt = typeof s.prompt === 'string' ? s.prompt.trim().slice(0, maxPrompt) : ''
+    if (!prompt) continue
+    let at = words[from].start
+    let end = Math.min(words[to].end, at + MAX_BROLL_DURATION)
+    if (end - at < MIN_BROLL_DURATION) end = at + MIN_BROLL_DURATION
+    if (end > total) {
+      // Am Ende des Videos nach vorn schieben statt zu kürzen.
+      end = total
+      at = Math.max(0, end - Math.max(MIN_BROLL_DURATION, words[to].end - words[from].start))
+    }
+    if (end - at < MIN_BROLL_DURATION) continue
+    const kind: BrollKind =
+      mode !== 'auto'
+        ? mode
+        : (BROLL_KINDS as readonly unknown[]).includes(s.kind)
+          ? (s.kind as BrollKind)
+          : 'image'
+    items.push({
+      at: round3(at),
+      end: round3(end),
+      kind,
+      title: line(s.title, 80),
+      reason: line(s.reason, 200),
+      prompt,
+    })
+  }
+  items.sort((a, b) => a.at - b.at)
+  const out: BrollSuggestion[] = []
+  for (const s of items) {
+    const prev = out[out.length - 1]
+    if (prev && s.at < prev.end + MIN_BROLL_GAP) continue
+    out.push(s)
+    if (out.length >= maxCount) break
+  }
+  return out
+}
+
+/**
+ * Zwischenbilder für das ganze Video. `words` liegen schon in Timeline-Zeit
+ * (siehe timelineWords in routes/ai.ts).
+ */
+export async function createBrollSuggestions(
+  words: Word[],
+  r: BrollRequest,
+  duration: number,
+  signal: AbortSignal,
+): Promise<BrollSuggestion[]> {
+  if (words.length < 3) return []
+  const raw = await askClaude(words, brollTask(r, duration), BROLL_SCHEMA, signal)
+  return buildBrollSuggestions(words, raw, duration, r.mode, r.count)
+}
