@@ -76,6 +76,16 @@ function nudge(dir: -1 | 1): void {
     nudgeTime(store.playhead, dir, nudgeStep.value, store.doc.settings.fps, store.duration),
   )
 }
+
+/**
+ * Zum Anfang bzw. Ende spulen. Zum Anfang läuft die Wiedergabe weiter (von
+ * vorn); am Ende gibt es nichts mehr abzuspielen, dort hält sie an.
+ */
+function jumpTo(where: 'start' | 'end'): void {
+  if (empty.value) return
+  if (where === 'end') store.playing = false
+  store.seek(where === 'start' ? 0 : store.duration)
+}
 const frameSec = computed(() => 1 / store.doc.settings.fps)
 const aspect = computed(() => `${store.doc.settings.width} / ${store.doc.settings.height}`)
 /** Seitenverhältnis als Zahl: Die Bildfläche ist genau so breit, wie ihre Höhe erlaubt. */
@@ -384,6 +394,17 @@ onBeforeUnmount(() => {
     <div class="controls">
       <button
         type="button"
+        class="play jump"
+        data-testid="preview-to-start"
+        :disabled="empty || store.playhead <= 0"
+        :title="t('timelinePreview.toStartTitle')"
+        :aria-label="t('timelinePreview.toStart')"
+        @click="jumpTo('start')"
+      >
+        ⏮
+      </button>
+      <button
+        type="button"
         class="play"
         data-testid="preview-play"
         :disabled="empty || !!problem"
@@ -392,6 +413,17 @@ onBeforeUnmount(() => {
         @click="store.togglePlay()"
       >
         {{ store.playing ? '❚❚' : '▶' }}
+      </button>
+      <button
+        type="button"
+        class="play jump"
+        data-testid="preview-to-end"
+        :disabled="empty || store.playhead >= store.duration"
+        :title="t('timelinePreview.toEndTitle')"
+        :aria-label="t('timelinePreview.toEnd')"
+        @click="jumpTo('end')"
+      >
+        ⏭
       </button>
       <span class="time" data-testid="preview-time">{{ timeLabel }}</span>
       <div
@@ -603,6 +635,10 @@ onBeforeUnmount(() => {
   background: var(--ds-surface-2);
   color: var(--ds-text);
   cursor: pointer;
+}
+.play.jump {
+  min-width: 0;
+  padding: 0 var(--ds-space-2);
 }
 .play:hover:not(:disabled) {
   border-color: var(--ds-accent);
