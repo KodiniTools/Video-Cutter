@@ -1,4 +1,5 @@
 import { DEFAULT_TEXT_STYLE, MIN_TEXT_DURATION } from '@/lib/textOverlay'
+import type { TextDefault } from './textDefault'
 import {
   clipEnd,
   createId,
@@ -28,10 +29,16 @@ export const SUBTITLE_STYLE: Record<string, unknown> = {
 const STYLE_KEYS = ['x', 'y', 'font', 'size', 'color', 'style', 'accent', 'animation', 'animSpeed']
 
 /**
- * Vorlage für neue Untertitel: Design des letzten Textes im Dokument (damit
- * weitere Untertitel gleich aussehen), sonst der Untertitel-Standard.
+ * Vorlage für neue Untertitel: der gespeicherte Text-Standard, sonst das
+ * Design des letzten Textes im Dokument (damit weitere Untertitel gleich
+ * aussehen), sonst der Untertitel-Standard.
  */
-export function subtitleStyle(doc: TimelineDoc): Record<string, unknown> {
+export function subtitleStyle(
+  doc: TimelineDoc,
+  textDefault?: TextDefault | null,
+): Record<string, unknown> {
+  // Gespeicherter Text-Standard geht vor: alle neuen Texte sehen so aus.
+  if (textDefault) return { ...SUBTITLE_STYLE, ...textDefault }
   const texts = doc.tracks
     .flatMap((t) => (t.kind === 'overlay' ? t.clips : []))
     .filter((c) => c.kind === 'text')

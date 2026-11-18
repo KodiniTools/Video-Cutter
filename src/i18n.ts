@@ -842,6 +842,22 @@ const messages = {
         cutsAppliedPartly:
           '{n} Bereiche herausgeschnitten, {m} lagen nicht mehr im Clip und wurden ausgelassen.',
       },
+      textDefault: {
+        title: 'Text-Standard',
+        save: 'Als Standard speichern',
+        update: 'Als neuen Standard speichern',
+        saveTitle:
+          'Speichert alle Einstellungen dieses Textes (Schrift, Größe, Farben, Stil, Animation, Position) als Standard. Alle vorhandenen und neuen Texte übernehmen sie.',
+        apply: 'Auf alle Texte anwenden',
+        applyTitle: 'Setzt alle Texte dieses Projekts auf den gespeicherten Standard zurück.',
+        clear: 'Standard aufheben',
+        clearTitle:
+          'Hebt den gespeicherten Standard auf. Vorhandene Texte bleiben, wie sie sind; neue Texte bekommen wieder die Vorgabe.',
+        none: 'Kein Standard gespeichert. Speicherst du diesen Text als Standard, übernehmen alle vorhandenen und neuen Texte seine Einstellungen.',
+        active:
+          'Dieser Text entspricht dem gespeicherten Standard. Du kannst ihn trotzdem einzeln ändern.',
+        differs: 'Dieser Text weicht vom gespeicherten Standard ab (eigene Einstellungen).',
+      },
       textInspector: 'Text bearbeiten',
       textInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Position: Mitte des Textes in % der Bildbreite und -höhe – oder den Rahmen im Bild ziehen.',
@@ -1872,6 +1888,21 @@ const messages = {
         cutsApplied: '{n} ranges cut out.',
         cutsAppliedPartly:
           '{n} ranges cut out, {m} were no longer inside the clip and were skipped.',
+      },
+      textDefault: {
+        title: 'Text default',
+        save: 'Save as default',
+        update: 'Save as new default',
+        saveTitle:
+          'Saves all settings of this text (font, size, colours, style, animation, position) as the default. All existing and new texts adopt them.',
+        apply: 'Apply to all texts',
+        applyTitle: 'Resets all texts of this project to the saved default.',
+        clear: 'Remove default',
+        clearTitle:
+          'Removes the saved default. Existing texts stay as they are; new texts get the built-in settings again.',
+        none: 'No default saved. If you save this text as the default, all existing and new texts adopt its settings.',
+        active: 'This text matches the saved default. You can still change it individually.',
+        differs: 'This text differs from the saved default (individual settings).',
       },
       textInspector: 'Edit text',
       textInspectorHint:

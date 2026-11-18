@@ -18,6 +18,7 @@ import {
 import { sourceRangeOnTimeline } from '@/timeline/cutSuggestions'
 import { findClip, type OverlayClip, type Time } from '@/timeline/model'
 import { cuesToClips, subtitleStyle } from '@/timeline/subtitles'
+import { useTextDefaultStore } from './textDefault'
 import { findSilences, type SilenceOptions } from '@/timeline/silence'
 import { useTimelineStore } from './timeline'
 
@@ -147,7 +148,7 @@ export const useTimelineAiStore = defineStore('timelineAi', () => {
         clip,
         result.cues,
         timeline.doc.settings.fps,
-        subtitleStyle(timeline.doc),
+        subtitleStyle(timeline.doc, useTextDefaultStore().value),
       )
       if (clips.length > 0 && !timeline.addOverlayClips(clips)) {
         throw new Error('Die Untertitel konnten nicht eingefügt werden.')

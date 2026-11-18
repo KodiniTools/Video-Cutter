@@ -16,6 +16,8 @@ import {
   type PositionPreset,
 } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTextDefaultStore } from '@/stores/textDefault'
+import { matchesTextDefault, textDefaultPatches } from '@/timeline/textDefault'
 import OverlayKeys from './OverlayKeys.vue'
 import { graphicMotionAt, withGraphicChange } from '@/timeline/graphicKeys'
 
@@ -114,6 +116,41 @@ const place = (at: { x?: number; y?: number }) =>
 
 function preset(name: PositionPreset): void {
   set(place({ x: 0.5, y: POSITION_PRESETS[name] }))
+}
+
+// --- Text-Standard -----------------------------------------------------------
+
+const textDefault = useTextDefaultStore()
+
+/** Vollständige Einstellungen des markierten Textes (fehlende Felder = Vorgabe). */
+const currentStyle = computed<Record<string, unknown>>(() => ({
+  ...DEFAULT_TEXT_STYLE,
+  animSpeed: 1,
+  ...clip.value?.data,
+}))
+
+/** Entspricht der markierte Text dem gespeicherten Standard? */
+const isDefault = computed(
+  () => !!textDefault.value && matchesTextDefault(currentStyle.value, textDefault.value),
+)
+/** Weicht irgendein Text vom Standard ab? */
+const othersDiffer = computed(
+  () => !!textDefault.value && textDefaultPatches(store.doc, textDefault.value).length > 0,
+)
+
+/** Gespeicherten Standard auf alle Texte anwenden (ein Rückgängig-Schritt). */
+function applyDefaultToAll(): void {
+  commit()
+  const def = textDefault.value
+  if (!def) return
+  const patches = textDefaultPatches(store.doc, def)
+  if (patches.length > 0) store.updateClipsData(patches)
+}
+
+/** Diesen Text als Standard speichern; alle anderen Texte übernehmen ihn. */
+function saveDefault(): void {
+  commit()
+  if (clip.value && textDefault.save(currentStyle.value)) applyDefaultToAll()
 }
 
 onBeforeUnmount(commit)
@@ -250,6 +287,50 @@ onBeforeUnmount(commit)
       </button>
     </div>
     <p class="hint">{{ t('timeline.textInspectorHint') }}</p>
+    <div class="default" data-testid="text-default">
+      <span class="default-title">{{ t('timeline.textDefault.title') }}</span>
+      <div class="presets">
+        <button
+          type="button"
+          data-testid="text-default-save"
+          :disabled="isDefault"
+          :title="t('timeline.textDefault.saveTitle')"
+          @click="saveDefault"
+        >
+          {{ t(textDefault.value ? 'timeline.textDefault.update' : 'timeline.textDefault.save') }}
+        </button>
+        <button
+          v-if="textDefault.value"
+          type="button"
+          data-testid="text-default-apply"
+          :disabled="!othersDiffer"
+          :title="t('timeline.textDefault.applyTitle')"
+          @click="applyDefaultToAll"
+        >
+          {{ t('timeline.textDefault.apply') }}
+        </button>
+        <button
+          v-if="textDefault.value"
+          type="button"
+          data-testid="text-default-clear"
+          :title="t('timeline.textDefault.clearTitle')"
+          @click="textDefault.clear()"
+        >
+          {{ t('timeline.textDefault.clear') }}
+        </button>
+      </div>
+      <p class="hint" data-testid="text-default-status">
+        {{
+          t(
+            !textDefault.value
+              ? 'timeline.textDefault.none'
+              : isDefault
+                ? 'timeline.textDefault.active'
+                : 'timeline.textDefault.differs',
+          )
+        }}
+      </p>
+    </div>
     <OverlayKeys :clip="clip" prefix="text" :hint="t('timeline.textKeys.hint')" />
   </section>
 </template>
@@ -332,8 +413,12 @@ input[type='color'] {
   color: var(--ds-text);
   cursor: pointer;
 }
-.presets button:hover {
+.presets button:hover:not(:disabled) {
   border-color: var(--ds-accent);
+}
+.presets button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 textarea:focus-visible,
 select:focus-visible,
@@ -341,6 +426,17 @@ input:focus-visible,
 button:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
+}
+.default {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  padding-top: var(--ds-space-3);
+  border-top: 1px solid var(--ds-border);
+}
+.default-title {
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-semibold);
 }
 .hint {
   margin: 0;
