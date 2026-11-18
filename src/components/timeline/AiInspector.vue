@@ -16,11 +16,13 @@ import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineAiStore } from '@/stores/timelineAi'
 import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
 import { SILENCE_LEVELS, type SilenceLevel } from '@/timeline/silence'
+import HighlightsPanel from './HighlightsPanel.vue'
 
 /**
  * KI-Assistent des Timeline-Editors: Untertitel für den markierten Clip
  * (Sprache erkennen + Claude) als Text-Clips auf einer Ebenen-Spur, alle
- * Texte übersetzen und Schnittvorschläge für den markierten Clip. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
+ * Texte übersetzen, Schnittvorschläge und Highlights (kurzer Clip) für den
+ * markierten Clip. Die Aufträge laufen auf dem Server wie im bisherigen Editor.
  */
 const { t } = useI18n()
 const store = useTimelineStore()
@@ -386,6 +388,13 @@ async function onTranslate(): Promise<void> {
         </template>
         <p v-else class="hint">{{ t('timeline.ai.cutsHint') }}</p>
       </div>
+
+      <HighlightsPanel
+        v-if="clip"
+        :clip="clip"
+        :language="language"
+        :ready="canTranscribe && canClaude"
+      />
 
       <div v-if="textClips.length" class="block">
         <span class="label">{{ t('ai.translate') }}</span>
