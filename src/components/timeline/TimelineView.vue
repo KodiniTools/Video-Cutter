@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n'
 import { followScroll } from '@/timeline/follow'
 import TimelineClip, { type ClipGrab } from './TimelineClip.vue'
 import TrackHeader from './TrackHeader.vue'
+import GraphicGallery from './GraphicGallery.vue'
 import MarkerEffect from './MarkerEffect.vue'
 import { addImageAsset, getImageAsset, IMAGE_ACCEPT, ImageAssetError } from '@/lib/imageAssets'
 import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
+import type { GraphicSymbol } from '@/lib/graphicOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
 import { useTextDefaultStore } from '@/stores/textDefault'
@@ -17,6 +19,7 @@ import {
   newGraphicData,
   newImageData,
   TIMELINE_GRAPHIC_KINDS,
+  type TimelineGraphicKind,
 } from '@/timeline/graphics'
 import { fitZoom, pxToTime, rulerTicks, timeToPx } from '@/timeline/layout'
 import { chapterList } from '@/timeline/markers'
@@ -309,14 +312,17 @@ function addText(): void {
   run(insertText)
 }
 
-/** Form, Symbol oder Emoji am Abspielkopf anlegen (Auswahl aus der Liste). */
-function addGraphic(e: Event): void {
-  const el = e.target as HTMLSelectElement
-  const kind = el.value
-  el.value = ''
-  if (!isTimelineGraphicKind(kind)) return
+/** Form, Symbol oder Emoji am Abspielkopf anlegen (Auswahl aus der Galerie). */
+function addGraphic(
+  kind: TimelineGraphicKind,
+  extra: { symbol?: GraphicSymbol; emoji?: string },
+): void {
   run(
-    () => store.addGraphic(newGraphicData(kind), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null,
+    () =>
+      store.addGraphic(
+        { ...newGraphicData(kind), ...extra },
+        secondsToTime(DEFAULT_GRAPHIC_DURATION),
+      ) !== null,
   )
 }
 
@@ -705,18 +711,7 @@ function onKeydown(event: KeyboardEvent): void {
       >
         {{ t('timeline.addText') }}
       </button>
-      <select
-        class="tool wide add-graphic"
-        data-testid="timeline-add-graphic"
-        :title="t('timeline.addGraphicTitle')"
-        :aria-label="t('timeline.addGraphicTitle')"
-        @change="addGraphic"
-      >
-        <option value="">{{ t('timeline.addGraphic') }}</option>
-        <option v-for="k in TIMELINE_GRAPHIC_KINDS" :key="k" :value="k">
-          {{ t(`graphics.kinds.${k}`) }}
-        </option>
-      </select>
+      <GraphicGallery @add="addGraphic" />
       <button
         type="button"
         class="tool wide"

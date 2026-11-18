@@ -6,7 +6,7 @@ import { i18n } from '@/i18n'
 import TimelineView from '@/components/timeline/TimelineView.vue'
 import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
-import { secondsToTime as s } from '@/timeline/model'
+import { secondsToTime as s, type Clip } from '@/timeline/model'
 
 vi.mock('@/lib/mediaApi', () => ({
   UPLOAD_ABORTED: 'UPLOAD_ABORTED',
@@ -418,6 +418,57 @@ describe('Timeline-Ansicht', () => {
     expect(video.find('.label').text()).toBe('a.mp4')
     expect(wrapper.findAll('.track')[1].findAll('canvas')).toHaveLength(2)
     expect(store.doc.tracks[0].clips).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('Galerie „+ Form / Emoji“: Formen, Symbole und Emojis als Kacheln', async () => {
+    const store = useTimelineStore()
+    const wrapper = mountView()
+    await nextTick()
+    const toggle = wrapper.get('[data-testid=timeline-add-graphic]')
+    const gallery = () => wrapper.find('[data-testid=graphic-gallery]')
+    expect(gallery().exists()).toBe(false)
+    await toggle.trigger('click')
+    expect(gallery().findAll('.pick[data-pick]')).toHaveLength(5 + 8 + 24)
+
+    // Symbol: gleich das gewählte Symbol, Galerie schließt, Clip ist markiert.
+    await gallery().get('[data-pick="symbol:star"]').trigger('click')
+    expect(gallery().exists()).toBe(false)
+    const clips = () => store.doc.tracks.flatMap((t): Clip[] => t.clips)
+    expect(clips()[0]).toMatchObject({ kind: 'graphic', data: { kind: 'symbol', symbol: 'star' } })
+    expect(store.selection).toEqual([clips()[0].id])
+
+    // Form und Emoji aus der Schnellauswahl.
+    store.seek(s(4))
+    await toggle.trigger('click')
+    await gallery().get('[data-pick=arrow]').trigger('click')
+    store.seek(s(8))
+    await toggle.trigger('click')
+    await gallery().get('[data-pick="emoji:🔥"]').trigger('click')
+    expect(clips().map((c) => (c.kind === 'graphic' ? c.data.kind : ''))).toEqual([
+      'symbol',
+      'arrow',
+      'emoji',
+    ])
+    expect(clips()[2]).toMatchObject({ data: { emoji: '🔥' } })
+
+    // Eigenes Emoji; Tippen löst keine Timeline-Kürzel aus, Esc schließt nur die Galerie.
+    store.seek(s(12))
+    await toggle.trigger('click')
+    const field = gallery().get('[data-testid=graphic-gallery-emoji]')
+    await field.setValue(' 🦊 ')
+    await field.trigger('keydown', { key: 'm' })
+    expect(store.doc.markers).toHaveLength(0)
+    await field.trigger('keydown', { key: 'Enter' })
+    expect(clips()[3]).toMatchObject({ data: { kind: 'emoji', emoji: '🦊' } })
+    await toggle.trigger('click')
+    await gallery().trigger('keydown', { key: 'Escape' })
+    expect(gallery().exists()).toBe(false)
+    expect(clips()).toHaveLength(4)
+
+    // Ein Schritt je Element im Verlauf.
+    store.undo()
+    expect(clips()).toHaveLength(3)
     wrapper.unmount()
   })
 })
