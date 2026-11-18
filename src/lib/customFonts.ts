@@ -95,23 +95,53 @@ export function getCustomFont(key: string): CustomFont | undefined {
   return byKey.get(key)
 }
 
-/** Holt die Schriftliste vom Server. Fehler -> nur die Standardschriften. */
+/** Wartezeiten (ms) bis zum nächsten Versuch, wenn der Server gerade nicht antwortet. */
+export const FONT_RETRY_DELAYS = [2000, 5000, 15000, 30000] as const
+let retries = 0
+
+/**
+ * Holt die Schriftliste vom Server. Altes Backend (404) -> nur die
+ * Standardschriften. Antwortet der Server gerade nicht (Neustart beim Deploy,
+ * 502/429, offline), wird der Fehlschlag nicht für die ganze Sitzung
+ * festgehalten: Es folgen einige Versuche von selbst, und jeder spätere
+ * Aufruf versucht es erneut. Sonst zeigte die Schriftauswahl bis zum
+ * Neuladen der Seite nur die Standardschriften.
+ */
 export function loadCustomFonts(): Promise<void> {
   if (!loading) {
     loading = (async () => {
+      let retry = false
       try {
         const res = await fetch(`${API_BASE}/api/fonts`)
-        if (!res.ok) return // altes Backend: keine eigenen Schriften
-        const list = parseFontList(await res.json())
-        byKey.clear()
-        for (const f of list) byKey.set(f.key, f)
-        fonts.value = list
+        if (res.ok) {
+          const list = parseFontList(await res.json())
+          byKey.clear()
+          for (const f of list) byKey.set(f.key, f)
+          fonts.value = list
+          retries = 0
+        } else {
+          retry = res.status !== 404 // 404 = altes Backend: keine eigenen Schriften
+        }
       } catch {
-        /* offline/alter Server: Standardschriften genügen */
+        retry = true
       }
+      if (!retry) return
+      loading = null
+      const delay = FONT_RETRY_DELAYS[retries]
+      if (delay === undefined) return
+      retries += 1
+      setTimeout(() => void loadCustomFonts(), delay)
     })()
   }
   return loading
+}
+
+/** Nur für Tests: Zustand wie vor dem ersten Laden. */
+export function resetCustomFonts(): void {
+  loading = null
+  retries = 0
+  byKey.clear()
+  fonts.value = []
 }
 
 const registered = new Set<string>()

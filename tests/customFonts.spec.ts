@@ -1,10 +1,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
+  FONT_RETRY_DELAYS,
   fontFileUrl,
   getCustomFont,
   groupFonts,
   loadCustomFonts,
   parseFontList,
+  resetCustomFonts,
 } from '@/lib/customFonts'
 import { FONT_OPTIONS, fontPreview } from '@/lib/textOverlay'
 
@@ -21,7 +23,10 @@ const entry = (file: string, extra: Record<string, unknown> = {}) => ({
 })
 
 describe('eigene Schriften (Frontend)', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetCustomFonts()
+  })
 
   it('kennt die Dateien aus src/assets/fonts', () => {
     expect(fontFileUrl('Supreme-Regular.woff2')).toBeTruthy()
@@ -60,8 +65,35 @@ describe('eigene Schriften (Frontend)', () => {
     ])
   })
 
+  it('versucht es erneut, wenn der Server gerade nicht antwortet (Neustart beim Deploy)', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(new Response('Bad Gateway', { status: 502 }))
+        .mockResolvedValue(new Response(JSON.stringify({ fonts: [entry('Zodiak-Bold.woff2')] })))
+      vi.stubGlobal('fetch', fetchMock)
+      await loadCustomFonts()
+      expect(getCustomFont('f:Zodiak-Bold')).toBeUndefined()
+      // Die Wahl bleibt sichtbar, auch wenn die Schrift noch nicht geladen ist.
+      expect(fontPreview('f:Zodiak-Bold')).toEqual({ ...FONT_OPTIONS.roboto, label: 'Zodiak Bold' })
+      await vi.advanceTimersByTimeAsync(FONT_RETRY_DELAYS[0])
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(getCustomFont('f:Zodiak-Bold')).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(FONT_RETRY_DELAYS[1])
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(getCustomFont('f:Zodiak-Bold')).toBeDefined()
+      // Danach kein weiterer Abruf.
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('lädt die Liste vom Server; Vorschau nutzt deren Messwerte, sonst Roboto', async () => {
-    expect(fontPreview('f:Supreme-Regular')).toEqual(FONT_OPTIONS.roboto)
+    expect(fontPreview('f:Supreme-Regular')).toMatchObject({ css: FONT_OPTIONS.roboto.css })
     vi.stubGlobal(
       'fetch',
       vi
