@@ -97,6 +97,7 @@ export const SERVER_FEATURES = [
   'aiTranslate',
   'aiHighlights',
   'aiPublish',
+  'aiBroll',
   'audioFade',
   'projects',
   'stillClip',

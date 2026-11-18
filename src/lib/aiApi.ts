@@ -219,6 +219,44 @@ export function parsePublishTexts(data: unknown): PublishTexts {
   }
 }
 
+// --- Zwischenbilder (B-Roll) -------------------------------------------------------
+
+export type BrollKind = 'image' | 'video'
+/** Welche Art Claude vorschlagen darf (`auto` = Claude entscheidet je Stelle). */
+export const BROLL_MODES = ['auto', 'image', 'video'] as const
+export type BrollMode = (typeof BROLL_MODES)[number]
+export const MAX_BROLLS = 12
+export const DEFAULT_BROLLS = 5
+
+/** Vorgeschlagene Stelle; `at`/`end` in Sekunden der Timeline. */
+export interface BrollSuggestion {
+  at: number
+  end: number
+  kind: BrollKind
+  title: string
+  reason: string
+  prompt: string
+}
+
+export function parseBrollSuggestions(data: unknown): BrollSuggestion[] {
+  const d = isRecord(data) ? data : {}
+  const list = Array.isArray(d.suggestions) ? d.suggestions : []
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  return list
+    .filter(isRecord)
+    .filter((s) => finite(s.at) && finite(s.end) && s.at >= 0 && s.end > s.at)
+    .filter((s) => typeof s.prompt === 'string' && s.prompt.trim() !== '')
+    .map((s) => ({
+      at: s.at as number,
+      end: s.end as number,
+      kind: s.kind === 'video' ? ('video' as const) : ('image' as const),
+      title: text(s.title),
+      reason: text(s.reason),
+      prompt: (s.prompt as string).trim(),
+    }))
+    .sort((a, b) => a.at - b.at)
+}
+
 // --- KI-Bilder für Bild-Clips ----------------------------------------------------
 
 /** Stilvorlagen (wie server/src/lib/claude.ts IMAGE_STYLES). */
@@ -469,6 +507,7 @@ export function runAiJob<T>(
     | 'translate'
     | 'highlights'
     | 'publish'
+    | 'broll'
     | 'image-prompt'
     | 'images'
     | 'video-prompt'

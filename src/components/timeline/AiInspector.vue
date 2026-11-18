@@ -18,6 +18,7 @@ import { timeToSeconds, type AudioClip, type VideoClip } from '@/timeline/model'
 import { SILENCE_LEVELS, type SilenceLevel } from '@/timeline/silence'
 import HighlightsPanel from './HighlightsPanel.vue'
 import PublishPanel from './PublishPanel.vue'
+import BrollPanel from './BrollPanel.vue'
 
 /**
  * KI-Assistent des Timeline-Editors: Untertitel für den markierten Clip
@@ -400,6 +401,13 @@ async function onTranslate(): Promise<void> {
       />
 
       <PublishPanel v-if="hasMedia" :language="language" :ready="canTranscribe && canClaude" />
+
+      <BrollPanel
+        v-if="hasMedia"
+        :language="language"
+        :ready="canTranscribe && canClaude"
+        :gemini="status?.image === true"
+      />
 
       <div v-if="textClips.length" class="block">
         <span class="label">{{ t('ai.translate') }}</span>

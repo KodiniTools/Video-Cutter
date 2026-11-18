@@ -26,6 +26,12 @@ import {
   createCutSuggestions,
   createHighlights,
   createPublishTexts,
+  createBrollSuggestions,
+  BROLL_MODES,
+  DEFAULT_BROLLS,
+  MAX_BROLLS,
+  type BrollMode,
+  type BrollRequest,
   PUBLISH_TARGETS,
   type PublishTarget,
   DEFAULT_HIGHLIGHT_TARGET,
@@ -62,6 +68,8 @@ import { Gallery, GalleryFullError, gallery, isGalleryId, type GalleryImage } fr
  * - POST /api/ai/highlights { mediaId, target, from?, to? } -> beste Stellen für einen Short (Claude)
  * - POST /api/ai/publish    { segments, target, duration } -> Titel, Beschreibung, Hashtags,
  *                                                  Kapitel für die ganze Timeline (Claude)
+ * - POST /api/ai/broll    { segments, duration, mode, style, language, count, width, height }
+ *                                                  -> Zwischenbilder (B-Roll) mit Prompts (Claude)
  * - POST /api/ai/image-prompt { idea, style, width, height, language, before?, after? }
  *                                                  -> Bild-Prompt für einen Bild-Clip (Claude)
  * - POST /api/ai/images     { prompt, width, height, count } -> Bildvarianten (Gemini)
@@ -316,6 +324,54 @@ aiRouter.post('/ai/publish', express.json({ limit: '128kb' }), (req: Request, re
   const job = aiJobs.start('claude', (signal) =>
     createPublishTexts(words, language, target, duration, signal),
   )
+  started(res, job)
+})
+
+/** Prüft die Wünsche für POST /api/ai/broll (Abschnitte wie bei /api/ai/publish). */
+export function parseBrollRequest(body: Record<string, unknown>): {
+  segments: PublishSegment[]
+  duration: number
+  request: BrollRequest
+} {
+  const { segments, duration } = parsePublishRequest(body)
+  const size = parseTargetSize(body)
+  const mode = (BROLL_MODES as readonly unknown[]).includes(body.mode)
+    ? (body.mode as BrollMode)
+    : 'auto'
+  const style = (IMAGE_STYLES as readonly unknown[]).includes(body.style)
+    ? (body.style as ImageStyle)
+    : 'auto'
+  const rawCount = Math.round(Number(body.count))
+  const count = Number.isFinite(rawCount)
+    ? Math.min(MAX_BROLLS, Math.max(1, rawCount))
+    : DEFAULT_BROLLS
+  return {
+    segments,
+    duration,
+    request: {
+      mode,
+      style,
+      aspect: nearestAspect(size.width, size.height),
+      language: body.language === 'en' ? 'en' : 'de',
+      count,
+    },
+  }
+}
+
+aiRouter.post('/ai/broll', express.json({ limit: '128kb' }), (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const { segments, duration, request } = parseBrollRequest(body)
+  const transcriptOf = new Map<string, Transcript>()
+  for (const s of segments) {
+    if (transcriptOf.has(s.mediaId)) continue
+    transcriptOf.set(s.mediaId, requireTranscript(requireMedia({ mediaId: s.mediaId })))
+  }
+  requireClaude()
+  const words = timelineWords(segments, (id) => transcriptOf.get(id) as Transcript)
+  if (!capacity('claude', res)) return
+  const job = aiJobs.start('claude', async (signal) => ({
+    suggestions: await createBrollSuggestions(words, request, duration, signal),
+  }))
   started(res, job)
 })
 
