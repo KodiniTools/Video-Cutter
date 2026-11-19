@@ -735,6 +735,9 @@ const messages = {
       rippleRemoveTitle: 'Markierte Clips löschen, spätere Clips rücken nach (Umschalt+Entf)',
       snap: 'Einrasten',
       snapTitle: 'An Clip-Rändern und am Abspielkopf einrasten',
+      stretch: 'Tempo dehnen',
+      stretchTitle:
+        'Rand eines Video- oder Ton-Clips ziehen ändert das Tempo statt zu kürzen: bis zum nächsten Clip ziehen = langsamer, die anderen Clips bleiben stehen (auch mit Alt beim Ziehen)',
       addVideoTrack: '+ Video-Spur',
       addVideoTrackTitle: 'Leere Video-Spur oben anlegen (liegt im Bild vorn)',
       addAudioTrack: '+ Ton-Spur',
@@ -2146,6 +2149,9 @@ const messages = {
       rippleRemoveTitle: 'Delete selected clips, later clips move up (Shift+Del)',
       snap: 'Snap',
       snapTitle: 'Snap to clip edges and the playhead',
+      stretch: 'Stretch speed',
+      stretchTitle:
+        'Dragging the edge of a video or audio clip changes its speed instead of trimming: drag to the next clip = slower, other clips stay put (also with Alt while dragging)',
       addVideoTrack: '+ Video track',
       addVideoTrackTitle: 'Add an empty video track on top (in front)',
       addAudioTrack: '+ Audio track',

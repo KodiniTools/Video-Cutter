@@ -684,6 +684,104 @@ function shiftMarkers(doc: TimelineDoc, from: Time, shift: Time): TimelineDoc {
   return { ...doc, markers: kept }
 }
 
+/** Mitglieder eines Dehnens: der Clip samt verknüpften Clips (nur Video/Ton). */
+function stretchMembers(doc: TimelineDoc, clipId: string): ClipLocation[] | OpError {
+  const loc = findClip(doc, clipId)
+  if (!loc) return 'clip-not-found'
+  const members = linkedClips(doc, loc, true)
+  if (members.some((m) => m.clip.kind !== 'video' && m.clip.kind !== 'audio'))
+    return 'kind-mismatch'
+  if (members.some((m) => m.track.locked)) return 'track-locked'
+  return members
+}
+
+/**
+ * Bereich, in den ein Rand beim Dehnen gezogen werden darf: Tempo bleibt in
+ * MIN_SPEED…MAX_SPEED, kein Clip wird kürzer als MIN_CLIP_DURATION, und kein
+ * Mitglied (auch der verknüpfte Ton) läuft in einen Nachbarn seiner Spur.
+ */
+export function stretchRange(
+  doc: TimelineDoc,
+  clipId: string,
+  edge: 'start' | 'end',
+): { min: Time; max: Time } | null {
+  const members = stretchMembers(doc, clipId)
+  if (typeof members === 'string') return null
+  const main = members.find((m) => m.clip.id === clipId)?.clip
+  if (!main) return null
+  let rMin = 0
+  let rMax = Infinity
+  for (const { track, clip } of members) {
+    if (clip.kind !== 'video' && clip.kind !== 'audio') return null
+    const span = sourceSpan(clip.duration, clip.speed)
+    rMin = Math.max(rMin, Math.max(MIN_CLIP_DURATION, span / MAX_SPEED) / clip.duration)
+    rMax = Math.min(rMax, span / MIN_SPEED / clip.duration)
+    const others = track.clips.filter((c) => !members.some((m) => m.clip.id === c.id))
+    if (edge === 'end') {
+      const next = others.filter((c) => c.start >= clipEnd(clip)).map((c) => c.start)
+      if (next.length > 0) rMax = Math.min(rMax, (Math.min(...next) - clip.start) / clip.duration)
+    } else {
+      const prev = others.filter((c) => clipEnd(c) <= clip.start).map(clipEnd)
+      const floor = prev.length > 0 ? Math.max(...prev) : 0
+      rMax = Math.min(rMax, (clipEnd(main) - floor) / clip.duration)
+    }
+  }
+  if (rMin > rMax) return null
+  const lo = Math.ceil(main.duration * rMin)
+  const hi = Math.floor(main.duration * rMax)
+  return edge === 'end'
+    ? { min: main.start + lo, max: main.start + hi }
+    : { min: clipEnd(main) - hi, max: clipEnd(main) - lo }
+}
+
+/**
+ * Clip dehnen bzw. stauchen: Ein Rand wandert nach `to`, der andere bleibt
+ * stehen, und das Tempo passt sich so an, dass derselbe Ausschnitt der Quelle
+ * genau die neue Länge füllt (länger = langsamer). Verknüpfte Clips (Ton des
+ * Videos) werden im selben Verhältnis gedehnt. Alle anderen Clips und Marker
+ * bleiben, wo sie sind; ist kein Platz, wird abgelehnt.
+ */
+export function stretchClip(
+  doc: TimelineDoc,
+  clipId: string,
+  edge: 'start' | 'end',
+  to: Time,
+): OpResult {
+  if (!isTime(to)) return fail('invalid-time')
+  const members = stretchMembers(doc, clipId)
+  if (typeof members === 'string') return fail(members)
+  const main = members.find((m) => m.clip.id === clipId)?.clip
+  if (!main) return fail('clip-not-found')
+  const mainDuration = edge === 'end' ? to - main.start : clipEnd(main) - to
+  if (mainDuration < MIN_CLIP_DURATION) return fail('too-short')
+  if (mainDuration === main.duration) return ok(doc)
+  const ratio = mainDuration / main.duration
+
+  const changed = new Map<string, Clip>()
+  for (const { clip } of members) {
+    if (clip.kind !== 'video' && clip.kind !== 'audio') return fail('kind-mismatch')
+    const duration = clip.id === clipId ? mainDuration : Math.round(clip.duration * ratio)
+    if (duration < MIN_CLIP_DURATION) return fail('too-short')
+    // Gleicher Quell-Ausschnitt in neuer Länge: Tempo = Quelle / Länge.
+    const speed = sourceSpan(clip.duration, clip.speed) / duration
+    const start = edge === 'end' ? clip.start : clipEnd(clip) - duration
+    const next: Clip = { ...clip, start, duration, speed }
+    const error = checkClip(doc, next)
+    if (error) return fail(error)
+    changed.set(clip.id, next)
+  }
+
+  let result = doc
+  for (let i = 0; i < doc.tracks.length; i++) {
+    const clips = (doc.tracks[i].clips as Clip[]).map((c) => changed.get(c.id) ?? c)
+    if (!doc.tracks[i].clips.some((c) => changed.has(c.id))) continue
+    const sorted = clips.slice().sort(byStart)
+    if (sorted.some((c, k) => k > 0 && clipEnd(sorted[k - 1]) > c.start)) return fail('overlap')
+    result = withClips(result, i, clips)
+  }
+  return ok(result)
+}
+
 /**
  * Tempo eines Video- oder Ton-Clips ändern. Der verwendete Bereich der Quelle
  * bleibt gleich, die Länge auf der Timeline ändert sich (schneller = kürzer).

@@ -51,6 +51,8 @@ import {
   frameIndex,
   frameTime,
   splitClip as splitClipOp,
+  stretchClip as stretchClipOp,
+  stretchRange,
   trimClip as trimClipOp,
   trimRange,
   unlinkClips as unlinkClipsOp,
@@ -589,6 +591,33 @@ export const useTimelineStore = defineStore('timeline', () => {
   })
 
   /**
+   * Rand eines Video-/Ton-Clips ziehen und dabei das Tempo anpassen (Dehnen):
+   * der andere Rand und alle übrigen Clips bleiben stehen. Rastet wie das
+   * Trimmen an Clip-Rändern ein (z. B. am Anfang des nächsten Videos).
+   */
+  function dragStretchTo(clipId: string, edge: 'start' | 'end', time: Time): boolean {
+    const range = stretchRange(doc.value, clipId, edge)
+    if (!range || !Number.isFinite(time)) {
+      if (!range) lastError.value = 'invalid-time'
+      return false
+    }
+    const ids = linkGroupIds(doc.value, clipId)
+    let target = Math.round(time)
+    let snapped = false
+    if (snapping.value) {
+      const points = snapPointsWithGuides({ exclude: ids })
+      const hit = snapTime(target, points, snapTolerance())
+      if (hit.snapped && hit.time >= range.min && hit.time <= range.max) {
+        target = hit.time
+        snapped = true
+      }
+    }
+    if (!snapped) target = snapToFrame(Math.max(0, target), doc.value.settings.fps)
+    target = Math.min(range.max, Math.max(range.min, target))
+    return apply((d) => stretchClipOp(d, clipId, edge, target))
+  }
+
+  /**
    * Am Abspielkopf teilen (ein Verlaufsschritt): die markierten Clips unter dem
    * Abspielkopf; liegt keiner davon dort, alle Clips unter dem Abspielkopf auf
    * nicht gesperrten Spuren.
@@ -841,6 +870,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     splitAtPlayhead,
     dragClipTo,
     dragTrimTo,
+    dragStretchTo,
     removeSelection,
     nudgeSelection,
     select,

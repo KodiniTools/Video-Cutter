@@ -207,9 +207,16 @@ interface Drag {
   /** Zeit des gegriffenen Rands bzw. Clip-Beginns beim Greifen. */
   origin: Time
   active: boolean
+  /** Rand ziehen ändert das Tempo statt den Ausschnitt (Dehnen). */
+  stretch: boolean
 }
 let drag: Drag | null = null
 const dragging = ref(false)
+/**
+ * Schalter „Tempo dehnen“: Ränder von Video-/Ton-Clips dehnen den Clip statt
+ * ihn zu trimmen. Alt beim Greifen wirkt für dieses eine Ziehen genauso.
+ */
+const stretchMode = ref(false)
 
 function onGrab(id: string, mode: ClipGrab, event: PointerEvent): void {
   root.value?.focus({ preventScroll: true })
@@ -227,6 +234,10 @@ function onGrab(id: string, mode: ClipGrab, event: PointerEvent): void {
     startScroll: scroller.value?.scrollLeft ?? 0,
     origin: mode === 'end' ? clip.start + clip.duration : clip.start,
     active: false,
+    stretch:
+      mode !== 'move' &&
+      (clip.kind === 'video' || clip.kind === 'audio') &&
+      (stretchMode.value || event.altKey),
   }
   window.addEventListener('pointermove', onDragMove)
   window.addEventListener('pointerup', onDragEnd)
@@ -245,6 +256,7 @@ function onDragMove(event: PointerEvent): void {
   }
   const time = drag.origin + Math.round((dx / store.zoom) * MICROS_PER_SECOND)
   if (drag.mode === 'move') store.dragClipTo(drag.id, time, trackAt(event))
+  else if (drag.stretch) store.dragStretchTo(drag.id, drag.mode, time)
   else store.dragTrimTo(drag.id, drag.mode, time)
 }
 
@@ -675,6 +687,10 @@ function onKeydown(event: KeyboardEvent): void {
       <label class="snap" :title="t('timeline.snapTitle')">
         <input v-model="store.snapping" type="checkbox" data-testid="timeline-snap" />
         {{ t('timeline.snap') }}
+      </label>
+      <label class="snap" :title="t('timeline.stretchTitle')">
+        <input v-model="stretchMode" type="checkbox" data-testid="timeline-stretch" />
+        {{ t('timeline.stretch') }}
       </label>
       <button
         type="button"
