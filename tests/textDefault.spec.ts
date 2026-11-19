@@ -13,7 +13,7 @@ import {
 } from '@/timeline/textDefault'
 
 const S = 1_000_000
-const BASE = { ...DEFAULT_TEXT_STYLE, animSpeed: 1 }
+const BASE = { ...DEFAULT_TEXT_STYLE, animSpeed: 1, opacity: 1, letterSpacing: 0 }
 const CUSTOM = {
   ...BASE,
   font: 'f:Zodiak-Bold',
@@ -49,6 +49,20 @@ describe('Text-Standard (reine Funktionen)', () => {
     expect(parseTextDefault({ ...CUSTOM, font: 'comic' })).toBeNull()
     expect(parseTextDefault({ ...CUSTOM, x: 1.5 })).toBeNull()
     expect(parseTextDefault({ ...CUSTOM, animSpeed: 7 })).toBeNull()
+  })
+
+  it('Deckkraft und Buchstabenabstand gehören zum Standard (fehlen = 1 bzw. 0)', () => {
+    const def = parseTextDefault({ ...CUSTOM, opacity: 0.5, letterSpacing: 0.2 })!
+    expect(def).toMatchObject({ opacity: 0.5, letterSpacing: 0.2 })
+    expect(parseTextDefault({ ...CUSTOM, opacity: 2 })).toBeNull()
+    expect(parseTextDefault({ ...CUSTOM, letterSpacing: 5 })).toBeNull()
+    // Älterer Text ohne die Felder bekommt sie.
+    const old: Record<string, unknown> = { ...CUSTOM, text: 'a' }
+    delete old.opacity
+    delete old.letterSpacing
+    expect(textDefaultPatch(old, def)).toEqual({ opacity: 0.5, letterSpacing: 0.2 })
+    // Standard ohne Abweichung lässt ältere Texte unverändert.
+    expect(textDefaultPatch(old, parseTextDefault(CUSTOM)!)).toEqual({})
   })
 
   it('textDefaultPatch: nur abweichende Felder; mit Keyframes bleibt die Position', () => {

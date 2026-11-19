@@ -9,8 +9,10 @@ import {
   animPatch,
   DEFAULT_TEXT_STYLE,
   formatAnimSpeed,
+  MAX_LETTER_SPACING,
   MAX_TEXT_LENGTH,
   MAX_TEXT_SIZE,
+  MIN_LETTER_SPACING,
   MIN_TEXT_SIZE,
   IN_ANIMATIONS,
   OUT_ANIMATIONS,
@@ -61,6 +63,11 @@ const size = computed(() => num('size', DEFAULT_TEXT_STYLE.size))
 const color = computed(() => str('color', DEFAULT_TEXT_STYLE.color))
 const style = computed(() => str('style', DEFAULT_TEXT_STYLE.style))
 const accent = computed(() => str('accent', DEFAULT_TEXT_STYLE.accent))
+/** Fehlen bei älteren Texten: deckend, ohne zusätzlichen Abstand. */
+const opacity = computed(() => Math.min(1, Math.max(0, num('opacity', 1))))
+const letterSpacing = computed(() =>
+  Math.min(MAX_LETTER_SPACING, Math.max(MIN_LETTER_SPACING, num('letterSpacing', 0))),
+)
 /** Ein- und Ausblenden getrennt (ältere Texte werden passend gedeutet). */
 const anim = computed(() =>
   animParts({ animation: DEFAULT_TEXT_STYLE.animation, ...clip.value?.data }),
@@ -230,6 +237,34 @@ onBeforeUnmount(commit)
           :value="accent"
           data-testid="text-accent"
           @change="set({ accent: value($event) })"
+        />
+      </label>
+    </div>
+    <div class="row">
+      <label class="field">
+        <span>{{ t('text.opacity') }} {{ percent(opacity) }} %</span>
+        <RangeSpinner
+          :scale="100"
+          min="0"
+          max="1"
+          step="0.01"
+          :value="opacity"
+          data-testid="text-opacity"
+          @input="edit({ opacity: clamp01(Number(value($event))) })"
+          @change="commit"
+        />
+      </label>
+      <label class="field">
+        <span>{{ t('text.letterSpacing') }} {{ percent(letterSpacing) }} %</span>
+        <RangeSpinner
+          :scale="100"
+          :min="MIN_LETTER_SPACING"
+          :max="MAX_LETTER_SPACING"
+          step="0.01"
+          :value="letterSpacing"
+          data-testid="text-letter-spacing"
+          @input="edit({ letterSpacing: Number(value($event)) })"
+          @change="commit"
         />
       </label>
     </div>

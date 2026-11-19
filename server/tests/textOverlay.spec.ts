@@ -4,6 +4,8 @@ import {
   assTime,
   buildAss,
   buildAssEvent,
+  buildAssEvents,
+  buildAssLines,
   buildTextFilter,
   cleanText,
   escapeAssText,
@@ -194,5 +196,99 @@ describe('buildAss / Filter / Argumente', () => {
     expect(args).toContain('libx264')
     expect(args[args.length - 1]).toBe('/out.mp4')
     expect(buildTextArgs('/in.webm', '/t.ass', '/fonts', '/out.webm')).toContain('libvpx-vp9')
+  })
+})
+
+describe('Deckkraft und Buchstabenabstand', () => {
+  it('fehlende Felder bleiben weg (ältere Projekte, bisheriger Editor)', () => {
+    const [o] = parseTextOverlays([base], 10)
+    expect(o).not.toHaveProperty('opacity')
+    expect(o).not.toHaveProperty('letterSpacing')
+    const [d] = parseTextOverlays([{ ...base, opacity: 1, letterSpacing: 0 }], 10)
+    expect(d).not.toHaveProperty('opacity')
+    expect(d).not.toHaveProperty('letterSpacing')
+  })
+
+  it('übernimmt abweichende Werte begrenzt und lehnt Unsinn ab', () => {
+    const [o] = parseTextOverlays([{ ...base, opacity: 0.5, letterSpacing: 0.25 }], 10)
+    expect(o.opacity).toBe(0.5)
+    expect(o.letterSpacing).toBe(0.25)
+    const [c] = parseTextOverlays([{ ...base, opacity: -3, letterSpacing: 9 }], 10)
+    expect(c.opacity).toBe(0)
+    expect(c.letterSpacing).toBe(1)
+    expect(parseTextOverlays([{ ...base, letterSpacing: -9 }], 10)[0].letterSpacing).toBe(-0.2)
+    expect(() => parseTextOverlays([{ ...base, opacity: 'x' }], 10)).toThrow(ValidationError)
+    expect(() => parseTextOverlays([{ ...base, letterSpacing: 'x' }], 10)).toThrow(ValidationError)
+  })
+
+  it('ohne die Felder bleibt die ASS-Datei Zeichen für Zeichen gleich', () => {
+    const plain = buildAss([overlay({ style: 'box', text: 'A\nB' })], 1920, 1080)
+    const same = buildAss(
+      [overlay({ style: 'box', text: 'A\nB', opacity: 1, letterSpacing: 0 })],
+      1920,
+      1080,
+    )
+    expect(same).toBe(plain)
+    expect(plain).not.toContain('BoxA')
+    expect(plain).not.toContain('\\fsp')
+  })
+
+  it('Deckkraft schwächt Füllung, Kontur und Schatten ab', () => {
+    const outline = buildAssEvent(overlay({ opacity: 0.5 }), 1920, 1080)
+    expect(outline).toContain('\\1a&H80&\\3a&H80&')
+    const shadow = buildAssEvent(overlay({ style: 'shadow', opacity: 0.5 }), 1920, 1080)
+    // Schatten war schon zu 25 % durchsichtig: 0x40 -> 255 - 191 * 0,5.
+    expect(shadow).toContain('\\1a&H80&\\4a&HA0&')
+    const none = buildAssEvent(overlay({ style: 'none', opacity: 0 }), 1920, 1080)
+    expect(none).toContain('\\1a&HFF&')
+  })
+
+  it('halbtransparente Box: eine Box um den ganzen Text (BorderStyle 4)', () => {
+    const o = overlay({ style: 'box', opacity: 0.5, text: 'Zeile 1\nZeile 2' })
+    const ass = buildAss([o], 1920, 1080)
+    expect(ass).toMatch(/^Style: BoxA,.*,4,0,0,5,0,0,0,1$/m)
+    const [line] = buildAssLines(o, 1920, 1080)
+    expect(line).toContain(',BoxA,,')
+    expect(line).toContain('\\4c&H000000&')
+    expect(line).toContain('\\1a&H80&\\3a&HFF&\\4a&H80&')
+    // Deckende Box wie bisher.
+    expect(buildAssEvent(overlay({ style: 'box' }), 1920, 1080)).toContain(',Box,,')
+  })
+
+  it('Buchstabenabstand in px der Schriftgröße, ohne Abstand hinter dem letzten Zeichen', () => {
+    // 0,06 × 1080 = 64,8 px; 25 % = 16,2 px.
+    const line = buildAssEvent(overlay({ letterSpacing: 0.25, text: 'AB\nCD' }), 1920, 1080)
+    expect(line).toContain('\\fsp16.2')
+    expect(line).toMatch(/A\{\\fsp0\}B\\N\{\\fsp16\.2\}C\{\\fsp0\}D$/)
+  })
+
+  it('Buchstabenabstand mit Schreibmaschine und Keyframes', () => {
+    const typed = buildAssEvent(
+      overlay({ animation: 'typewriter', letterSpacing: -0.1, text: 'ABC' }),
+      1920,
+      1080,
+    )
+    expect(typed).toContain('\\fsp-6.5')
+    expect(typed).toMatch(/\{\\fsp0\}\{[^}]*\}C$/)
+    const keyed = buildAssEvents(
+      overlay({
+        letterSpacing: 0.5,
+        opacity: 0.4,
+        motion: {
+          keys: [
+            { at: 0, x: 0.2, y: 0.5, scale: 1 },
+            { at: 2, x: 0.8, y: 0.5, scale: 2 },
+          ],
+          smooth: false,
+        },
+      }),
+      1920,
+      1080,
+    )
+    expect(keyed.length).toBeGreaterThan(0)
+    for (const l of keyed) {
+      expect(l).toContain('\\fsp32.4')
+      expect(l).toContain('\\1a&H99&')
+    }
   })
 })

@@ -192,7 +192,8 @@ describe('Text-Standard mit eigenem Ausblenden', () => {
   }
 
   it('ältere Standards ohne Ausblenden bleiben gültig und unverändert', () => {
-    expect(parseTextDefault(style)).toEqual(style)
+    // Deckkraft/Buchstabenabstand kommen mit ihren Vorgaben dazu (ändern nichts).
+    expect(parseTextDefault(style)).toEqual({ ...style, opacity: 1, letterSpacing: 0 })
     expect(matchesTextDefault(style, parseTextDefault(style)!)).toBe(true)
   })
 

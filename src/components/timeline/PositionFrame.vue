@@ -160,12 +160,16 @@ const text = computed(() => {
   const font = fontPreview(
     (typeof c.data.font === 'string' ? c.data.font : DEFAULT_TEXT_STYLE.font) as TextFont,
   )
+  // Buchstabenabstand wie im Export; den Abstand hinter dem letzten Zeichen
+  // (setzt der Browser mit) zählt der Rahmen nicht mit, wie im Export.
+  const spacing = num(c.data.letterSpacing, 0) * px
   return {
     content: typeof c.data.text === 'string' && c.data.text.trim() ? c.data.text : ' ',
     style: {
       fontFamily: `'${font.css}'`,
       fontSize: `${px}px`,
       lineHeight: String(font.lineRatio),
+      ...(spacing !== 0 ? { letterSpacing: `${spacing}px`, marginRight: `${-spacing}px` } : {}),
     },
   }
 })

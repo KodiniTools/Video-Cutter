@@ -198,6 +198,9 @@ export const MAX_TEXT_LENGTH = 300
 export const MIN_TEXT_SIZE = 0.02
 export const MAX_TEXT_SIZE = 0.3
 export const MIN_TEXT_DURATION = 0.2
+/** Buchstabenabstand als Anteil der Schriftgröße (wie im Server; fehlt = 0). */
+export const MIN_LETTER_SPACING = -0.2
+export const MAX_LETTER_SPACING = 1
 /** Standard-Länge einer neuen Einblendung (Sekunden). */
 export const DEFAULT_TEXT_DURATION = 3
 

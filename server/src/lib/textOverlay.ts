@@ -112,6 +112,10 @@ export interface TextOverlay {
   animOut?: OutAnimation
   /** Tempo des Ausblendens (nur mit `animOut`). */
   animOutSpeed?: number
+  /** Deckkraft des ganzen Textes samt Kontur/Box/Schatten (0–1); fehlt = 1. */
+  opacity?: number
+  /** Buchstabenabstand als Anteil der Schriftgröße (−0,2–1); fehlt = 0. */
+  letterSpacing?: number
   /**
    * Bewegung über Keyframes (Timeline-Editor): Mitte und Größe ändern sich
    * über die Zeit. Ersetzt `x`/`y`.
@@ -143,6 +147,9 @@ export const MIN_TEXT_SIZE = 0.02
 export const MAX_TEXT_SIZE = 0.3
 /** Mindestdauer einer Einblendung in Sekunden. */
 export const MIN_TEXT_DURATION = 0.2
+/** Buchstabenabstand (Anteil der Schriftgröße), wie im Frontend. */
+export const MIN_LETTER_SPACING = -0.2
+export const MAX_LETTER_SPACING = 1
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i
 
@@ -244,6 +251,20 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
       throw new ValidationError(`Text ${n}: Ende muss nach dem Start liegen (im Video).`)
     }
     const animOut = parseAnimOut(item.animOut, `Ausblenden von Text ${n}`)
+    // Optional (fehlen bei älteren Projekten und im bisherigen Editor): nur
+    // abweichende Werte übernehmen, damit die ASS-Datei sonst gleich bleibt.
+    const opacity =
+      item.opacity === undefined || item.opacity === null
+        ? 1
+        : clamp(num(item.opacity, `Deckkraft von Text ${n}`), 0, 1)
+    const letterSpacing =
+      item.letterSpacing === undefined || item.letterSpacing === null
+        ? 0
+        : clamp(
+            num(item.letterSpacing, `Buchstabenabstand von Text ${n}`),
+            MIN_LETTER_SPACING,
+            MAX_LETTER_SPACING,
+          )
     return {
       text,
       start,
@@ -263,6 +284,8 @@ export function parseTextOverlays(raw: unknown, videoDuration: number): TextOver
             animOutSpeed: parseAnimSpeed(item.animOutSpeed, `Tempo des Ausblendens von Text ${n}`),
           }
         : {}),
+      ...(opacity < 1 ? { opacity } : {}),
+      ...(letterSpacing !== 0 ? { letterSpacing } : {}),
     }
   })
 }
@@ -399,19 +422,50 @@ function edgeTags(o: Pick<TextOverlay, 'style'>, px: number): string {
   }
 }
 
+/** Deckkraft des Textes (fehlt = 1). */
+const opacityOf = (o: Pick<TextOverlay, 'opacity'>) => o.opacity ?? 1
+
+/**
+ * ASS-Alpha (`&H00&` deckend … `&HFF&` unsichtbar) für einen Grundwert `base`
+ * (0–255), abgeschwächt um die Deckkraft des Textes.
+ */
+function alphaHex(base: number, opacity: number): string {
+  const a = Math.round(255 - (255 - base) * opacity)
+  return `&H${a.toString(16).toUpperCase().padStart(2, '0')}&`
+}
+
+/**
+ * Halbtransparente Box: Je Zeile eine eigene Box (BorderStyle 3) würde sich
+ * zwischen den Zeilen überlappen und dort dunkler werden. Dann eine Box um
+ * den ganzen Text (BorderStyle 4, Farbe aus `\\4c`). Deckende Boxen bleiben
+ * wie bisher.
+ */
+const translucentBox = (o: TextOverlay) => o.style === 'box' && opacityOf(o) < 1
+
+/** Name des ASS-Stils einer Einblendung (siehe `buildAss`). */
+function styleName(o: TextOverlay): string {
+  if (o.style !== 'box') return 'Text'
+  return translucentBox(o) ? 'BoxA' : 'Box'
+}
+
 /** Alpha-Werte (ASS: 00 = deckend, FF = unsichtbar) je Stil. */
 function styleTags(o: TextOverlay, px: number): { tags: string; alpha: string; edge: string } {
   const accent = assColor(o.accent)
   const edge = edgeTags(o, px)
+  const op = opacityOf(o)
+  const solid = alphaHex(0, op)
   switch (o.style) {
     case 'outline':
-      return { tags: `${edge}\\3c${accent}`, alpha: '\\1a&H00&\\3a&H00&', edge }
+      return { tags: `${edge}\\3c${accent}`, alpha: `\\1a${solid}\\3a${solid}`, edge }
     case 'box':
+      // Halbtransparent: Kontur unsichtbar, `\\bord` bleibt der Rand der Box.
+      if (op < 1)
+        return { tags: `${edge}\\4c${accent}`, alpha: `\\1a${solid}\\3a&HFF&\\4a${solid}`, edge }
       return { tags: `${edge}\\3c${accent}`, alpha: '\\1a&H00&\\3a&H00&', edge }
     case 'shadow':
-      return { tags: `${edge}\\4c${accent}`, alpha: '\\1a&H00&\\4a&H40&', edge }
+      return { tags: `${edge}\\4c${accent}`, alpha: `\\1a${solid}\\4a${alphaHex(0x40, op)}`, edge }
     case 'none':
-      return { tags: edge, alpha: '\\1a&H00&', edge }
+      return { tags: edge, alpha: `\\1a${solid}`, edge }
     default: {
       const never: never = o.style
       throw new Error(`Unbekannter Stil: ${String(never)}`)
@@ -424,24 +478,61 @@ function styleTags(o: TextOverlay, px: number): { tags: string; alpha: string; e
  * ist die Zeit, die beim Beginn dieser Zeile schon vergangen ist (Texte mit
  * Keyframes bestehen aus mehreren Zeilen hintereinander).
  */
-function typewriterBody(o: TextOverlay, dur: number, alpha: string, offsetMs: number): string {
+function typewriterBody(
+  o: TextOverlay,
+  dur: number,
+  alpha: string,
+  offsetMs: number,
+  fsp = '',
+): string {
   const chars = Array.from(o.text)
   const visible = chars.filter((c) => c !== '\n').length
   const step = typeStepMs(dur, visible, o.animSpeed)
   // Box bleibt von Anfang an stehen (sonst stückelt libass sie je Zeichen).
   const hidden = o.style === 'box' ? '\\1a&HFF&' : '\\1a&HFF&\\3a&HFF&\\4a&HFF&'
-  const shown = o.style === 'box' ? '\\1a&H00&' : alpha
+  const shown = o.style === 'box' ? `\\1a${alphaHex(0, opacityOf(o))}` : alpha
   let k = 0
-  return chars
-    .map((ch) => {
-      if (ch === '\n') return '\\N'
-      const at = Math.round(k++ * step)
-      const t = at - offsetMs
-      // Zeichen 0 sofort sichtbar; danach jeweils nach `step` ms.
-      if (at === 0 || t <= 0) return escapeChar(ch)
-      return `{${hidden}\\t(${t},${t + 1},${shown})}${escapeChar(ch)}`
-    })
-    .join('')
+  return spacedBody(chars, fsp, (ch) => {
+    const at = Math.round(k++ * step)
+    const t = at - offsetMs
+    // Zeichen 0 sofort sichtbar; danach jeweils nach `step` ms.
+    if (at === 0 || t <= 0) return escapeChar(ch)
+    return `{${hidden}\\t(${t},${t + 1},${shown})}${escapeChar(ch)}`
+  })
+}
+
+/** Buchstabenabstand in px für die Schriftgröße `px` (`\\fsp`, leer ohne Abstand). */
+function spacingTag(o: Pick<TextOverlay, 'letterSpacing'>, px: number): string {
+  const s = o.letterSpacing ?? 0
+  return s === 0 ? '' : `\\fsp${r1(s * px)}`
+}
+
+/**
+ * Setzt den Text Zeichen für Zeichen (`piece` je sichtbarem Zeichen, in
+ * Reihenfolge). Mit Buchstabenabstand: libass setzt ihn auch hinter das letzte
+ * Zeichen einer Zeile, die Zeile stünde dann um den halben Abstand neben der
+ * Mitte (und eine Box wäre rechts breiter). Deshalb vor dem letzten Zeichen
+ * jeder Zeile `\\fsp0` und nach dem Umbruch wieder der Abstand. Ein Abstand
+ * skaliert in libass mit `\\fscx` (Keyframes, Zoom) mit.
+ */
+function spacedBody(chars: string[], fsp: string, piece: (ch: string) => string): string {
+  let out = ''
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i]
+    if (ch === '\n') {
+      out += fsp ? `\\N{${fsp}}` : '\\N'
+      continue
+    }
+    const last = i + 1 === chars.length || chars[i + 1] === '\n'
+    out += (fsp && last ? '{\\fsp0}' : '') + piece(ch)
+  }
+  return out
+}
+
+/** Text ohne Schreibmaschine (maskiert, mit Buchstabenabstand `fsp`). */
+function plainBody(o: TextOverlay, fsp: string): string {
+  if (!fsp) return escapeAssText(o.text)
+  return spacedBody(Array.from(o.text), fsp, escapeChar)
 }
 
 /** Stand der Bewegung zur Zeit `at` (s ab Beginn): zwischen Keyframes gemischt, außen gehalten. */
@@ -542,7 +633,8 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
   // Mit Keyframes wird jede Ausblend-Animation zum Ausblenden (wie beim Einblenden).
   const end = splitAnimation(o)
   const fadeOut = end.out === 'none' ? 0 : end.legacy ? f : fadeMs(dur, end.outSpeed)
-  const style = o.style === 'box' ? 'Box' : 'Text'
+  const style = styleName(o)
+  const fsp = spacingTag(o, px)
   const breaks = motionBreaks(motion, dur)
   const scaled = motion.keys.some((k) => k.scale !== 1)
   const pct = (scale: number) => r1(scale * 100)
@@ -567,11 +659,11 @@ export function buildAssEvents(o: TextOverlay, width: number, height: number): s
     const fad = fin > 0 || fout > 0 ? `\\fad(${fin},${fout})` : ''
     const base =
       `\\an5\\fn${meta.family}\\b${meta.bold ? 1 : 0}\\fs${r1(px * meta.winRatio)}` +
-      `\\c${assColor(o.color)}${edgeTags(o, px * a.scale)}${colors}${alpha}`
+      `\\c${assColor(o.color)}${edgeTags(o, px * a.scale)}${colors}${alpha}${fsp}`
     const body =
       o.animation === 'typewriter'
-        ? typewriterBody(o, dur, alpha, Math.round(from * 1000))
-        : escapeAssText(o.text)
+        ? typewriterBody(o, dur, alpha, Math.round(from * 1000), fsp)
+        : plainBody(o, fsp)
     lines.push(
       `Dialogue: 0,${assTime(o.start + from)},${assTime(o.start + to)},${style},,0,0,0,,` +
         `{${base}${place}${size}${fad}}${body}`,
@@ -591,9 +683,10 @@ export function buildAssLines(o: TextOverlay, width: number, height: number): st
   const x = Math.round(o.x * width)
   const y = Math.round(o.y * height)
   const { tags: look, alpha } = styleTags(o, px)
+  const fsp = spacingTag(o, px)
   const base =
     `\\an5\\fn${meta.family}\\b${meta.bold ? 1 : 0}\\fs${r1(px * meta.winRatio)}` +
-    `\\c${assColor(o.color)}${look}${alpha}`
+    `\\c${assColor(o.color)}${look}${alpha}${fsp}`
 
   const end = splitAnimation(o)
   // Bewegtes Ausblenden braucht eine eigene Zeile (ASS kennt je Zeile nur ein \\move).
@@ -603,7 +696,7 @@ export function buildAssLines(o: TextOverlay, width: number, height: number): st
   const fi = fadeMs(dur, o.animSpeed)
   const m = moveMs(dur, o.animSpeed)
   let anim: string
-  let body = escapeAssText(o.text)
+  let body = plainBody(o, fsp)
   switch (o.animation) {
     case 'none':
     case 'fadeOut':
@@ -639,7 +732,7 @@ export function buildAssLines(o: TextOverlay, width: number, height: number): st
     }
     case 'typewriter':
       anim = `\\pos(${x},${y})` + (f > 0 ? `\\fad(0,${f})` : '')
-      body = typewriterBody(o, dur, alpha, 0)
+      body = typewriterBody(o, dur, alpha, 0, fsp)
       break
     default: {
       const never: never = o.animation
@@ -647,7 +740,7 @@ export function buildAssLines(o: TextOverlay, width: number, height: number): st
     }
   }
 
-  const style = o.style === 'box' ? 'Box' : 'Text'
+  const style = styleName(o)
   const line = (from: number, to: number, tags: string, text: string) =>
     `Dialogue: 0,${assTime(from)},${assTime(to)},${style},,0,0,0,,{${base}${tags}}${text}`
   if (!tail) return [line(o.start, o.end, anim, body)]
@@ -694,8 +787,8 @@ export function buildAssLines(o: TextOverlay, width: number, height: number): st
   }
   const tailBody =
     o.animation === 'typewriter'
-      ? typewriterBody(o, dur, alpha, (splitCs - startCs) * 10)
-      : escapeAssText(o.text)
+      ? typewriterBody(o, dur, alpha, (splitCs - startCs) * 10, fsp)
+      : plainBody(o, fsp)
   // Reicht das Einblenden bis hinter die Grenze (sehr kurze Texte), entfällt die erste Zeile.
   if (splitCs - startCs < MIN_MOTION_STEP * 100) return [line(o.start, o.end, out, tailBody)]
   return [line(o.start, split, anim, body), line(split, o.end, out, tailBody)]
@@ -730,6 +823,8 @@ export function buildAss(overlays: TextOverlay[], width: number, height: number)
       'Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     style('Text', 1),
     style('Box', 3),
+    // Nur wenn gebraucht: ältere Projekte behalten genau dieselbe Datei.
+    ...(overlays.some(translucentBox) ? [style('BoxA', 4)] : []),
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
