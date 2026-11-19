@@ -1,5 +1,7 @@
 import {
   ANIM_SPEEDS,
+  MAX_LETTER_SPACING,
+  MIN_LETTER_SPACING,
   OUT_ANIMATIONS,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
@@ -27,6 +29,10 @@ export interface TextDefault {
   /** Eigenes Ausblenden (fehlt bei älteren Standards: wie bisher über `animation`). */
   animOut?: string
   animOutSpeed?: number
+  /** Deckkraft 0–1 (fehlt bei älteren Standards: 1). */
+  opacity: number
+  /** Buchstabenabstand, Anteil der Schriftgröße (fehlt bei älteren Standards: 0). */
+  letterSpacing: number
 }
 
 export const TEXT_DEFAULT_KEYS = [
@@ -41,6 +47,8 @@ export const TEXT_DEFAULT_KEYS = [
   'animSpeed',
   'animOut',
   'animOutSpeed',
+  'opacity',
+  'letterSpacing',
 ] as const satisfies readonly (keyof TextDefault)[]
 
 const HEX = /^#[0-9a-f]{6}$/i
@@ -67,7 +75,28 @@ export function parseTextDefault(raw: unknown): TextDefault | null {
     return null
   if (typeof animSpeed !== 'number' || !(ANIM_SPEEDS as readonly number[]).includes(animSpeed))
     return null
-  const base = { x, y, font, size, color, style, accent, animation, animSpeed }
+  // Fehlen bei Texten und Standards von vorher: deckend, ohne Abstand.
+  const opacity = d.opacity === undefined ? 1 : d.opacity
+  const letterSpacing = d.letterSpacing === undefined ? 0 : d.letterSpacing
+  if (!unit(opacity)) return null
+  if (
+    typeof letterSpacing !== 'number' ||
+    !(letterSpacing >= MIN_LETTER_SPACING && letterSpacing <= MAX_LETTER_SPACING)
+  )
+    return null
+  const base = {
+    x,
+    y,
+    font,
+    size,
+    color,
+    style,
+    accent,
+    animation,
+    animSpeed,
+    opacity,
+    letterSpacing,
+  }
   const animOut = d.animOut
   if (animOut === undefined || animOut === null) return base
   if (typeof animOut !== 'string' || !(OUT_ANIMATIONS as readonly string[]).includes(animOut))
@@ -103,7 +132,10 @@ export function textDefaultPatch(
     if (keyed && (key === 'x' || key === 'y')) continue
     // Tempo: fehlt = 1. Ohne eigenes Ausblenden spielt dessen Tempo keine Rolle.
     const speed = key === 'animSpeed' || (key === 'animOutSpeed' && def.animOut !== undefined)
-    const cur = speed && data[key] === undefined ? 1 : (data[key] ?? undefined)
+    // Deckkraft fehlt = 1, Buchstabenabstand fehlt = 0.
+    const missing = speed || key === 'opacity' ? 1 : key === 'letterSpacing' ? 0 : undefined
+    const cur =
+      data[key] === undefined && missing !== undefined ? missing : (data[key] ?? undefined)
     const want = key === 'animOutSpeed' && def.animOut === undefined ? cur : def[key]
     if (cur !== want) patch[key] = want
   }

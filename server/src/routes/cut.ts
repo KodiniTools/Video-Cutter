@@ -119,6 +119,8 @@ export const SERVER_FEATURES = [
   'timelinePreviewFull',
   'timelineAnimOut',
   'timelineLoopSpeed',
+  'timelineTextOpacity',
+  'timelineTextSpacing',
   'timelineClipFadeOut',
   'timelineRender',
   'timelineNormalize',
