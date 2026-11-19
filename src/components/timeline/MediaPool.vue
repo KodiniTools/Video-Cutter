@@ -83,13 +83,18 @@ const playProgress = ref(0)
 /** Vorschau-Kopie ließ sich nicht laden: dann das Original vom Server. */
 const useOriginal = ref(false)
 
-/** Nur Videos mit fertiger Vorschau-Kopie lassen sich im Vorschaubild abspielen. */
+/**
+ * Abspielbar im Vorschaubild: Videos mit fertiger Vorschau-Kopie und Tondateien
+ * (diese direkt aus der hochgeladenen Datei, nur per Klick).
+ */
 const canPlay = (item: PoolItem) =>
-  !!item.media && !isAudio(item) && item.derived?.proxy.state === 'ready'
+  !!item.media && (isAudio(item) || item.derived?.proxy.state === 'ready')
 
 function playSrc(item: PoolItem): string {
   const id = item.media!.id
-  return useOriginal.value ? `${API_BASE}/api/media/${encodeURIComponent(id)}/file` : proxyUrl(id)
+  return useOriginal.value || isAudio(item)
+    ? `${API_BASE}/api/media/${encodeURIComponent(id)}/file`
+    : proxyUrl(id)
 }
 
 function startPlay(item: PoolItem, sound: boolean): void {
@@ -102,7 +107,8 @@ function startPlay(item: PoolItem, sound: boolean): void {
 
 function onHover(item: PoolItem): void {
   // Ein mit Ton laufendes Vorschaubild wird durch Überfahren nicht unterbrochen.
-  if (!canPlay(item) || playing.value?.sound) return
+  // Tondateien stumm abzuspielen ergibt nichts: Sie laufen nur per Klick.
+  if (!canPlay(item) || isAudio(item) || playing.value?.sound) return
   startPlay(item, false)
 }
 
@@ -117,7 +123,7 @@ function onThumbClick(item: PoolItem): void {
 }
 
 function onTimeUpdate(event: Event): void {
-  const el = event.target as HTMLVideoElement
+  const el = event.target as HTMLMediaElement
   playProgress.value = el.duration > 0 ? el.currentTime / el.duration : 0
 }
 
@@ -131,13 +137,20 @@ function onVideoError(): void {
   else playing.value = null
 }
 
+function onAudioError(): void {
+  playing.value = null
+}
+
 function playLabel(item: PoolItem): string {
-  return t(
-    playing.value?.key === item.key && playing.value.sound
+  const active = playing.value?.key === item.key && playing.value.sound
+  const key = isAudio(item)
+    ? active
+      ? 'mediaPool.stopAudioNamed'
+      : 'mediaPool.playAudioNamed'
+    : active
       ? 'mediaPool.stopPreviewNamed'
-      : 'mediaPool.playPreviewNamed',
-    { name: item.name },
-  )
+      : 'mediaPool.playPreviewNamed'
+  return t(key, { name: item.name })
 }
 
 function addLabel(item: PoolItem): string {
@@ -263,9 +276,9 @@ const rejectedText = computed(() =>
           v-if="canPlay(item)"
           type="button"
           class="thumb playable"
-          :class="{ active: playing?.key === item.key }"
+          :class="{ active: playing?.key === item.key, audio: isAudio(item) }"
           :style="thumbStyle(item)"
-          :title="t('mediaPool.playPreviewHint')"
+          :title="t(isAudio(item) ? 'mediaPool.playAudioHint' : 'mediaPool.playPreviewHint')"
           :aria-label="playLabel(item)"
           :aria-pressed="playing?.key === item.key && playing.sound"
           data-testid="media-pool-thumb"
@@ -273,8 +286,19 @@ const rejectedText = computed(() =>
           @mouseleave="onLeave(item)"
           @click="onThumbClick(item)"
         >
+          <span v-if="isAudio(item)">♪</span>
+          <audio
+            v-if="isAudio(item) && playing?.key === item.key"
+            :src="playSrc(item)"
+            autoplay
+            preload="auto"
+            data-testid="media-pool-thumb-audio"
+            @timeupdate="onTimeUpdate"
+            @ended="onEnded"
+            @error="onAudioError"
+          ></audio>
           <video
-            v-if="playing?.key === item.key"
+            v-else-if="playing?.key === item.key"
             class="thumb-video"
             :src="playSrc(item)"
             :muted="!playing.sound"
@@ -294,15 +318,7 @@ const rejectedText = computed(() =>
             playing?.key === item.key && playing.sound ? '❚❚' : '▶'
           }}</span>
         </button>
-        <div
-          v-else
-          class="thumb"
-          :class="{ audio: isAudio(item) }"
-          :style="thumbStyle(item)"
-          aria-hidden="true"
-        >
-          <span v-if="isAudio(item)">♪</span>
-        </div>
+        <div v-else class="thumb" :style="thumbStyle(item)" aria-hidden="true"></div>
         <div class="body">
           <div class="row">
             <span class="name" :title="item.name">{{ item.name }}</span>
