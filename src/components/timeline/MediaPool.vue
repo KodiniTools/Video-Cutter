@@ -328,7 +328,7 @@ const rejectedText = computed(() =>
               class="to-timeline"
               :title="addLabel(item)"
               :aria-label="addLabel(item)"
-              @click="timeline.appendMedia(item.media.id)"
+              @click="timeline.insertMediaAtPlayhead(item.media.id)"
             >
               {{ t('mediaPool.addToTimeline') }}
             </button>

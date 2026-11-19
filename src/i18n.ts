@@ -703,8 +703,8 @@ const messages = {
       playPreviewNamed: 'Vorschau von {name} mit Ton abspielen',
       stopPreviewNamed: 'Vorschau von {name} anhalten',
       addToTimeline: '+ Timeline',
-      addToTimelineNamed: '{name} ans Ende der Timeline legen',
-      addAudioToTimelineNamed: '{name} auf eine Ton-Spur legen',
+      addToTimelineNamed: '{name} am Abspielkopf in die Timeline einfügen',
+      addAudioToTimelineNamed: '{name} am Abspielkopf auf eine Ton-Spur legen',
       audioFile: 'Tondatei',
       audioUnsupported:
         'Das Server-Backend ist veraltet und nimmt noch keine Tondateien an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
@@ -2115,8 +2115,8 @@ const messages = {
       playPreviewNamed: 'Play preview of {name} with sound',
       stopPreviewNamed: 'Stop preview of {name}',
       addToTimeline: '+ Timeline',
-      addToTimelineNamed: 'Put {name} at the end of the timeline',
-      addAudioToTimelineNamed: 'Put {name} on an audio track',
+      addToTimelineNamed: 'Insert {name} into the timeline at the playhead',
+      addAudioToTimelineNamed: 'Put {name} on an audio track at the playhead',
       audioFile: 'Audio file',
       audioUnsupported:
         'The server backend is outdated and does not accept audio files yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
