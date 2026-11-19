@@ -1500,21 +1500,7 @@ export function appendMedia(
   if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
   const ids = opts.ids ?? createId
   if (asset.kind === 'audio') return appendAudioFile(doc, asset, ids)
-  let next = doc
-
-  // Musik, die schon liegt, zählt nicht: Das erste Video bestimmt das Format.
-  const empty = !doc.tracks.some((t) => t.kind !== 'audio' && t.clips.length > 0)
-  if (empty && asset.width && asset.height) {
-    next = {
-      ...next,
-      settings: {
-        ...next.settings,
-        width: asset.width,
-        height: asset.height,
-        fps: asset.fps && asset.fps > 0 ? asset.fps : next.settings.fps,
-      },
-    }
-  }
+  let next = adoptFormat(doc, asset)
 
   /** Oberste freie Spur dieser Art; sonst eine neue. `null` = Anlegen abgelehnt. */
   const useTrack = (kind: 'video' | 'audio', prefix: string): string | null => {
@@ -1540,6 +1526,96 @@ export function appendMedia(
   const start = Math.max(0, ...used.map(trackEnd))
   const linkGroup = audioTrackId ? ids() : undefined
   const base = { asset: assetId, start, duration: asset.duration, sourceIn: 0, speed: 1 }
+  const video = insertClip(next, videoTrackId, {
+    ...base,
+    id: ids(),
+    kind: 'video',
+    ...(linkGroup ? { linkGroup } : {}),
+  })
+  if (!video.ok || !audioTrackId) return video
+  return insertClip(video.doc, audioTrackId, {
+    ...base,
+    id: ids(),
+    kind: 'audio',
+    gain: 1,
+    linkGroup,
+  })
+}
+
+/**
+ * Liegt noch kein Bild auf der Timeline, übernimmt das Projekt Größe und
+ * Bildrate des Videos. Musik, die schon liegt, zählt nicht.
+ */
+function adoptFormat(doc: TimelineDoc, asset: AssetRef): TimelineDoc {
+  const empty = !doc.tracks.some((t) => t.kind !== 'audio' && t.clips.length > 0)
+  if (!empty || !asset.width || !asset.height) return doc
+  return {
+    ...doc,
+    settings: {
+      ...doc.settings,
+      width: asset.width,
+      height: asset.height,
+      fps: asset.fps && asset.fps > 0 ? asset.fps : doc.settings.fps,
+    },
+  }
+}
+
+/**
+ * Medium aus der Medienliste genau an einer Stelle (dem Abspielkopf) einfügen,
+ * jede Art in ihre Spur:
+ * - Video: Bild auf die oberste nicht gesperrte Video-Spur, die an der Stelle
+ *   frei ist; Ton (falls vorhanden) verknüpft und gleichzeitig auf die oberste
+ *   freie Ton-Spur, die keine Musik-Spur ist.
+ * - Tondatei: auf die oberste nicht gesperrte Musik-Spur, die an der Stelle
+ *   frei ist.
+ * Ist keine passende Spur frei, entsteht eine neue (Bild oben, Ton unten).
+ * Vorhandene Clips werden also nie überschrieben oder verschoben.
+ */
+export function insertMediaAt(
+  doc: TimelineDoc,
+  assetId: string,
+  at: Time,
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const asset = doc.assets[assetId]
+  if (!asset) return fail('asset-not-found')
+  if (asset.kind === 'image' || asset.duration === null) return fail('kind-mismatch')
+  if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
+  if (!isTime(at)) return fail('invalid-time')
+  const ids = opts.ids ?? createId
+  const end = at + asset.duration
+  let next = asset.kind === 'audio' ? doc : adoptFormat(doc, asset)
+
+  /** Oberste passende, an der Stelle freie Spur; sonst eine neue. `null` = Anlegen abgelehnt. */
+  const useTrack = (kind: 'video' | 'audio', music: boolean, prefix: string): string | null => {
+    const free = next.tracks.find(
+      (t) =>
+        t.kind === kind &&
+        !t.locked &&
+        (kind === 'video' || isMusicTrack(next, t) === music) &&
+        !overlaps(t.clips, at, end),
+    )
+    if (free) return free.id
+    const id = ids()
+    const index = kind === 'video' ? 0 : next.tracks.length
+    const added = addTrack(next, { id, kind, name: nextTrackName(next, prefix) }, index)
+    if (!added.ok) return null
+    next = added.doc
+    return id
+  }
+
+  const base = { asset: assetId, start: at, duration: asset.duration, sourceIn: 0, speed: 1 }
+  if (asset.kind === 'audio') {
+    const trackId = useTrack('audio', true, 'A')
+    if (trackId === null) return fail('duplicate-id')
+    return insertClip(next, trackId, { ...base, id: ids(), kind: 'audio', gain: 1 })
+  }
+
+  const videoTrackId = useTrack('video', false, 'V')
+  const audioTrackId = asset.hasAudio ? useTrack('audio', false, 'A') : null
+  if (videoTrackId === null || (asset.hasAudio && audioTrackId === null))
+    return fail('duplicate-id')
+  const linkGroup = audioTrackId ? ids() : undefined
   const video = insertClip(next, videoTrackId, {
     ...base,
     id: ids(),

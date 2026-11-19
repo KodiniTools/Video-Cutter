@@ -306,10 +306,16 @@ describe('Medienliste (Komponente)', () => {
     expect(timeline.doc.assets.m1).toMatchObject({ kind: 'audio', hasAudio: true })
 
     const add = wrapper.get('.to-timeline')
-    expect(add.attributes('title')).toBe('lied.mp3 auf eine Ton-Spur legen')
+    expect(add.attributes('title')).toBe('lied.mp3 am Abspielkopf auf eine Ton-Spur legen')
+    timeline.seek(2_000_000)
     await add.trigger('click')
     expect(timeline.doc.tracks.map((t) => [t.kind, t.clips.length])).toEqual([['audio', 1]])
-    expect(timeline.doc.tracks[0].clips[0]).toMatchObject({ asset: 'm1', start: 0, kind: 'audio' })
+    // Genau am Abspielkopf, nicht bei 0 bzw. hinten angehängt.
+    expect(timeline.doc.tracks[0].clips[0]).toMatchObject({
+      asset: 'm1',
+      start: 2_000_000,
+      kind: 'audio',
+    })
   })
 
   it('erklärt, warum ein verwendetes Video nicht entfernt wird', async () => {

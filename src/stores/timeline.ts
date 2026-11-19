@@ -9,8 +9,10 @@ import {
   addTrack as addTrackOp,
   appendMedia as appendMediaOp,
   insertAudioAt as insertAudioAtOp,
+  insertMediaAt as insertMediaAtOp,
   assetInUse,
   createDoc,
+  clipEnd,
   docDuration,
   findClip,
   createId,
@@ -46,6 +48,8 @@ import {
   snapPoints,
   snapTime,
   snapToFrame,
+  frameIndex,
+  frameTime,
   splitClip as splitClipOp,
   trimClip as trimClipOp,
   trimRange,
@@ -480,6 +484,27 @@ export const useTimelineStore = defineStore('timeline', () => {
     return true
   }
 
+  /**
+   * Medium aus der Medienliste genau am Abspielkopf einfügen, jede Art in ihre
+   * Spur (ein Verlaufsschritt); belegte Spuren weichen auf freie bzw. neue aus.
+   * Die neuen Clips werden markiert, und der Abspielkopf rückt an ihr Ende –
+   * so liegen mehrere nacheinander eingefügte Videos lückenlos hintereinander.
+   */
+  function insertMediaAtPlayhead(assetId: string): boolean {
+    const at = playhead.value
+    const before = new Set(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
+    if (!apply((d) => insertMediaAtOp(d, assetId, at))) return false
+    const added = doc.value.tracks.flatMap((t): Clip[] => t.clips).filter((c) => !before.has(c.id))
+    selection.value = added.map((c) => c.id)
+    // Auf das erste Bild ab dem Ende (nicht davor), sonst überlappte das
+    // nächste eingefügte Medium den Clip um Bruchteile eines Bildes.
+    const end = Math.max(at, ...added.map(clipEnd))
+    const fps = doc.value.settings.fps
+    const framed = snapToFrame(end, fps)
+    seek(framed < end ? frameTime(frameIndex(end, fps) + 1, fps) : framed)
+    return true
+  }
+
   // --- Ziehen mit der Maus ---------------------------------------------------
 
   /** Einrast-Toleranz in Zeit (aus Pixeln über den Zoom). */
@@ -811,6 +836,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     removeClip,
     appendMedia,
     insertAudioAt,
+    insertMediaAtPlayhead,
     splitTargets,
     splitAtPlayhead,
     dragClipTo,
