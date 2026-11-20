@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RangeSpinner from './timeline/RangeSpinner.vue'
+import ResetButton from './ResetButton.vue'
 import { storeToRefs } from 'pinia'
 import { useGraphicOverlayStore } from '@/stores/graphicOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
@@ -14,6 +15,7 @@ import {
   GRAPHIC_SYMBOLS,
   MAX_CROP,
   MAX_EMOJI_LENGTH,
+  defaultGraphic,
   MAX_GRAPHICS,
   MAX_GRAPHIC_H,
   MAX_GRAPHIC_W,
@@ -65,6 +67,8 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const graphics = useGraphicOverlayStore()
 const { overlays, selected, selectedId, canAdd } = storeToRefs(graphics)
+/** Standardwerte der Art (Ziel der Knöpfe ↺). */
+const defaults = computed(() => defaultGraphic(selected.value?.kind ?? 'rect'))
 
 const SHAPES: { kind: GraphicKind; icon: string }[] = [
   { kind: 'rect', icon: '▭' },
@@ -540,6 +544,12 @@ function symbolPath(s: GraphicSymbol): string {
             @change="commitPercent(axis, $event)"
             @keydown.enter.prevent="commitPercent(axis, $event)"
           />
+          <ResetButton
+            :value="50"
+            :disabled="busy || pct(selected[axis]) === 50"
+            :data-testid="`graphic-pos-${axis}-reset`"
+            @click="setPercent(axis, 50)"
+          />
         </div>
         <p class="hint">{{ t('graphics.dragHint') }}</p>
       </div>
@@ -554,6 +564,7 @@ function symbolPath(s: GraphicSymbol): string {
           </span>
         </div>
         <RangeSpinner
+          :reset="Math.round(defaults.w * 1000)"
           :scale="0.1"
           class="range"
           :min="MIN_GRAPHIC_SIZE * 1000"
@@ -571,6 +582,7 @@ function symbolPath(s: GraphicSymbol): string {
           <span class="field-value">{{ pct(selected.h) }} %</span>
         </div>
         <RangeSpinner
+          :reset="Math.round(defaults.h * 1000)"
           :scale="0.1"
           class="range"
           :min="MIN_GRAPHIC_SIZE * 1000"
@@ -600,6 +612,12 @@ function symbolPath(s: GraphicSymbol): string {
             @keydown.enter.prevent="commitRotation"
           />
           <span class="field-label">°</span>
+          <ResetButton
+            :value="0"
+            :disabled="busy || selected.rotation === 0"
+            data-testid="graphic-rotation-reset"
+            @click="patch({ rotation: 0 })"
+          />
         </div>
         <input
           class="range"
@@ -647,6 +665,7 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-value">{{ pct(selected.strokeWidth) }} %</span>
           </label>
           <RangeSpinner
+            :reset="Math.round(defaults.strokeWidth * 1000)"
             :scale="0.1"
             class="range"
             min="0"
@@ -676,6 +695,7 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-value">{{ Math.round(selected.fillOpacity * 100) }} %</span>
           </label>
           <RangeSpinner
+            :reset="Math.round(defaults.fillOpacity * 100)"
             class="range"
             min="0"
             max="100"
@@ -692,6 +712,7 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-value">{{ Math.round(selected.radius * 200) }} %</span>
           </div>
           <RangeSpinner
+            :reset="Math.round(defaults.radius * 100)"
             :scale="2"
             class="range"
             min="0"
@@ -712,6 +733,7 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="field-value">{{ Math.round(selected.opacity * 100) }} %</span>
           </div>
           <RangeSpinner
+            :reset="100"
             class="range"
             min="5"
             max="100"
@@ -728,6 +750,7 @@ function symbolPath(s: GraphicSymbol): string {
             <span class="pos-axis crop-side">{{ t(`graphics.image.sides.${c.label}`) }}</span>
             <span class="grow spin">
               <RangeSpinner
+                :reset="0"
                 class="range"
                 min="0"
                 :max="MAX_CROP * 100"
@@ -812,22 +835,34 @@ function symbolPath(s: GraphicSymbol): string {
           <span class="field-label">{{ t('text.animSpeed') }}</span>
           <span class="field-value">{{ formatAnimSpeed(animSpeedOf(selected), locale) }}</span>
         </div>
-        <input
-          class="range"
-          type="range"
-          min="0"
-          :max="ANIM_SPEEDS.length - 1"
-          step="1"
-          :value="animSpeedIndex(animSpeedOf(selected))"
-          :disabled="busy || (selected.animation === 'none' && selected.loop === 'none')"
-          :aria-label="t('text.animSpeed')"
-          :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
-          @input="
-            patch({
-              animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
-            })
-          "
-        />
+        <div class="pos-row">
+          <input
+            class="range"
+            type="range"
+            min="0"
+            :max="ANIM_SPEEDS.length - 1"
+            step="1"
+            :value="animSpeedIndex(animSpeedOf(selected))"
+            :disabled="busy || (selected.animation === 'none' && selected.loop === 'none')"
+            :aria-label="t('text.animSpeed')"
+            :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
+            @input="
+              patch({
+                animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
+              })
+            "
+          />
+          <ResetButton
+            :value="formatAnimSpeed(1, locale)"
+            :disabled="
+              busy ||
+              (selected.animation === 'none' && selected.loop === 'none') ||
+              animSpeedOf(selected) === 1
+            "
+            data-testid="graphic-anim-speed-reset"
+            @click="patch({ animSpeed: 1 })"
+          />
+        </div>
         <span class="hint">{{ t('text.animSpeedHint') }}</span>
       </div>
     </div>

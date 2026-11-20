@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { useAudioFadeStore } from '@/stores/audioFade'
 import {
   AUDIO_FADE_CURVES,
+  DEFAULT_AUDIO_FADE,
   FADE_STEP_SEC,
   MAX_FADE_SEC,
   MIN_FADE_SEC,
@@ -68,6 +69,7 @@ function formatSec(s: number): string {
         </div>
         <RangeSpinner
           :id="`${side.key}-duration`"
+          :reset="DEFAULT_AUDIO_FADE[side.key].duration"
           class="range"
           :min="MIN_FADE_SEC"
           :max="MAX_FADE_SEC"

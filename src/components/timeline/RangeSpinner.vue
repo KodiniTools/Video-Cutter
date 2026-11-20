@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ResetButton from '@/components/ResetButton.vue'
 
 /**
  * Regler mit Zahlenfeld (▲▼) daneben. Ersetzt ein `<input type="range">`:
@@ -28,7 +29,7 @@ const props = withDefaults(
   { scale: 1, disabled: false, reset: undefined },
 )
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const range = ref<HTMLInputElement | null>(null)
 const num = ref<HTMLInputElement | null>(null)
 
@@ -47,13 +48,6 @@ const resetValue = computed(() =>
 )
 const atReset = computed(
   () => resetValue.value !== null && tidy(resetValue.value) === tidy(props.value),
-)
-const resetLabel = computed(() =>
-  resetValue.value === null
-    ? ''
-    : t('timeline.resetValue', {
-        value: tidy(resetValue.value * props.scale).toLocaleString(locale.value),
-      }),
 )
 
 /** Stellt den Regler wie eine Eingabe, damit der Aufrufer nichts Neues kennen muss. */
@@ -121,18 +115,13 @@ function onNumber(): void {
       @keydown.enter.prevent="onNumber"
       @keydown.stop
     />
-    <button
+    <ResetButton
       v-if="resetValue !== null"
-      type="button"
-      class="reset"
+      :value="tidy(resetValue * scale)"
       :disabled="disabled || atReset"
-      :title="resetLabel"
-      :aria-label="resetLabel"
       :data-testid="$attrs['data-testid'] ? `${String($attrs['data-testid'])}-reset` : undefined"
       @click="onReset"
-    >
-      ↺
-    </button>
+    />
   </span>
 </template>
 
@@ -162,34 +151,11 @@ input[type='range'] {
   font-size: var(--ds-text-sm);
   font-variant-numeric: tabular-nums;
 }
-.reset {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--ds-border);
-  border-radius: var(--ds-radius-sm);
-  background: var(--ds-surface-0);
-  color: var(--ds-text);
-  font: inherit;
-  font-size: var(--ds-text-sm);
-  line-height: 1;
-  cursor: pointer;
-}
-.reset:hover:not(:disabled) {
-  border-color: var(--ds-accent);
-  color: var(--ds-accent);
-}
-.reset:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
 /* ▲▼ immer zeigen, nicht erst beim Überfahren (Chromium blendet sie sonst aus). */
 .num::-webkit-inner-spin-button {
   opacity: 1;
 }
-input:focus-visible,
-.reset:focus-visible {
+input:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
 }
