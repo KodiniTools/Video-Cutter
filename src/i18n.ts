@@ -703,6 +703,8 @@ const messages = {
       playPreviewNamed: 'Vorschau von {name} mit Ton abspielen',
       stopPreviewNamed: 'Vorschau von {name} anhalten',
       addToTimeline: '+ Timeline',
+      replaceWith: '⇄ Einsetzen',
+      replaceWithNamed: 'Wartenden Clip durch {name} ersetzen',
       addToTimelineNamed: '{name} am Abspielkopf in die Timeline einfügen',
       addAudioToTimelineNamed: '{name} am Abspielkopf auf eine Ton-Spur legen',
       addImageToTimelineNamed: '{name} am Abspielkopf als Bild auf eine Ebene legen',
@@ -757,6 +759,24 @@ const messages = {
       addTextTitle: 'Text am Abspielkopf einfügen (liegt über allen Videos)',
       addGraphic: '+ Form / Emoji',
       addGraphicTitle: 'Form, Symbol oder Emoji am Abspielkopf einfügen (liegt über allen Videos)',
+      replace: {
+        button: '⇄ Ersetzen',
+        title:
+          'Markierten Clip an genau derselben Stelle durch ein anderes Element ersetzen. Das neue übernimmt keine Einstellungen des alten.',
+        active: 'Ersetzen:',
+        help: {
+          video:
+            'bei einem Video in der Medienliste „⇄ Einsetzen“ klicken. Es beginnt an derselben Stelle und behält seine eigene Länge (höchstens bis zum nächsten Clip).',
+          audio:
+            'bei einer Tondatei in der Medienliste „⇄ Einsetzen“ klicken. Sie beginnt an derselben Stelle und behält ihre eigene Länge (höchstens bis zum nächsten Clip).',
+          overlay:
+            '+ Text, + Form / Emoji, + Bild oder ein Bild aus der Medienliste („⇄ Einsetzen“) wählen. Gleiche Ebene, gleicher Beginn, gleiche Länge.',
+        },
+        mismatch:
+          'Das passt hier nicht: Ein Video ersetzt nur ein Video, eine Tondatei nur Ton, Texte, Formen und Bilder nur einander.',
+        failed: 'Das Ersetzen hat nicht geklappt.',
+        cancel: 'Abbrechen (Esc)',
+      },
       positionFrame: 'Position im Bild',
       positionFrameTitle:
         'Ziehen zum Verschieben (mit Umschalttaste fein), angeklickt auch mit den Pfeiltasten',
@@ -2129,6 +2149,8 @@ const messages = {
       playPreviewNamed: 'Play preview of {name} with sound',
       stopPreviewNamed: 'Stop preview of {name}',
       addToTimeline: '+ Timeline',
+      replaceWith: '⇄ Use here',
+      replaceWithNamed: 'Replace the waiting clip with {name}',
       addToTimelineNamed: 'Insert {name} into the timeline at the playhead',
       addAudioToTimelineNamed: 'Put {name} on an audio track at the playhead',
       addImageToTimelineNamed: 'Put {name} on a layer as an image at the playhead',
@@ -2182,6 +2204,24 @@ const messages = {
       addTextTitle: 'Insert text at the playhead (shown above all videos)',
       addGraphic: '+ Shape / emoji',
       addGraphicTitle: 'Insert a shape, symbol or emoji at the playhead (shown above all videos)',
+      replace: {
+        button: '⇄ Replace',
+        title:
+          'Replace the selected clip at exactly the same place with another element. The new one takes over none of the old settings.',
+        active: 'Replace:',
+        help: {
+          video:
+            'click “⇄ Use here” on a video in the media list. It starts at the same place and keeps its own length (at most up to the next clip).',
+          audio:
+            'click “⇄ Use here” on an audio file in the media list. It starts at the same place and keeps its own length (at most up to the next clip).',
+          overlay:
+            'choose + Text, + Shape / emoji, + Image or an image from the media list (“⇄ Use here”). Same layer, start and length.',
+        },
+        mismatch:
+          'This does not fit here: a video only replaces a video, an audio file only audio, and texts, shapes and images only each other.',
+        failed: 'Replacing did not work.',
+        cancel: 'Cancel (Esc)',
+      },
       positionFrame: 'Position in the picture',
       positionFrameTitle:
         'Drag to move (hold Shift for fine steps), or use the arrow keys once clicked',
