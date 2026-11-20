@@ -368,6 +368,9 @@ function removeLayoutKey(index: number): void {
 
 // --- Übergang am Anfang ------------------------------------------------------
 
+/** Dauer eines neuen Übergangs bzw. Ausblendens (wie im Store), Ziel der Knöpfe ↺. */
+const DEFAULT_FADE_SECONDS = 1
+
 const transition = computed(() => video.value?.transitionIn ?? null)
 const transitionSeconds = computed(() =>
   transition.value ? timeToSeconds(transition.value.duration) : 1,
@@ -478,6 +481,7 @@ onBeforeUnmount(commit)
         :max="MAX_CLIP_GAIN * 100"
         step="5"
         :value="gainPercent"
+        :reset="100"
         data-testid="clip-gain"
         @input="onGain"
         @change="commit"
@@ -493,6 +497,7 @@ onBeforeUnmount(commit)
             :max="maxFadeSeconds(side)"
             step="0.1"
             :value="fadeSeconds(side)"
+            :reset="0"
             :data-testid="`clip-fade-${side}`"
             @input="onFade(side, $event)"
             @change="commit"
@@ -555,6 +560,7 @@ onBeforeUnmount(commit)
           :max="timeToSeconds(MAX_TRANSITION)"
           step="0.1"
           :value="transitionSeconds"
+          :reset="DEFAULT_FADE_SECONDS"
           data-testid="clip-transition-duration"
           @input="onTransitionDuration"
           @change="commit"
@@ -581,6 +587,7 @@ onBeforeUnmount(commit)
           :max="timeToSeconds(MAX_TRANSITION)"
           step="0.1"
           :value="fadeOutSeconds"
+          :reset="DEFAULT_FADE_SECONDS"
           data-testid="clip-fade-out-duration"
           @input="onFadeOutDuration"
           @change="commit"
@@ -625,6 +632,7 @@ onBeforeUnmount(commit)
           :max="Math.round(maxMargin(side) * 100)"
           step="1"
           :value="Math.round(margins[side] * 100)"
+          :reset="0"
           :data-testid="`clip-crop-${side}`"
           @input="onCrop(side, $event)"
           @change="commit"
@@ -651,6 +659,7 @@ onBeforeUnmount(commit)
           max="100"
           step="1"
           :value="Math.round(color[field] * 100)"
+          :reset="0"
           :data-testid="`clip-color-${field}`"
           @input="onColor(field, $event)"
           @change="commit"
@@ -678,6 +687,7 @@ onBeforeUnmount(commit)
           step="1"
           :value="Math.round(layout[field] * 100)"
           :disabled="layoutDisabled(field)"
+          :reset="Math.round(FULL_LAYOUT[field] * 100)"
           :data-testid="`clip-layout-${field}`"
           @input="onLayout(field, $event)"
           @change="commit"

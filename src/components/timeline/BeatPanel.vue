@@ -203,6 +203,7 @@ const canApply = computed(() => beats.times.length > 0)
             :max="maxOffsetMs"
             step="5"
             :value="beats.offsetMs"
+            :reset="0"
             data-testid="beat-offset"
             @input="onOffset"
           />

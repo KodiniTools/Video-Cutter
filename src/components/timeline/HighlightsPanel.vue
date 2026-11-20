@@ -154,6 +154,7 @@ function onApply(): void {
           step="5"
           :value="target"
           :disabled="running"
+          :reset="DEFAULT_HIGHLIGHT_TARGET"
           data-testid="timeline-ai-highlights-target"
           @input="target = Number(($event.target as HTMLInputElement).value)"
         />

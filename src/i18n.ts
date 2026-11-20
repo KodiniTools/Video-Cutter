@@ -1123,6 +1123,7 @@ const messages = {
         removeNamed: '{name} entfernen',
       },
       exactValue: 'Genauer Wert',
+      resetValue: 'Auf Standard zurücksetzen ({value})',
       marker: {
         add: '+ Marker',
         addTitle: 'Marker am Abspielkopf setzen (M)',
@@ -2537,6 +2538,7 @@ const messages = {
         removeNamed: 'Remove {name}',
       },
       exactValue: 'Exact value',
+      resetValue: 'Reset to default ({value})',
       marker: {
         add: '+ Marker',
         addTitle: 'Set a marker at the playhead (M)',

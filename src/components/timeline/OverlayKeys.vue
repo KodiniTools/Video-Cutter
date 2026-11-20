@@ -96,6 +96,7 @@ onBeforeUnmount(commit)
         :max="MAX_KEY_SCALE"
         step="0.01"
         :value="scale"
+        :reset="1"
         :data-testid="`${prefix}-key-scale`"
         @input="onScale"
         @change="commit"

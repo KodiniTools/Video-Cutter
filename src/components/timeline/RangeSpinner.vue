@@ -8,6 +8,8 @@ import { useI18n } from 'vue-i18n'
  * unverändert auf dem Regler. Das Zahlenfeld stellt den Regler und löst
  * dessen `input`- und `change`-Ereignis aus, der Aufrufer merkt keinen
  * Unterschied. Eine Eingabe im Zahlenfeld ist damit ein Rückgängig-Schritt.
+ * Mit `reset` erscheint dahinter ein Knopf ↺, der den Regler auf diesen
+ * Standardwert stellt – ebenfalls über `input` + `change`, also ein Schritt.
  */
 defineOptions({ inheritAttrs: false })
 
@@ -20,11 +22,13 @@ const props = withDefaults(
     /** Faktor für die Anzeige im Zahlenfeld, z. B. 100 für Anteile 0 … 1 als Prozent. */
     scale?: number
     disabled?: boolean
+    /** Standardwert in Einheiten des Reglers; ohne ihn gibt es keinen Knopf ↺. */
+    reset?: number
   }>(),
-  { scale: 1, disabled: false },
+  { scale: 1, disabled: false, reset: undefined },
 )
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const range = ref<HTMLInputElement | null>(null)
 const num = ref<HTMLInputElement | null>(null)
 
@@ -35,6 +39,46 @@ const numMin = computed(() => tidy(Number(props.min) * props.scale))
 const numMax = computed(() => tidy(Number(props.max) * props.scale))
 const numStep = computed(() => tidy(Number(props.step) * props.scale))
 
+/** Standardwert innerhalb der Grenzen (der Regler könnte ihn sonst nicht zeigen). */
+const resetValue = computed(() =>
+  props.reset === undefined || !Number.isFinite(props.reset)
+    ? null
+    : Math.min(Number(props.max), Math.max(Number(props.min), props.reset)),
+)
+const atReset = computed(
+  () => resetValue.value !== null && tidy(resetValue.value) === tidy(props.value),
+)
+const resetLabel = computed(() =>
+  resetValue.value === null
+    ? ''
+    : t('timeline.resetValue', {
+        value: tidy(resetValue.value * props.scale).toLocaleString(locale.value),
+      }),
+)
+
+/** Stellt den Regler wie eine Eingabe, damit der Aufrufer nichts Neues kennen muss. */
+function setSlider(wanted: number): void {
+  const slider = range.value
+  if (!slider) return
+  slider.value = String(wanted)
+  slider.dispatchEvent(new Event('input', { bubbles: true }))
+  slider.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+/** Beide Felder zeigen wieder den echten Wert (nach Ablehnung oder Rundung). */
+function resync(): void {
+  void nextTick(() => {
+    if (num.value) num.value.value = String(shown.value)
+    if (range.value) range.value.value = String(props.value)
+  })
+}
+
+function onReset(): void {
+  if (resetValue.value === null || atReset.value || props.disabled) return
+  setSlider(resetValue.value)
+  resync()
+}
+
 function onNumber(): void {
   const field = num.value
   const slider = range.value
@@ -42,17 +86,11 @@ function onNumber(): void {
   const typed = field.value.trim() === '' ? Number.NaN : Number(field.value)
   // Unverändert (z. B. Enter und danach das `change` beim Verlassen): nichts auslösen.
   if (Number.isFinite(typed) && typed !== shown.value) {
-    const wanted = Math.min(numMax.value, Math.max(numMin.value, typed)) / props.scale
     // Der Regler rundet selbst auf seine Schritte und Grenzen.
-    slider.value = String(wanted)
-    slider.dispatchEvent(new Event('input', { bubbles: true }))
-    slider.dispatchEvent(new Event('change', { bubbles: true }))
+    setSlider(Math.min(numMax.value, Math.max(numMin.value, typed)) / props.scale)
   }
   // Abgelehnte oder gerundete Eingaben: beide Felder zeigen wieder den echten Wert.
-  void nextTick(() => {
-    if (num.value) num.value.value = String(shown.value)
-    if (range.value) range.value.value = String(props.value)
-  })
+  resync()
 }
 </script>
 
@@ -83,6 +121,18 @@ function onNumber(): void {
       @keydown.enter.prevent="onNumber"
       @keydown.stop
     />
+    <button
+      v-if="resetValue !== null"
+      type="button"
+      class="reset"
+      :disabled="disabled || atReset"
+      :title="resetLabel"
+      :aria-label="resetLabel"
+      :data-testid="$attrs['data-testid'] ? `${String($attrs['data-testid'])}-reset` : undefined"
+      @click="onReset"
+    >
+      ↺
+    </button>
   </span>
 </template>
 
@@ -112,11 +162,34 @@ input[type='range'] {
   font-size: var(--ds-text-sm);
   font-variant-numeric: tabular-nums;
 }
+.reset {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-surface-0);
+  color: var(--ds-text);
+  font: inherit;
+  font-size: var(--ds-text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.reset:hover:not(:disabled) {
+  border-color: var(--ds-accent);
+  color: var(--ds-accent);
+}
+.reset:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 /* ▲▼ immer zeigen, nicht erst beim Überfahren (Chromium blendet sie sonst aus). */
 .num::-webkit-inner-spin-button {
   opacity: 1;
 }
-input:focus-visible {
+input:focus-visible,
+.reset:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);
 }

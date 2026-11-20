@@ -43,18 +43,22 @@ const ai = useTimelineAiStore()
 const { status, statusChecked } = storeToRefs(ai)
 
 const VOICE_KEY = 'videoCutter.voiceOver'
+/** Startwerte der Regler (auch Ziel des Knopfs ↺). */
+const DEFAULT_SECONDS = 30
+const DEFAULT_SPEED = 1
+const DEFAULT_STABILITY = 0.5
 
 type Task = 'write' | 'translate' | 'speak'
 
 const text = ref('')
 const idea = ref('')
-const seconds = ref(30)
+const seconds = ref(DEFAULT_SECONDS)
 const language = ref<ScriptLanguage>('de')
 const voices = ref<Voice[]>([])
 const voicesState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const voiceId = ref('')
-const speed = ref(1)
-const stability = ref(0.5)
+const speed = ref(DEFAULT_SPEED)
+const stability = ref(DEFAULT_STABILITY)
 const task = ref<Task | null>(null)
 const error = ref('')
 const notice = ref('')
@@ -310,6 +314,7 @@ const taskLabel = computed(() => (task.value ? t(`timeline.voiceOver.running.${t
             step="5"
             :value="seconds"
             :disabled="running"
+            :reset="DEFAULT_SECONDS"
             data-testid="voice-over-seconds"
             @input="seconds = Number(($event.target as HTMLInputElement).value)"
           />
@@ -416,6 +421,7 @@ const taskLabel = computed(() => (task.value ? t(`timeline.voiceOver.running.${t
             step="0.05"
             :value="speed"
             :disabled="running"
+            :reset="DEFAULT_SPEED"
             data-testid="voice-over-speed"
             @input="speed = Number(($event.target as HTMLInputElement).value)"
           />
@@ -429,6 +435,7 @@ const taskLabel = computed(() => (task.value ? t(`timeline.voiceOver.running.${t
             :scale="100"
             :value="stability"
             :disabled="running"
+            :reset="DEFAULT_STABILITY"
             data-testid="voice-over-stability"
             @input="stability = Number(($event.target as HTMLInputElement).value)"
           />

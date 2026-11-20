@@ -72,6 +72,37 @@ describe('RangeSpinner', () => {
     expect(el.value).toBe('33.5')
     w.unmount()
   })
+
+  it('ohne reset kein Knopf ↺', () => {
+    const { w } = mountSpinner({})
+    expect(w.find('[data-testid=x-reset]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('Knopf ↺ stellt den Standardwert wie eine Eingabe', async () => {
+    const { w, seen } = mountSpinner({ reset: 1, scale: 100 })
+    const btn = w.get('[data-testid=x-reset]')
+    expect(btn.attributes('disabled')).toBeUndefined()
+    expect(btn.attributes('title')).toContain('100')
+    await btn.trigger('click')
+    expect(seen).toEqual(['input:1', 'change'])
+    // Schon auf dem Standard: gesperrt, nichts passiert.
+    await w.setProps({ value: 1 })
+    expect(btn.attributes('disabled')).toBeDefined()
+    await btn.trigger('click')
+    expect(seen).toHaveLength(2)
+    // Gesperrter Regler: Knopf auch gesperrt.
+    await w.setProps({ value: 0.2, disabled: true })
+    expect(btn.attributes('disabled')).toBeDefined()
+    w.unmount()
+  })
+
+  it('Standardwert außerhalb der Grenzen wird begrenzt', async () => {
+    const { w, seen } = mountSpinner({ reset: 5 })
+    await w.get('[data-testid=x-reset]').trigger('click')
+    expect(seen).toEqual(['input:1', 'change'])
+    w.unmount()
+  })
 })
 
 describe('Spinner im Feld „Clip“', () => {
@@ -106,6 +137,37 @@ describe('Spinner im Feld „Clip“', () => {
     expect(clip().gain).toBe(1)
     // Jeder Regler im Feld hat ein Zahlenfeld.
     expect(w.findAll('input[type=range]').length).toBe(w.findAll('input[type=number]').length)
+    w.unmount()
+  })
+
+  it('Knopf ↺ setzt die Lautstärke zurück, ein eigener Rückgängig-Schritt', async () => {
+    const asset: AssetRef = {
+      id: 'a',
+      kind: 'video',
+      name: 'a.mp4',
+      duration: 10_000_000,
+      width: 1280,
+      height: 720,
+      fps: 25,
+      hasAudio: true,
+    }
+    const store = useTimelineStore()
+    store.load(must(appendMedia(putAsset(createDoc(), asset), 'a')))
+    const clip = () => store.doc.tracks.find((t) => t.kind === 'audio')?.clips[0] as AudioClip
+    store.select([clip().id])
+    const w = mount(ClipInspector, { global: { plugins: [i18n] }, attachTo: document.body })
+    const num = w.get('[data-testid=clip-gain-num]')
+    await num.setValue('40')
+    await num.trigger('change')
+    expect(clip().gain).toBe(0.4)
+    await w.get('[data-testid=clip-gain-reset]').trigger('click')
+    expect(clip().gain).toBe(1)
+    store.undo()
+    expect(clip().gain).toBe(0.4)
+    store.redo()
+    expect(clip().gain).toBe(1)
+    // Jeder Regler im Feld hat einen Knopf ↺.
+    expect(w.findAll('input[type=range]').length).toBe(w.findAll('button.reset').length)
     w.unmount()
   })
 })
