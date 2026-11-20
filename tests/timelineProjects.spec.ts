@@ -40,9 +40,11 @@ vi.mock('@/lib/projectApi', () => ({
 }))
 
 const uploadMedia = vi.fn((_file: File): Promise<MediaView> => Promise.reject(new Error('nein')))
+const fetchMediaFile = vi.fn((_id: string): Promise<Blob> => Promise.reject(new Error('nein')))
 vi.mock('@/lib/mediaApi', async (original) => ({
   ...(await original<typeof import('@/lib/mediaApi')>()),
   uploadMedia: (file: File) => ({ promise: uploadMedia(file), abort: () => {} }),
+  fetchMediaFile: (id: string) => fetchMediaFile(id),
 }))
 
 const ensureDerived = vi.fn((_id: string) => new Promise<never>(() => {}))
@@ -53,15 +55,29 @@ vi.mock('@/lib/derivedApi', async (original) => ({
 
 let imageSeq = 0
 const imageFiles = new Map<string, File>()
+interface FakeDecoded {
+  name: string
+  file: File
+}
+const registerImage = (id: string, image: FakeDecoded) => {
+  imageFiles.set(id, image.file)
+  return { id, name: image.name, file: image.file }
+}
 vi.mock('@/lib/imageAssets', () => ({
   getImageAsset: (id: string) =>
     imageFiles.has(id) ? { id, file: imageFiles.get(id) } : undefined,
   hasImageAsset: (id: string) => imageFiles.has(id),
+  loadImageFile: async (file: File): Promise<FakeDecoded> => {
+    if (file.name === 'kaputt.png') throw new Error('decode')
+    return { name: file.name, file }
+  },
+  registerImage: (id: string, image: FakeDecoded) => registerImage(id, image),
+  registerBrowserImage: (image: FakeDecoded) => registerImage(`img${++imageSeq}`, image),
+  removeImageAsset: (id: string) => imageFiles.delete(id),
+  releaseDecodedImage: () => {},
   addImageAsset: async (file: File) => {
     if (file.name === 'kaputt.png') throw new Error('decode')
-    const id = `img${++imageSeq}`
-    imageFiles.set(id, file)
-    return { id, name: file.name, file }
+    return registerImage(`img${++imageSeq}`, { name: file.name, file })
   },
 }))
 
@@ -85,6 +101,7 @@ const {
   parseTimelineProject,
   rebindProject,
   usedImageIds,
+  browserImageIds,
 } = await import('@/timeline/projectFile')
 
 const media = (id: string, name = `${id}.mp4`): MediaView => ({
@@ -202,7 +219,88 @@ describe('projectFile', () => {
   })
 })
 
+const imageMedia = (id: string, name = 'logo.png'): MediaView => ({
+  id,
+  name,
+  size: 300,
+  duration: 0,
+  width: 40,
+  height: 30,
+  hasAudio: false,
+  fps: 0,
+  kind: 'image',
+})
+
+describe('projectFile: Bilder der Medienliste', () => {
+  it('Bild-Medium: Clip folgt der neuen Medien-ID; altes Bild als Medium übernommen', () => {
+    const { imageId } = fill()
+    const timeline = useTimelineStore()
+    timeline.putAsset(assetFromMedia(imageMedia('b1')))
+    timeline.addGraphic(newImageData('b1'), secondsToTime(1))
+    const doc = timeline.doc
+    // Nur das Bild ohne Medium gehört als Original in den Projektstand.
+    expect(browserImageIds(doc)).toEqual([imageId])
+
+    const r = rebindProject(
+      doc,
+      { m1: media('neu'), b1: imageMedia('b9') },
+      new Map([[imageId, imageMedia('b10', 'foto.png')]]),
+    )
+    expect(r.missing).toBe(0)
+    expect(r.media.map((m) => m.id).sort()).toEqual(['b10', 'b9', 'neu'])
+    expect(r.doc.assets.b9).toMatchObject({ kind: 'image', duration: null })
+    expect(r.doc.assets.b10).toMatchObject({ kind: 'image', name: 'foto.png' })
+    expect(usedImageIds(r.doc).sort()).toEqual(['b10', 'b9'])
+    expect(browserImageIds(r.doc)).toEqual([])
+    expect(timeline.load(r.doc)).toEqual([])
+
+    // Bild-Medium fehlt im Projekt: zählt als fehlend, Clip bleibt mit leerem Verweis.
+    const gone = rebindProject(doc, { m1: media('neu') }, new Map([[imageId, 'img7']]))
+    expect(gone.missing).toBe(1)
+    expect(usedImageIds(gone.doc)).toEqual(['img7'])
+  })
+})
+
 describe('timelineProjects-Store', () => {
+  it('speichert Bilder der Medienliste als Medien, öffnet sie und lädt alte Bilder hoch', async () => {
+    const { imageId } = fill()
+    const timeline = useTimelineStore()
+    timeline.putAsset(assetFromMedia(imageMedia('b1')))
+    imageFiles.set('b1', png('logo.png'))
+    timeline.addGraphic(newImageData('b1'), secondsToTime(1))
+    const store = useTimelineProjectStore()
+    saveProject.mockResolvedValue({ project: summary(), missingAssets: [] })
+    await store.save('Film')
+    const req = saveProject.mock.calls[0][0] as SaveRequest
+    expect([...req.media].sort()).toEqual(['b1', 'm1'])
+    // Nur das alte Bild (nur im Browser) als Zusatzdatei.
+    expect(req.assets.map((a) => a.name)).toEqual(['foto.png'])
+    expect(Object.keys((req.state as { images: object }).images)).toEqual([imageId])
+
+    // Öffnen in frischer Sitzung: Bild-Medium vom Server laden, altes Bild hochladen.
+    const saved = JSON.parse(JSON.stringify(req.state))
+    setActivePinia(createPinia())
+    imageFiles.clear()
+    fetchProject.mockResolvedValue({ project: summary(), state: saved })
+    openProjectMedia.mockResolvedValue({ m1: media('live'), b1: imageMedia('b5') })
+    uploadMedia.mockResolvedValueOnce(imageMedia('b6', 'foto.png'))
+    fetchMediaFile.mockResolvedValue(new Blob(['x'], { type: 'image/png' }))
+    const opened = useTimelineProjectStore()
+    const r = await opened.open('p1')
+    expect(r.missing).toBe(0)
+    expect(fetchMediaFile).toHaveBeenCalledWith('b5')
+    const t2 = useTimelineStore()
+    expect(Object.keys(t2.doc.assets).sort()).toEqual(['b5', 'b6', 'live'])
+    expect(usedImageIds(t2.doc).sort()).toEqual(['b5', 'b6'])
+    expect(imageFiles.has('b5') && imageFiles.has('b6')).toBe(true)
+    const pool = useMediaPoolStore()
+    expect(pool.items.map((i) => i.media?.kind ?? 'video').sort()).toEqual([
+      'image',
+      'image',
+      'video',
+    ])
+  })
+
   it('speichert Dokument, Videos und Bild-Originale; lädt fehlende Dateien hoch', async () => {
     const store = useTimelineProjectStore()
     const timeline = useTimelineStore()

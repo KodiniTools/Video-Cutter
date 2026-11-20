@@ -11,6 +11,8 @@ import { DEFAULT_TEXT_DURATION, DEFAULT_TEXT_STYLE } from '@/lib/textOverlay'
 import type { GraphicSymbol } from '@/lib/graphicOverlay'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { MAX_ZOOM, MIN_ZOOM, useTimelineStore } from '@/stores/timeline'
+import { useMediaPoolStore } from '@/stores/mediaPool'
+import { MEDIA_IMAGE_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
 import { useTimelineBeatsStore } from '@/stores/timelineBeats'
 import { useTextDefaultStore } from '@/stores/textDefault'
 import {
@@ -47,6 +49,7 @@ import {
  */
 const { t, locale } = useI18n()
 const store = useTimelineStore()
+const pool = useMediaPoolStore()
 
 /** Breite der Spalte mit den Spurnamen (px). */
 const HEADER_WIDTH = 150
@@ -370,15 +373,25 @@ async function addImage(e: Event): Promise<void> {
   const markerId = imageForMarker
   imageForMarker = null
   try {
-    const asset = await addImageAsset(file)
+    // Wie Videos über die Medienliste auf den Server: Das Bild steht dann in
+    // der Liste und kommt mit dem Projekt wieder. Älteres Backend: nur im Browser.
+    let imageId: string
+    try {
+      imageId = (await pool.addImage(file, { quietUnsupported: true })).id
+    } catch (err) {
+      if (!(err instanceof Error && err.message === MEDIA_IMAGE_UNSUPPORTED)) throw err
+      imageId = (await addImageAsset(file)).id
+    }
     const insert = () =>
-      store.addGraphic(newImageData(asset.id), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null
+      store.addGraphic(newImageData(imageId), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null
     run(() => (markerId ? store.addAtMarker(markerId, insert) : insert()))
   } catch (err) {
     hint.value =
       err instanceof ImageAssetError
         ? t(`graphics.image.errors.${err.code}`, { name: file.name })
-        : t('graphics.image.errors.decode', { name: file.name })
+        : err instanceof Error && err.message && err.message !== UPLOAD_ABORTED
+          ? err.message
+          : t('graphics.image.errors.decode', { name: file.name })
   } finally {
     imageBusy.value = false
   }
@@ -457,7 +470,10 @@ function elementName(clip: Clip): string {
   if (clip.kind === 'graphic') {
     const g = clipGraphic(clip.data)
     if (g.kind === 'emoji') return g.emoji || t('graphics.kinds.emoji')
-    if (g.kind === 'image') return getImageAsset(g.image)?.name ?? t('graphics.kinds.image')
+    if (g.kind === 'image')
+      return (
+        getImageAsset(g.image)?.name ?? store.doc.assets[g.image]?.name ?? t('graphics.kinds.image')
+      )
     return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
   }
   if ('asset' in clip && clip.asset) return store.doc.assets[clip.asset]?.name ?? clip.kind

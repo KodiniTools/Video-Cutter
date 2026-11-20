@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { rm } from 'node:fs/promises'
 import { config } from '../config'
-import { isAudioOnly, probeMedia } from '../lib/probe'
+import { isAudioOnly, probeMedia, type MediaInfo } from '../lib/probe'
 import { runFfmpeg } from '../lib/ffmpeg'
 import { jobManager } from '../lib/jobs'
 import { buildStillArgs, parseStillParams, stillClipName } from '../lib/stillClip'
@@ -24,11 +24,51 @@ const upload = multer({
   }),
   limits: { fileSize: config.maxFileSizeBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
-    // Tondateien (Musik, Sprachaufnahmen) nutzt der Timeline-Editor auf Ton-Spuren.
-    if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) cb(null, true)
-    else cb(new ValidationError('Nur Video- und Tondateien werden akzeptiert.'))
+    // Tondateien (Musik, Sprachaufnahmen) nutzt der Timeline-Editor auf Ton-Spuren,
+    // Bilder (JPEG, PNG, WebP) als Bild-Einblendungen auf Ebenen-Spuren.
+    if (
+      file.mimetype.startsWith('video/') ||
+      file.mimetype.startsWith('audio/') ||
+      MEDIA_IMAGE_TYPES.has(file.mimetype)
+    )
+      cb(null, true)
+    else cb(new ValidationError('Nur Video-, Ton- und Bilddateien werden akzeptiert.'))
   },
 })
+
+/** Eigene Bilder für Bild-Einblendungen (der Browser zeichnet sie, der Server bewahrt sie auf). */
+export const MEDIA_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+/** Größte Bilddatei (wie im Browser). */
+export const MAX_MEDIA_IMAGE_BYTES = 30 * 1024 * 1024
+/** Größte Kantenlänge eines Bildes (wie im Browser). */
+export const MAX_MEDIA_IMAGE_DIM = 12000
+
+/**
+ * Eckdaten eines hochgeladenen Bildes. ffprobe liest JPEG/PNG/WebP als
+ * Einzelbild; Dauer und Bildrate haben für ein Bild keine Bedeutung.
+ */
+export async function probeImage(filePath: string, size: number): Promise<MediaInfo> {
+  if (size > MAX_MEDIA_IMAGE_BYTES) throw new ValidationError('Bild zu groß (höchstens 30 MB).')
+  let info: MediaInfo
+  try {
+    info = await probeMedia(filePath)
+  } catch {
+    throw new ValidationError('Bild kann nicht gelesen werden.')
+  }
+  if (!(info.width > 0 && info.height > 0))
+    throw new ValidationError('Bild kann nicht gelesen werden.')
+  if (info.width > MAX_MEDIA_IMAGE_DIM || info.height > MAX_MEDIA_IMAGE_DIM)
+    throw new ValidationError('Bild zu groß (höchstens 12000 px Kantenlänge).')
+  return {
+    width: info.width,
+    height: info.height,
+    hasAudio: false,
+    duration: 0,
+    fps: 0,
+    hasVideo: true,
+    image: true,
+  }
+}
 
 /** Bild für einen Bild-Clip (vom Browser bereits in Zielgröße gezeichnet). */
 const STILL_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
@@ -63,8 +103,9 @@ export function displayName(original: string): string {
 export const mediaRouter = Router()
 
 /**
- * POST /api/media (multipart: video; auch Tondateien)
+ * POST /api/media (multipart: video; auch Ton- und Bilddateien)
  * -> 201 { id, name, size, duration, width, height, hasAudio, fps, kind }
+ * Bilder: kind 'image', duration 0.
  */
 mediaRouter.post(
   '/media',
@@ -73,6 +114,17 @@ mediaRouter.post(
     const file = req.file
     if (!file) throw new ValidationError('Keine Videodatei empfangen.')
     try {
+      if (MEDIA_IMAGE_TYPES.has(file.mimetype)) {
+        const info = await probeImage(file.path, file.size)
+        const item = await mediaStore.add(
+          file.path,
+          displayName(file.originalname),
+          info,
+          file.size,
+        )
+        res.status(201).json(mediaView(item))
+        return
+      }
       const info = await probeMedia(file.path)
       if (!(info.duration > 0)) throw new ValidationError('Dauer des Videos unbekannt.')
       if (isAudioOnly(info) && !info.hasAudio)

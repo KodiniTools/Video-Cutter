@@ -299,9 +299,18 @@ export function putAsset(doc: TimelineDoc, asset: AssetRef): TimelineDoc {
   return { ...doc, assets: { ...doc.assets, [asset.id]: asset } }
 }
 
-/** Wird das Medium von einem Clip verwendet? */
+/**
+ * Wird das Medium von einem Clip verwendet? Bilder der Medienliste nennen
+ * Bild-Clips (Grafiken der Art `image`) in `data.image`.
+ */
 export function assetInUse(doc: TimelineDoc, assetId: string): boolean {
-  return doc.tracks.some((t) => t.clips.some((c) => 'asset' in c && c.asset === assetId))
+  return doc.tracks.some((t) =>
+    t.clips.some(
+      (c) =>
+        ('asset' in c && c.asset === assetId) ||
+        (c.kind === 'graphic' && c.data.kind === 'image' && c.data.image === assetId),
+    ),
+  )
 }
 
 /** Medium abmelden; abgelehnt, solange ein Clip es verwendet. */

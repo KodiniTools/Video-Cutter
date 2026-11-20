@@ -20,8 +20,22 @@ export interface MediaView {
   hasAudio: boolean
   /** Bildrate (Bilder/s), 0 = unbekannt (älteres Backend). */
   fps: number
-  /** `audio` = reine Tondatei (Musik, Sprachaufnahme); nur im Timeline-Editor. Fehlt = Video. */
-  kind?: 'video' | 'audio'
+  /**
+   * `audio` = reine Tondatei (Musik, Sprachaufnahme), `image` = eigenes Bild für
+   * Bild-Einblendungen; beide nur im Timeline-Editor. Fehlt = Video.
+   */
+  kind?: 'video' | 'audio' | 'image'
+}
+
+/** Fehler-Kennung: Das Backend nimmt noch keine Bilder an (veraltet). */
+export const MEDIA_IMAGE_UNSUPPORTED = 'MEDIA_IMAGE_UNSUPPORTED'
+
+/** Bildarten, die die Medienliste annimmt (wie `imageAssets`). */
+const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+/** Ist die Datei ein Bild für Bild-Einblendungen (JPEG, PNG, WebP)? */
+export function isImageFile(file: Pick<File, 'type'>): boolean {
+  return IMAGE_MIME.has(file.type)
 }
 
 /** Fehler-Kennung: Das Backend nimmt noch keine Tondateien an (veraltet). */
@@ -29,6 +43,8 @@ export const MEDIA_AUDIO_UNSUPPORTED = 'MEDIA_AUDIO_UNSUPPORTED'
 
 /** Meldung eines älteren Backends, das nur Videos annimmt. */
 const VIDEO_ONLY_MESSAGE = 'Nur Videodateien werden akzeptiert.'
+/** Meldung eines älteren Backends, das nur Videos und Tondateien annimmt. */
+const VIDEO_AUDIO_ONLY_MESSAGE = 'Nur Video- und Tondateien werden akzeptiert.'
 
 /** Endungen üblicher Tondateien (manche Browser melden dafür keinen Typ). */
 const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|wma|aiff?)$/i
@@ -52,7 +68,7 @@ export function parseMediaView(data: unknown): MediaView {
     height: num(d.height),
     hasAudio: d.hasAudio === true,
     fps: num(d.fps),
-    kind: d.kind === 'audio' ? 'audio' : 'video',
+    kind: d.kind === 'audio' || d.kind === 'image' ? d.kind : 'video',
   }
 }
 
@@ -98,10 +114,14 @@ export function uploadMedia(file: File, onProgress?: (ratio: number) => void): M
         }
       } else {
         const err = errorFrom(xhr.status, xhr.responseText, xhr.getResponseHeader?.('Retry-After'))
+        const oldBackend =
+          err.message === VIDEO_ONLY_MESSAGE || err.message === VIDEO_AUDIO_ONLY_MESSAGE
         reject(
-          err.message === VIDEO_ONLY_MESSAGE && isAudioFile(file)
-            ? new Error(MEDIA_AUDIO_UNSUPPORTED)
-            : err,
+          oldBackend && isImageFile(file)
+            ? new Error(MEDIA_IMAGE_UNSUPPORTED)
+            : err.message === VIDEO_ONLY_MESSAGE && isAudioFile(file)
+              ? new Error(MEDIA_AUDIO_UNSUPPORTED)
+              : err,
         )
       }
     }

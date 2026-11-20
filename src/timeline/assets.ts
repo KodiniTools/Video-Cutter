@@ -1,8 +1,21 @@
 import type { MediaView } from '@/lib/mediaApi'
 import { secondsToTime, type AssetRef } from './model'
 
-/** Hochgeladenes Video bzw. hochgeladene Tondatei der Server-Bibliothek als Medium der Timeline. */
+/**
+ * Hochgeladenes Video, Tondatei oder Bild der Server-Bibliothek als Medium der
+ * Timeline. Bilder haben keine Länge; Bild-Clips (Grafiken der Art `image`)
+ * verweisen über `data.image` auf sie.
+ */
 export function assetFromMedia(media: MediaView): AssetRef {
+  if (media.kind === 'image')
+    return {
+      id: media.id,
+      kind: 'image',
+      name: media.name,
+      duration: null,
+      width: media.width,
+      height: media.height,
+    }
   if (media.kind === 'audio')
     return {
       id: media.id,

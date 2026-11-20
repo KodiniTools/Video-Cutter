@@ -131,6 +131,26 @@ describe('MediaStore mit Verzeichnis auf der Platte', () => {
     expect(mediaView(b.get(item.id)!).kind).toBe('audio')
   })
 
+  it('Bilder bleiben nach einem Neustart Bilder', async () => {
+    const a = open()
+    await a.init()
+    const p = await file('logo.png', 5)
+    const item = await a.add(p, 'logo.png', {
+      width: 40,
+      height: 30,
+      hasAudio: false,
+      duration: 0,
+      fps: 0,
+      hasVideo: true,
+      image: true,
+    })
+    expect(mediaView(item).kind).toBe('image')
+    await a.shutdown()
+    const b = open()
+    expect(await b.init()).toBe(1)
+    expect(mediaView(b.get(item.id)!)).toMatchObject({ kind: 'image', width: 40, height: 30 })
+  })
+
   it('erster Start ohne Verzeichnis: leer, kein Fehler', async () => {
     expect(await open().init()).toBe(0)
   })

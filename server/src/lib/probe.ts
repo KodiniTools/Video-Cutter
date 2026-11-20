@@ -17,6 +17,13 @@ export interface MediaInfo {
    * MP3/M4A zählt nicht). Fehlt bei älteren Datensätzen: dann gilt Video.
    */
   hasVideo?: boolean
+  /** Einzelbild (JPEG/PNG/WebP) für Bild-Einblendungen, kein Video. Fehlt = nein. */
+  image?: boolean
+}
+
+/** Hochgeladenes Bild (kein Video, keine Tondatei)? */
+export function isImageInfo(info: Pick<MediaInfo, 'image'>): boolean {
+  return info.image === true
 }
 
 /** Reine Tondatei (Musik, Sprachaufnahme)? */

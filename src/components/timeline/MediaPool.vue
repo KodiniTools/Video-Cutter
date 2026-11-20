@@ -7,13 +7,21 @@ import VoiceRecorder from './VoiceRecorder.vue'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { API_BASE } from '@/lib/apiBase'
 import { DERIVED_MEDIA_GONE, proxyUrl, stripTileStyle } from '@/lib/derivedApi'
-import { MEDIA_AUDIO_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
+import { MEDIA_AUDIO_UNSUPPORTED, MEDIA_IMAGE_UNSUPPORTED, UPLOAD_ABORTED } from '@/lib/mediaApi'
+import { IMAGE_ACCEPT } from '@/lib/imageAssets'
+import { secondsToTime } from '@/timeline/model'
+import { DEFAULT_GRAPHIC_DURATION, newImageData } from '@/timeline/graphics'
 import { formatClockDuration } from '@/lib/timeFormat'
-import { generatedAtRisk, useMediaPoolStore, type PoolItem } from '@/stores/mediaPool'
+import {
+  generatedAtRisk,
+  IMAGE_LOAD_FAILED,
+  useMediaPoolStore,
+  type PoolItem,
+} from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineProjectStore } from '@/stores/timelineProjects'
 
-/** Medienliste des Timeline-Editors: Videos und Tondateien hochladen, ansehen, entfernen. */
+/** Medienliste des Timeline-Editors: Videos, Tondateien und Bilder hochladen, ansehen, entfernen. */
 const { t } = useI18n()
 const pool = useMediaPoolStore()
 const timeline = useTimelineStore()
@@ -56,8 +64,23 @@ function remove(item: PoolItem): void {
   blockedKey.value = pool.remove(item.key) === 'in-use' ? item.key : null
 }
 
-/** Vorschaubild: das mittlere Bild des Filmstreifens. */
+/** Vorschaubild: das mittlere Bild des Filmstreifens (Bilder: das Bild selbst). */
 function thumbStyle(item: PoolItem): Record<string, string> {
+  if (isImage(item)) {
+    const m = item.media
+    const ratio = m && m.width > 0 && m.height > 0 ? m.height / m.width : 9 / 16
+    return {
+      width: `${THUMB_WIDTH}px`,
+      height: `${Math.round(THUMB_WIDTH * Math.min(1, ratio))}px`,
+      ...(item.thumb
+        ? {
+            backgroundImage: `url("${item.thumb}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }
+        : {}),
+    }
+  }
   const strip = item.derived?.strip
   const tile =
     item.media && strip
@@ -72,6 +95,16 @@ function thumbStyle(item: PoolItem): Record<string, string> {
 }
 
 const isAudio = (item: PoolItem) => item.media?.kind === 'audio'
+const isImage = (item: PoolItem) => item.media?.kind === 'image'
+
+/** „+ Timeline“: Bilder als Bild-Clip auf eine Ebene, sonst Video/Ton wie bisher. */
+function insert(item: PoolItem): void {
+  const m = item.media
+  if (!m) return
+  if (m.kind === 'image')
+    timeline.insertImageAtPlayhead(newImageData(m.id), secondsToTime(DEFAULT_GRAPHIC_DURATION))
+  else timeline.insertMediaAtPlayhead(m.id)
+}
 
 /**
  * Abspielen im Vorschaubild: Überfahren spielt stumm in Schleife, ein Klick spielt mit Ton
@@ -154,15 +187,22 @@ function playLabel(item: PoolItem): string {
 }
 
 function addLabel(item: PoolItem): string {
-  return t(isAudio(item) ? 'mediaPool.addAudioToTimelineNamed' : 'mediaPool.addToTimelineNamed', {
-    name: item.name,
-  })
+  const key = isAudio(item)
+    ? 'mediaPool.addAudioToTimelineNamed'
+    : isImage(item)
+      ? 'mediaPool.addImageToTimelineNamed'
+      : 'mediaPool.addToTimelineNamed'
+  return t(key, { name: item.name })
 }
 
 function details(item: PoolItem): string {
   const m = item.media
   if (!m) return ''
   if (m.kind === 'audio') return `${formatClockDuration(m.duration)} · ${t('mediaPool.audioFile')}`
+  if (m.kind === 'image')
+    return m.width > 0 && m.height > 0
+      ? `${t('mediaPool.imageFile')} · ${m.width}×${m.height}`
+      : t('mediaPool.imageFile')
   const size = m.width > 0 && m.height > 0 ? ` · ${m.width}×${m.height}` : ''
   return `${formatClockDuration(m.duration)}${size}`
 }
@@ -181,7 +221,9 @@ function status(item: PoolItem): { text: string; tone: 'info' | 'ok' | 'error' }
           ? t('mediaPool.aborted')
           : item.error === MEDIA_AUDIO_UNSUPPORTED
             ? t('mediaPool.audioUnsupported')
-            : (item.error ?? t('mediaPool.uploadFailed'))
+            : item.error === MEDIA_IMAGE_UNSUPPORTED
+              ? t('mediaPool.imageUnsupported')
+              : (item.error ?? t('mediaPool.uploadFailed'))
     return { text, tone: 'error' }
   }
   switch (item.prepare) {
@@ -196,7 +238,13 @@ function status(item: PoolItem): { text: string; tone: 'info' | 'ok' | 'error' }
       }
     }
     case 'failed':
-      return { text: t('mediaPool.prepareFailed'), tone: 'error' }
+      return {
+        text:
+          item.error === IMAGE_LOAD_FAILED
+            ? t('mediaPool.imageLoadFailed')
+            : t('mediaPool.prepareFailed'),
+        tone: 'error',
+      }
     case 'unsupported':
       return { text: t('mediaPool.unsupported'), tone: 'error' }
     case 'done':
@@ -229,7 +277,7 @@ const rejectedText = computed(() =>
       ref="input"
       class="file"
       type="file"
-      accept="video/*,audio/*"
+      :accept="`video/*,audio/*,${IMAGE_ACCEPT}`"
       multiple
       data-testid="media-pool-input"
       @change="onPick"
@@ -318,7 +366,14 @@ const rejectedText = computed(() =>
             playing?.key === item.key && playing.sound ? '❚❚' : '▶'
           }}</span>
         </button>
-        <div v-else class="thumb" :style="thumbStyle(item)" aria-hidden="true"></div>
+        <div
+          v-else
+          class="thumb"
+          :class="{ image: isImage(item) }"
+          :style="thumbStyle(item)"
+          :data-testid="isImage(item) ? 'media-pool-image-thumb' : undefined"
+          aria-hidden="true"
+        ></div>
         <div class="body">
           <div class="row">
             <span class="name" :title="item.name">{{ item.name }}</span>
@@ -328,7 +383,7 @@ const rejectedText = computed(() =>
               class="to-timeline"
               :title="addLabel(item)"
               :aria-label="addLabel(item)"
-              @click="timeline.insertMediaAtPlayhead(item.media.id)"
+              @click="insert(item)"
             >
               {{ t('mediaPool.addToTimeline') }}
             </button>

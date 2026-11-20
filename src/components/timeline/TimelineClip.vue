@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WaveformCanvas from './WaveformCanvas.vue'
 import { stripTileStyle } from '@/lib/derivedApi'
-import { getImageAsset } from '@/lib/imageAssets'
+import { getImageAsset, hasImageAsset } from '@/lib/imageAssets'
 import { useMediaPoolStore } from '@/stores/mediaPool'
 import { useTimelineStore } from '@/stores/timeline'
 import { useTimelineAiStore } from '@/stores/timelineAi'
@@ -54,7 +54,8 @@ const name = computed(() => {
   if (clip.kind === 'graphic') {
     const g = clipGraphic(clip.data)
     if (g.kind === 'emoji') return g.emoji || t('graphics.kinds.emoji')
-    if (g.kind === 'image') return getImageAsset(g.image)?.name ?? t('graphics.kinds.image')
+    // Fehlt das Bild, zeigt das Label „Bild fehlt“ (+ Name aus der Medienliste, falls bekannt).
+    if (g.kind === 'image') return getImageAsset(g.image)?.name ?? pool.byAsset(g.image)?.name ?? ''
     return g.kind === 'symbol' ? t(`graphics.symbols.${g.symbol}`) : t(`graphics.kinds.${g.kind}`)
   }
   const base = item.value?.name ?? ''
@@ -64,6 +65,13 @@ const name = computed(() => {
     return base ? `${base} · ${speed}` : speed
   }
   return base
+})
+
+/** Bild-Clip ohne geladenes Bild: wird in Vorschau und Export übersprungen. */
+const imageMissing = computed(() => {
+  const clip = props.clip
+  if (clip.kind !== 'graphic' || clip.data.kind !== 'image') return false
+  return !hasImageAsset(typeof clip.data.image === 'string' ? clip.data.image : '')
 })
 
 /** Vorschaubilder entlang eines Video-Clips (aus dem Filmstreifen). */
@@ -268,11 +276,12 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
   <div
     ref="root"
     class="clip"
-    :class="{ selected }"
+    :class="{ selected, missing: imageMissing }"
     :data-kind="clip.kind"
     :data-clip="clip.id"
+    :data-missing="imageMissing ? 'image' : undefined"
     :style="{ left: `${left}px`, width: `${width}px` }"
-    :title="name"
+    :title="imageMissing ? t('timeline.imageMissingClipHint') : name"
     @pointerdown.stop="grab('move', $event)"
   >
     <div v-if="thumbs.length" class="thumbs" aria-hidden="true">
@@ -346,13 +355,16 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
       :title="t('timeline.clipInspector.hold')"
       aria-hidden="true"
     ></span>
-    <span v-if="name || clip.marker" class="label"
+    <span v-if="name || clip.marker || imageMissing" class="label"
       ><span
         v-if="clip.marker"
         class="bound"
         data-testid="clip-marker-bound"
         :title="t('timeline.marker.elements.boundClip')"
         >⚡</span
+      ><span v-if="imageMissing" class="missing-mark" data-testid="clip-image-missing">{{
+        t('timeline.imageMissingClip')
+      }}</span
       >{{ name }}</span
     >
     <template v-if="!locked">
@@ -420,6 +432,19 @@ function grab(mode: ClipGrab, event: PointerEvent): void {
 .clip[data-kind='graphic'] {
   background: var(--ds-surface-2);
   border-style: dashed;
+}
+.clip.missing {
+  border: 1px solid var(--ds-danger);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--ds-danger) 14%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+}
+.missing-mark {
+  margin-right: 4px;
+  color: var(--ds-danger);
+  font-weight: var(--ds-weight-semibold);
 }
 .clip.selected {
   border-color: var(--ds-accent);
