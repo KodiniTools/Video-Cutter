@@ -2,6 +2,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTimelineStore } from '@/stores/timeline'
+import {
+  FORMAT_GROUPS,
+  FORMAT_PRESETS,
+  findPreset,
+  formatKey,
+  formatLabel,
+  ratioOf,
+} from '@/timeline/formats'
 
 /**
  * Projektformat des Timeline-Editors: Bildgröße, Bildrate und Hintergrund.
@@ -13,29 +21,30 @@ import { useTimelineStore } from '@/stores/timeline'
 const { t } = useI18n()
 const store = useTimelineStore()
 
-const SIZES = [
-  { width: 1920, height: 1080, ratio: '16:9' },
-  { width: 1280, height: 720, ratio: '16:9' },
-  { width: 3840, height: 2160, ratio: '16:9' },
-  { width: 1080, height: 1920, ratio: '9:16' },
-  { width: 1080, height: 1080, ratio: '1:1' },
-  { width: 1080, height: 1350, ratio: '4:5' },
-] as const
 const RATES = [24, 25, 30, 50, 60] as const
 
-const sizeKey = (s: { width: number; height: number }) => `${s.width}x${s.height}`
+const sizeKey = formatKey
 const settings = computed(() => store.doc.settings)
 
-/** Feste Auswahl plus das aktuelle Format, falls es (vom Video übernommen) nicht dabei ist. */
-const sizes = computed(() => {
-  const current = settings.value
-  const list: Array<{ key: string; label: string }> = SIZES.map((s) => ({
-    key: sizeKey(s),
-    label: `${s.width} × ${s.height} (${s.ratio})`,
-  }))
-  if (!list.some((s) => s.key === sizeKey(current)))
-    list.unshift({ key: sizeKey(current), label: `${current.width} × ${current.height}` })
-  return list
+/** Gängige Formate mit Plattformnamen, gruppiert nach Hoch-/Quadrat-/Querformat. */
+const groups = FORMAT_GROUPS.map((group) => ({
+  group,
+  options: FORMAT_PRESETS.filter((p) => p.group === group).map((p) => ({
+    key: formatKey(p),
+    label: formatLabel(p),
+  })),
+}))
+
+/** Aktuelles Format, falls es (vom Video übernommen) nicht in der Liste steht. */
+const customSize = computed(() => {
+  const s = settings.value
+  if (findPreset(s)) return null
+  return { key: formatKey(s), label: `${s.width} × ${s.height} (${ratioOf(s.width, s.height)})` }
+})
+
+const currentLabel = computed(() => {
+  const preset = findPreset(settings.value)
+  return preset ? formatLabel(preset) : (customSize.value?.label ?? '')
 })
 const rates = computed(() => {
   const fps = settings.value.fps
@@ -63,8 +72,19 @@ function onBackground(event: Event): void {
   <div class="project" data-testid="project-settings">
     <label>
       <span>{{ t('timelineProject.size') }}</span>
-      <select :value="sizeKey(settings)" data-testid="project-size" @change="onSize">
-        <option v-for="s in sizes" :key="s.key" :value="s.key">{{ s.label }}</option>
+      <select
+        :value="sizeKey(settings)"
+        :title="currentLabel"
+        class="size"
+        data-testid="project-size"
+        @change="onSize"
+      >
+        <option v-if="customSize" :value="customSize.key">
+          {{ t('timelineProject.custom') }}: {{ customSize.label }}
+        </option>
+        <optgroup v-for="g in groups" :key="g.group" :label="t(`timelineProject.group.${g.group}`)">
+          <option v-for="s in g.options" :key="s.key" :value="s.key">{{ s.label }}</option>
+        </optgroup>
       </select>
     </label>
     <label>
@@ -106,6 +126,10 @@ select {
   border-radius: var(--ds-radius-md);
   background: var(--ds-surface-2);
   color: var(--ds-text);
+}
+select.size {
+  max-width: min(24rem, 60vw);
+  text-overflow: ellipsis;
 }
 input[type='color'] {
   width: var(--ds-control-sm);

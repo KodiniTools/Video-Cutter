@@ -1386,6 +1386,8 @@ const messages = {
       fps: 'Bilder/s',
       background: 'Hintergrund',
       backgroundTitle: 'Farbe hinter den Clips (sichtbar an Rändern und in Lücken)',
+      custom: 'Eigenes Format',
+      group: { portrait: 'Hochformat', square: 'Quadratisch', landscape: 'Querformat' },
     },
     timelineProjects: {
       button: 'Projekt',
@@ -2797,6 +2799,8 @@ const messages = {
       fps: 'Frames/s',
       background: 'Background',
       backgroundTitle: 'Colour behind the clips (visible at borders and in gaps)',
+      custom: 'Custom format',
+      group: { portrait: 'Portrait', square: 'Square', landscape: 'Landscape' },
     },
     timelineProjects: {
       button: 'Project',
