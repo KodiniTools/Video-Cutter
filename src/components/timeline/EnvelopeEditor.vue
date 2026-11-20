@@ -119,6 +119,7 @@ function clear(): void {
           step="5"
           :value="Math.round(row.gain * 100)"
           :aria-label="t('timeline.clipInspector.envelope.gain', { time: row.label })"
+          :reset="100"
           :data-testid="`clip-envelope-gain-${row.index}`"
           @input="onGain(row.index, $event)"
           @change="commit"

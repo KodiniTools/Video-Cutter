@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import RangeSpinner from './RangeSpinner.vue'
 import { useTimelineStore } from '@/stores/timeline'
 import {
+  DEFAULT_MARKER_EFFECTS,
   MARKER_EFFECTS,
   MAX_EFFECT_DURATION,
   MAX_STROBE_RATE,
@@ -103,6 +104,7 @@ onBeforeUnmount(commit)
           step="0.05"
           :scale="100"
           :value="effect.intensity"
+          :reset="DEFAULT_MARKER_EFFECTS[effect.kind].intensity"
           data-testid="marker-effect-intensity"
           @input="onSlide({ intensity: value($event) })"
           @change="commit"
@@ -116,6 +118,7 @@ onBeforeUnmount(commit)
           :max="timeToSeconds(MAX_EFFECT_DURATION)"
           step="0.1"
           :value="timeToSeconds(effect.duration)"
+          :reset="timeToSeconds(DEFAULT_MARKER_EFFECTS[effect.kind].duration)"
           data-testid="marker-effect-duration"
           @input="onSlide({ duration: secondsToTime(value($event)) })"
           @change="commit"
@@ -129,6 +132,7 @@ onBeforeUnmount(commit)
           :max="MAX_STROBE_RATE"
           step="1"
           :value="effect.rate"
+          :reset="DEFAULT_MARKER_EFFECTS[effect.kind].rate"
           data-testid="marker-effect-rate"
           @input="onSlide({ rate: value($event) })"
           @change="commit"

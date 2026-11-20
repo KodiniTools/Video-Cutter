@@ -9,6 +9,7 @@ import {
   hasFill,
   hasHeight,
   imageHeight,
+  defaultGraphic,
   MAX_CROP,
   MAX_EMOJI_LENGTH,
   MAX_GRAPHIC_H,
@@ -52,6 +53,8 @@ const clip = computed(() => {
 })
 /** Vollständige Einstellungen in gültigen Grenzen. */
 const g = computed(() => (clip.value ? clipGraphic(clip.value.data) : null))
+/** Standardwerte der Art (Ziel der Knöpfe ↺). */
+const defaults = computed(() => defaultGraphic(g.value?.kind ?? 'rect'))
 
 const isLine = computed(() => g.value?.kind === 'line' || g.value?.kind === 'arrow')
 const sizeLabel = computed(() => {
@@ -206,6 +209,7 @@ onBeforeUnmount(commit)
           :max="MAX_GRAPHIC_W"
           step="0.005"
           :value="g.w"
+          :reset="defaults.w"
           data-testid="graphic-w"
           @input="edit({ w: number($event) })"
           @change="commit"
@@ -219,6 +223,7 @@ onBeforeUnmount(commit)
           :max="MAX_GRAPHIC_H"
           step="0.005"
           :value="g.h"
+          :reset="defaults.h"
           data-testid="graphic-h"
           @input="edit({ h: number($event) })"
           @change="commit"
@@ -232,6 +237,7 @@ onBeforeUnmount(commit)
         max="180"
         step="1"
         :value="g.rotation"
+        :reset="0"
         data-testid="graphic-rotation"
         @input="edit({ rotation: number($event) })"
         @change="commit"
@@ -265,6 +271,7 @@ onBeforeUnmount(commit)
             :max="MAX_STROKE"
             step="0.001"
             :value="g.strokeWidth"
+            :reset="defaults.strokeWidth"
             data-testid="graphic-stroke-width"
             @input="edit({ strokeWidth: number($event) })"
             @change="commit"
@@ -291,6 +298,7 @@ onBeforeUnmount(commit)
             max="1"
             step="0.05"
             :value="g.fillOpacity"
+            :reset="defaults.fillOpacity"
             data-testid="graphic-fill-opacity"
             @input="edit({ fillOpacity: number($event) })"
             @change="commit"
@@ -305,6 +313,7 @@ onBeforeUnmount(commit)
           max="0.5"
           step="0.01"
           :value="g.radius"
+          :reset="defaults.radius"
           data-testid="graphic-radius"
           @input="edit({ radius: number($event) })"
           @change="commit"
@@ -321,6 +330,7 @@ onBeforeUnmount(commit)
           max="1"
           step="0.01"
           :value="g.opacity"
+          :reset="1"
           data-testid="graphic-opacity"
           @input="edit({ opacity: number($event) })"
           @change="commit"
@@ -336,6 +346,7 @@ onBeforeUnmount(commit)
             :max="MAX_CROP"
             step="0.005"
             :value="g[c.key]"
+            :reset="0"
             :data-testid="`graphic-${c.key}`"
             @input="edit({ [c.key]: number($event) })"
             @change="commit"
@@ -458,6 +469,7 @@ onBeforeUnmount(commit)
           max="1"
           step="0.005"
           :value="motion.x"
+          :reset="0.5"
           data-testid="graphic-x"
           @input="editMotion({ x: clamp01(number($event)) })"
           @change="commit"
@@ -471,6 +483,7 @@ onBeforeUnmount(commit)
           max="1"
           step="0.005"
           :value="motion.y"
+          :reset="0.5"
           data-testid="graphic-y"
           @input="editMotion({ y: clamp01(number($event)) })"
           @change="commit"
