@@ -2,7 +2,7 @@ import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from '../config'
-import { isAudioOnly, type MediaInfo } from './probe'
+import { isAudioOnly, isImageInfo, type MediaInfo } from './probe'
 
 /** Ein auf dem Server gespeichertes Video der Bibliothek. */
 export interface MediaItem {
@@ -28,8 +28,11 @@ export interface MediaView {
   hasAudio: boolean
   /** Bildrate, 0 = unbekannt (Frontend schaltet dann auf ms-Schritte zurück). */
   fps: number
-  /** `audio` = reine Tondatei (nur im Timeline-Editor verwendbar). */
-  kind: 'video' | 'audio'
+  /**
+   * `audio` = reine Tondatei, `image` = Bild für Bild-Einblendungen (beide nur
+   * im Timeline-Editor verwendbar).
+   */
+  kind: 'video' | 'audio' | 'image'
 }
 
 export function mediaView(m: MediaItem): MediaView {
@@ -42,7 +45,7 @@ export function mediaView(m: MediaItem): MediaView {
     height: m.info.height,
     hasAudio: m.info.hasAudio,
     fps: m.info.fps ?? 0,
-    kind: isAudioOnly(m.info) ? 'audio' : 'video',
+    kind: isImageInfo(m.info) ? 'image' : isAudioOnly(m.info) ? 'audio' : 'video',
   }
 }
 
@@ -100,6 +103,7 @@ function parseIndexEntry(raw: unknown, baseDir: string): MediaItem | null {
       duration: info.duration,
       ...(isCount(info.fps) ? { fps: info.fps } : {}),
       ...(typeof info.hasVideo === 'boolean' ? { hasVideo: info.hasVideo } : {}),
+      ...(info.image === true ? { image: true } : {}),
     },
     createdAt: r.createdAt,
     lastUsed: r.lastUsed,

@@ -186,6 +186,14 @@ function clipImage(clip: Clip): string | null {
   return typeof clip.data.image === 'string' ? clip.data.image : ''
 }
 
+/**
+ * Bilder, die nur im Browser liegen (kein Medium im Dokument), und deren
+ * Originale daher im Projektstand mitgespeichert werden.
+ */
+export function browserImageIds(doc: TimelineDoc): string[] {
+  return usedImageIds(doc).filter((id) => !doc.assets[id])
+}
+
 /** IDs der Bilder, die das Dokument verwendet (jede einmal). */
 export function usedImageIds(doc: TimelineDoc): string[] {
   const ids = new Set<string>()
@@ -217,8 +225,10 @@ export interface ReboundProject {
  * Schreibt ein geladenes Dokument auf die neu angemeldeten Videos und die neu
  * geladenen Bilder um.
  *
- * @param media   je gespeicherter Video-ID das jetzt angemeldete Video
- * @param images  je gespeicherter Bild-ID die ID des jetzt geladenen Bildes
+ * @param media   je gespeicherter Medien-ID (Video, Ton, Bild) das jetzt angemeldete Medium
+ * @param images  je gespeicherter Bild-ID (Original im Projektstand, ältere
+ *                Projekte) die ID des jetzt geladenen Bildes – oder das Medium,
+ *                als das es jetzt in der Bibliothek liegt
  *
  * Clips, deren Video fehlt, entfallen. Bild-Clips, deren Bild fehlt, bleiben
  * mit leerem Verweis stehen (der Editor zeigt dann „Bild fehlt“).
@@ -226,23 +236,43 @@ export interface ReboundProject {
 export function rebindProject(
   doc: TimelineDoc,
   media: Readonly<Record<string, MediaView>>,
-  images: ReadonlyMap<string, string>,
+  images: ReadonlyMap<string, string | MediaView>,
 ): ReboundProject {
   let missing = 0
   const assets: Record<string, AssetRef> = {}
   const ids = new Map<string, string>()
   const list: MediaView[] = []
+  const adopt = (oldId: string, view: MediaView) => {
+    ids.set(oldId, view.id)
+    if (!assets[view.id]) list.push(view)
+    assets[view.id] = assetFromMedia(view)
+  }
   for (const oldId of Object.keys(doc.assets)) {
     const view = media[oldId]
     if (!view) {
       missing++
       continue
     }
-    ids.set(oldId, view.id)
-    if (!assets[view.id]) list.push(view)
-    assets[view.id] = assetFromMedia(view)
+    adopt(oldId, view)
   }
-  for (const id of usedImageIds(doc)) if (!images.has(id)) missing++
+  /** Neue ID je Bild-ID der Clips (Medium der Bibliothek oder Bild nur im Browser). */
+  const imageIds = new Map<string, string>()
+  for (const id of usedImageIds(doc)) {
+    const known = ids.get(id)
+    if (known !== undefined) {
+      imageIds.set(id, known)
+      continue
+    }
+    // Ein Medium, das im Stand fehlt, ist oben schon gezählt.
+    if (doc.assets[id]) continue
+    const image = images.get(id)
+    if (image === undefined) missing++
+    else if (typeof image === 'string') imageIds.set(id, image)
+    else {
+      adopt(id, image)
+      imageIds.set(id, image.id)
+    }
+  }
 
   const tracks = doc.tracks.map((track) => {
     const clips = (track.clips as Clip[]).flatMap((clip): Clip[] => {
@@ -252,7 +282,7 @@ export function rebindProject(
       }
       if (clip.kind !== 'graphic' || clip.data.kind !== 'image') return [clip]
       const image = typeof clip.data.image === 'string' ? clip.data.image : ''
-      return [{ ...clip, data: { ...clip.data, image: images.get(image) ?? '' } }]
+      return [{ ...clip, data: { ...clip.data, image: imageIds.get(image) ?? '' } }]
     })
     return { ...track, clips } as Track
   })

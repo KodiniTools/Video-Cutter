@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, watch } from 'vue'
-import { addImageAsset, getImageAsset } from '@/lib/imageAssets'
+import {
+  getImageAsset,
+  loadImageFile,
+  registerBrowserImage,
+  registerImage,
+} from '@/lib/imageAssets'
 import {
   deleteProject,
   fetchAsset,
@@ -15,15 +20,15 @@ import {
   type AssetRef,
   type ProjectSummary,
 } from '@/lib/projectApi'
-import { uploadMedia, type MediaView } from '@/lib/mediaApi'
+import { MEDIA_IMAGE_UNSUPPORTED, uploadMedia, type MediaView } from '@/lib/mediaApi'
 import { parseProjectState } from '@/lib/projectState'
 import { convertClassicProject, type ClassicSkip } from '@/timeline/convertClassic'
 import {
+  browserImageIds,
   buildTimelineProject,
   isTimelineProject,
   parseTimelineProject,
   rebindProject,
-  usedImageIds,
   type ProjectImageRef,
   type TimelineProjectState,
 } from '@/timeline/projectFile'
@@ -143,8 +148,10 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
       throw new Error(TIMELINE_PROJECT_UPLOADS_PENDING)
     }
     const doc = timeline.doc
+    // Medien = Videos, Tondateien und Bilder der Medienliste (Server-Bibliothek).
     const media = Object.keys(doc.assets)
-    const imageIds = usedImageIds(doc)
+    // Bilder nur im Browser (älteres Backend): Originale als Zusatzdateien.
+    const imageIds = browserImageIds(doc)
     if (media.length > MAX_PROJECT_MEDIA || imageIds.length > MAX_PROJECT_IMAGES) {
       throw new Error(TIMELINE_PROJECT_TOO_MANY)
     }
@@ -254,8 +261,12 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
         throw new Error(TIMELINE_PROJECT_INVALID)
       }
 
-      const images = new Map<string, string>()
-      const refs = usedImageIds(state.doc).flatMap((imageId) => {
+      // Bilder älterer Stände liegen als Zusatzdatei im Projekt: in die
+      // Bibliothek hochladen, damit sie in der Medienliste stehen (älteres
+      // Backend: wie bisher nur im Browser).
+      const images = new Map<string, string | MediaView>()
+      let serverImages = true
+      const refs = browserImageIds(state.doc).flatMap((imageId) => {
         const ref = state.images[imageId]
         return ref ? [[imageId, ref] as const] : []
       })
@@ -269,11 +280,27 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
           const blob = await fetchAsset(id, ref.asset)
           const file = new File([blob], ref.name, { type: ref.type || blob.type })
           hashes.set(file, ref.asset)
-          images.set(imageId, (await addImageAsset(file)).id)
+          const image = await loadImageFile(file)
+          let view: MediaView | null = null
+          if (serverImages) {
+            try {
+              view = await uploadMedia(file).promise
+            } catch (e) {
+              if (e instanceof Error && e.message === MEDIA_IMAGE_UNSUPPORTED) serverImages = false
+            }
+          }
+          if (view) {
+            registerImage(view.id, image)
+            images.set(imageId, view)
+          } else images.set(imageId, registerBrowserImage(image).id)
         } catch {
           // Fehlt oder nicht lesbar: Der Clip bleibt, der Editor zeigt „Bild fehlt“.
         }
       }
+      // Bilder der Medienliste vor dem Übernehmen laden, damit Vorschau und
+      // Timeline sie sofort zeigen. Fehlt eins, markiert die Liste es.
+      progress.value = { key: 'timelineProjects.progress.opening' }
+      await pool.loadImages(Object.values(media))
 
       // --- Ab hier synchron übernehmen ---
       const rebound = rebindProject(state.doc, media, images)

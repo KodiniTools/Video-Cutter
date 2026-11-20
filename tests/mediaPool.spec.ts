@@ -15,12 +15,37 @@ interface PendingUpload {
 }
 const uploads: PendingUpload[] = []
 const deleteMedia = vi.fn((_id: string) => Promise.resolve())
+const fetchMediaFile = vi.fn((_id: string) =>
+  Promise.resolve(new Blob(['bild'], { type: 'image/png' })),
+)
+
+// Bilder: Dekodieren gibt es in jsdom nicht, daher eine einfache Registry.
+const images = new Map<string, { name: string; file: File; pinned?: boolean }>()
+vi.mock('@/lib/imageAssets', async (original) => ({
+  ...(await original<typeof import('@/lib/imageAssets')>()),
+  hasImageAsset: (id: string) => images.has(id),
+  getImageAsset: (id: string) =>
+    images.has(id) ? { id, ...images.get(id), source: {}, width: 40, height: 30 } : undefined,
+  loadImageFile: async (file: File) => {
+    if (file.name.startsWith('kaputt')) throw new Error('Bild kann nicht gelesen werden.')
+    return { name: file.name, file, source: {}, width: 40, height: 30 }
+  },
+  registerImage: (id: string, image: { name: string; file: File }) => {
+    images.set(id, { ...image, pinned: true })
+    return { id, ...image }
+  },
+  removeImageAsset: (id: string) => images.delete(id),
+  releaseDecodedImage: () => {},
+}))
 
 vi.mock('@/lib/mediaApi', () => ({
   UPLOAD_ABORTED: 'UPLOAD_ABORTED',
   MEDIA_UNSUPPORTED: 'MEDIA_UNSUPPORTED',
   MEDIA_AUDIO_UNSUPPORTED: 'MEDIA_AUDIO_UNSUPPORTED',
+  MEDIA_IMAGE_UNSUPPORTED: 'MEDIA_IMAGE_UNSUPPORTED',
   isAudioFile: (f: File) => f.type.startsWith('audio/'),
+  isImageFile: (f: File) => ['image/png', 'image/jpeg', 'image/webp'].includes(f.type),
+  fetchMediaFile: (id: string) => fetchMediaFile(id),
   uploadMedia: (file: File, onProgress: (ratio: number) => void) => {
     let resolve!: (m: MediaView) => void
     let reject!: (e: Error) => void
@@ -50,6 +75,7 @@ const { useMediaPoolStore, DERIVED_POLL_MS } = await import('@/stores/mediaPool'
 const { useTimelineStore } = await import('@/stores/timeline')
 const { default: MediaPool } = await import('@/components/timeline/MediaPool.vue')
 const { secondsToTime } = await import('@/timeline/model')
+type Clip = import('@/timeline/model').Clip
 
 const video = (name: string) => new File([new Uint8Array([0])], name, { type: 'video/mp4' })
 const media = (over: Partial<MediaView> = {}): MediaView => ({
@@ -250,6 +276,114 @@ describe('Medienliste (Store)', () => {
   })
 })
 
+describe('Medienliste: Bilder', () => {
+  const png = (name: string) => new File([new Uint8Array([1])], name, { type: 'image/png' })
+  const imageView = (over: Partial<MediaView> = {}): MediaView =>
+    media({
+      id: 'b1',
+      name: 'logo.png',
+      duration: 0,
+      hasAudio: false,
+      fps: 0,
+      kind: 'image',
+      ...over,
+    })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    uploads.length = 0
+    images.clear()
+    deleteMedia.mockClear()
+    ensureDerived.mockReset()
+    fetchMediaFile.mockClear()
+  })
+
+  it('lädt ein Bild auf den Server, registriert es unter der Medien-ID und meldet es an', async () => {
+    const pool = useMediaPoolStore()
+    const timeline = useTimelineStore()
+    const ready = vi.fn()
+    pool.add([png('logo.png')], ready)
+    expect(pool.rejected).toEqual([])
+    expect(pool.items).toMatchObject([{ name: 'logo.png', state: 'uploading' }])
+    uploads[0].resolve(imageView())
+    await flushPromises()
+    expect(pool.items[0]).toMatchObject({
+      state: 'ready',
+      prepare: 'done',
+      media: { kind: 'image' },
+    })
+    expect(images.has('b1')).toBe(true)
+    expect(timeline.doc.assets.b1).toMatchObject({ kind: 'image', duration: null, width: 1920 })
+    // Keine Wellenform/Filmstreifen für Bilder.
+    expect(ensureDerived).not.toHaveBeenCalled()
+    expect(ready).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1' }))
+  })
+
+  it('„+ Timeline“ legt ein Bild als Bild-Clip an; verwendet = nicht entfernbar', async () => {
+    const pool = useMediaPoolStore()
+    const timeline = useTimelineStore()
+    pool.add([png('logo.png')])
+    uploads[0].resolve(imageView())
+    await flushPromises()
+    const wrapper = mount(MediaPool, { global: { plugins: [i18n] } })
+    expect(wrapper.find('[data-testid="media-pool-image-thumb"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('1920×1080')
+    await wrapper.find('.to-timeline').trigger('click')
+    const clips = timeline.doc.tracks.flatMap((t): Clip[] => [...t.clips])
+    expect(clips).toHaveLength(1)
+    expect(clips[0]).toMatchObject({ kind: 'graphic', data: { kind: 'image', image: 'b1' } })
+    expect(timeline.playhead).toBe(clips[0].start + clips[0].duration)
+
+    expect(pool.remove(pool.items[0].key)).toBe('in-use')
+    expect(images.has('b1')).toBe(true)
+    timeline.removeSelection()
+    expect(pool.remove(pool.items[0].key)).toBe('removed')
+    expect(images.has('b1')).toBe(false)
+    expect(deleteMedia).toHaveBeenCalledWith('b1')
+    wrapper.unmount()
+  })
+
+  it('älteres Backend: still entfernen (Ausweichen auf „nur im Browser“) oder Hinweis zeigen', async () => {
+    const pool = useMediaPoolStore()
+    const quiet = pool.addImage(png('a.png'), { quietUnsupported: true })
+    await flushPromises()
+    uploads[0].reject(new Error('MEDIA_IMAGE_UNSUPPORTED'))
+    await expect(quiet).rejects.toThrow('MEDIA_IMAGE_UNSUPPORTED')
+    expect(pool.items).toEqual([])
+
+    pool.add([png('b.png')])
+    await flushPromises()
+    uploads[1].reject(new Error('MEDIA_IMAGE_UNSUPPORTED'))
+    await flushPromises()
+    expect(pool.items[0]).toMatchObject({ state: 'error', error: 'MEDIA_IMAGE_UNSUPPORTED' })
+  })
+
+  it('unlesbares Bild: Upload abgebrochen, Fehler am Eintrag', async () => {
+    const pool = useMediaPoolStore()
+    await expect(pool.addImage(png('kaputt.png'))).rejects.toThrow('nicht gelesen')
+    expect(uploads[0].abort).toHaveBeenCalled()
+    expect(pool.items[0]).toMatchObject({
+      state: 'error',
+      error: 'Bild kann nicht gelesen werden.',
+    })
+  })
+
+  it('lädt Bilder geöffneter Projekte vom Server; Fehler zeigt „Erneut versuchen“', async () => {
+    const pool = useMediaPoolStore()
+    await pool.loadImages([imageView(), media()])
+    expect(fetchMediaFile).toHaveBeenCalledTimes(1)
+    expect(images.has('b1')).toBe(true)
+
+    fetchMediaFile.mockRejectedValueOnce(new Error('weg'))
+    pool.replaceAll([imageView({ id: 'b2', name: 'weg.png' })])
+    await flushPromises()
+    expect(pool.items[0]).toMatchObject({ prepare: 'failed', error: 'IMAGE_LOAD_FAILED' })
+    await pool.prepare(pool.items[0].key)
+    expect(pool.items[0].prepare).toBe('done')
+    expect(images.has('b2')).toBe(true)
+  })
+})
+
 describe('Medienliste (Komponente)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -354,7 +488,9 @@ describe('Medienliste (Komponente)', () => {
     uploads[0].resolve(media())
     await flushPromises()
     expect(wrapper.text()).toContain('Vorschau wird vorbereitet … 42 %')
-    expect(wrapper.text()).toContain('Weder Video noch Ton, übersprungen: b.txt')
+    expect(wrapper.text()).toContain(
+      'Weder Video, Ton noch Bild (JPEG, PNG, WebP), übersprungen: b.txt',
+    )
 
     pool.remove(pool.items[0].key)
     ensureDerived.mockRejectedValueOnce(new Error('DERIVED_UNSUPPORTED'))

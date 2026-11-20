@@ -22,7 +22,7 @@ import {
   type AppendClip,
   type MusicTrack,
 } from '../lib/args'
-import { isAudioOnly, probeMedia, type MediaInfo } from '../lib/probe'
+import { isAudioOnly, isImageInfo, probeMedia, type MediaInfo } from '../lib/probe'
 import { isMediaId, mediaStore } from '../lib/media'
 import {
   parseAppendMeta,
@@ -146,6 +146,7 @@ export const SERVER_FEATURES = [
   'timelineMarkerEffects',
   'beatDetection',
   'timelineQuality',
+  'mediaImages',
 ] as const
 
 /** Eine Eingabedatei: frisch hochgeladen (gehört dem Job) oder aus der Bibliothek. */
@@ -214,8 +215,10 @@ cutRouter.post(
     const fromLibrary = (id: string): Source => {
       const item = mediaStore.get(id)
       if (!item) throw new ValidationError('Video nicht (mehr) auf dem Server vorhanden.')
-      if (isAudioOnly(item.info))
-        throw new ValidationError('Tondateien lassen sich nur im Timeline-Editor verwenden.')
+      if (isAudioOnly(item.info) || isImageInfo(item.info))
+        throw new ValidationError(
+          'Ton- und Bilddateien lassen sich nur im Timeline-Editor verwenden.',
+        )
       mediaStore.acquire([id])
       acquired.push(id)
       return {

@@ -680,9 +680,9 @@ const messages = {
     footer: 'Serverseitige Verarbeitung mit FFmpeg.',
     mediaPool: {
       title: 'Medien',
-      add: '+ Videos oder Ton hochladen',
+      add: '+ Videos, Ton oder Bilder hochladen',
       empty:
-        'Noch keine Medien. Videos oder Tondateien (Musik, Sprachaufnahmen) hochladen oder hierher ziehen.',
+        'Noch keine Medien. Videos, Tondateien (Musik, Sprachaufnahmen) oder Bilder (JPEG, PNG, WebP) hochladen oder hierher ziehen.',
       uploading: 'Lädt hoch … {pct} %',
       uploadFailed: 'Upload fehlgeschlagen.',
       aborted: 'Upload abgebrochen.',
@@ -705,11 +705,16 @@ const messages = {
       addToTimeline: '+ Timeline',
       addToTimelineNamed: '{name} am Abspielkopf in die Timeline einfügen',
       addAudioToTimelineNamed: '{name} am Abspielkopf auf eine Ton-Spur legen',
+      addImageToTimelineNamed: '{name} am Abspielkopf als Bild auf eine Ebene legen',
       audioFile: 'Tondatei',
+      imageFile: 'Bild',
+      imageUnsupported:
+        'Das Server-Backend ist veraltet und nimmt noch keine Bilder an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API). Über „+ Bild“ lassen sich Bilder weiter nur im Browser einfügen.',
+      imageLoadFailed: 'Das Bild konnte nicht geladen werden.',
       audioUnsupported:
         'Das Server-Backend ist veraltet und nimmt noch keine Tondateien an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       inUse: 'Diese Datei wird in der Timeline verwendet. Bitte zuerst die Clips löschen.',
-      rejected: 'Weder Video noch Ton, übersprungen: {names}',
+      rejected: 'Weder Video, Ton noch Bild (JPEG, PNG, WebP), übersprungen: {names}',
       generatedUnsaved:
         'Bild-Clips und KI-Videos liegen nur vorübergehend auf dem Server und werden nach etwa 2 Stunden ohne Benutzung gelöscht. Bitte das Projekt speichern, damit sie erhalten bleiben (KI-Bilder und KI-Videos bleiben zusätzlich in der Galerie).',
     },
@@ -765,6 +770,9 @@ const messages = {
         'Eigenes Bild (JPEG, PNG, WebP) am Abspielkopf einfügen, z. B. ein Logo (liegt über allen Videos)',
       imageMissing:
         'Das Bild ist nicht mehr geladen. Bitte den Clip löschen und das Bild neu einfügen.',
+      imageMissingClip: '⚠ Bild fehlt',
+      imageMissingClipHint:
+        'Die Bilddatei fehlt. Dieser Clip wird in Vorschau und Export übersprungen. Bitte den Clip löschen und das Bild neu einfügen.',
       graphicInspector: '{kind} bearbeiten',
       graphicInspectorHint:
         'Länge und Zeitpunkt änderst du am Clip in der Timeline. Größen in % der Bildhöhe, Position: Mitte in % der Bildbreite und -höhe. Texte liegen immer über Formen.',
@@ -2095,9 +2103,9 @@ const messages = {
     footer: 'Server-side processing with FFmpeg.',
     mediaPool: {
       title: 'Media',
-      add: '+ Upload videos or audio',
+      add: '+ Upload videos, audio or images',
       empty:
-        'No media yet. Upload videos or audio files (music, voice recordings) or drop them here.',
+        'No media yet. Upload videos, audio files (music, voice recordings) or images (JPEG, PNG, WebP) or drop them here.',
       uploading: 'Uploading … {pct} %',
       uploadFailed: 'Upload failed.',
       aborted: 'Upload cancelled.',
@@ -2120,11 +2128,16 @@ const messages = {
       addToTimeline: '+ Timeline',
       addToTimelineNamed: 'Insert {name} into the timeline at the playhead',
       addAudioToTimelineNamed: 'Put {name} on an audio track at the playhead',
+      addImageToTimelineNamed: 'Put {name} on a layer as an image at the playhead',
       audioFile: 'Audio file',
+      imageFile: 'Image',
+      imageUnsupported:
+        'The server backend is outdated and does not accept images yet. Please update the backend (deploy/deploy.sh without SKIP_API). “+ Image” still inserts images in the browser only.',
+      imageLoadFailed: 'The image could not be loaded.',
       audioUnsupported:
         'The server backend is outdated and does not accept audio files yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       inUse: 'This file is used in the timeline. Please delete its clips first.',
-      rejected: 'Neither video nor audio, skipped: {names}',
+      rejected: 'Neither video, audio nor image (JPEG, PNG, WebP), skipped: {names}',
       generatedUnsaved:
         'Image clips and AI videos are only kept on the server temporarily and are deleted after about 2 hours without use. Please save the project to keep them (AI images and AI videos also stay in the gallery).',
     },
@@ -2179,6 +2192,9 @@ const messages = {
         'Insert your own image (JPEG, PNG, WebP) at the playhead, e.g. a logo (shown above all videos)',
       imageMissing:
         'The image is no longer loaded. Please delete the clip and insert the image again.',
+      imageMissingClip: '⚠ Image missing',
+      imageMissingClipHint:
+        'The image file is missing. This clip is skipped in preview and export. Please delete the clip and insert the image again.',
       graphicInspector: 'Edit {kind}',
       graphicInspectorHint:
         'Change length and timing on the clip in the timeline. Sizes in % of the frame height, position: centre in % of frame width and height. Texts are always above shapes.',

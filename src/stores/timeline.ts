@@ -507,6 +507,20 @@ export const useTimelineStore = defineStore('timeline', () => {
     return true
   }
 
+  /**
+   * Bild der Medienliste als Bild-Clip am Abspielkopf einfügen (Ebene wie bei
+   * „+ Bild“). Wie bei Videos springt der Abspielkopf danach ans Ende des Clips.
+   */
+  function insertImageAtPlayhead(data: Record<string, unknown>, duration: Time): boolean {
+    const at = playhead.value
+    if (addGraphic(data, duration) === null) return false
+    const end = at + duration
+    const fps = doc.value.settings.fps
+    const framed = snapToFrame(end, fps)
+    seek(framed < end ? frameTime(frameIndex(end, fps) + 1, fps) : framed)
+    return true
+  }
+
   // --- Ziehen mit der Maus ---------------------------------------------------
 
   /** Einrast-Toleranz in Zeit (aus Pixeln über den Zoom). */
@@ -866,6 +880,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     appendMedia,
     insertAudioAt,
     insertMediaAtPlayhead,
+    insertImageAtPlayhead,
     splitTargets,
     splitAtPlayhead,
     dragClipTo,
