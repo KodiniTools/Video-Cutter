@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RangeSpinner from './timeline/RangeSpinner.vue'
 import { storeToRefs } from 'pinia'
-import { useVideoEditorStore } from '@/stores/videoEditor'
+import { DEFAULT_MUSIC_VOLUME, useVideoEditorStore } from '@/stores/videoEditor'
 import {
   useLibraryStore,
   itemLength,
@@ -44,7 +44,12 @@ import {
   type GraphicAddExtra,
   type GraphicKind,
 } from '@/lib/graphicOverlay'
-import { useAnimationPref, MIN_DURATION, MAX_DURATION } from '@/composables/useAnimationPref'
+import {
+  useAnimationPref,
+  DEFAULT_DURATION as DEFAULT_ANIM_DURATION,
+  MIN_DURATION,
+  MAX_DURATION,
+} from '@/composables/useAnimationPref'
 import {
   formatClockDuration,
   formatTimeMs,
@@ -1793,6 +1798,7 @@ async function downloadResult(): Promise<void> {
               </div>
               <RangeSpinner
                 id="anim-duration"
+                :reset="DEFAULT_ANIM_DURATION"
                 class="range"
                 :min="MIN_DURATION"
                 :max="MAX_DURATION"
@@ -1936,6 +1942,7 @@ async function downloadResult(): Promise<void> {
                 </div>
                 <RangeSpinner
                   id="music-volume"
+                  :reset="Math.round(DEFAULT_MUSIC_VOLUME * 100)"
                   class="range"
                   min="0"
                   max="100"
@@ -1957,6 +1964,7 @@ async function downloadResult(): Promise<void> {
                 </div>
                 <RangeSpinner
                   id="music-original"
+                  :reset="100"
                   class="range"
                   min="0"
                   max="100"

@@ -17,7 +17,8 @@ const DEFAULT: AnimationId = 'fade'
 /** Grenzen der Übergangsdauer in Sekunden. */
 export const MIN_DURATION = 1
 export const MAX_DURATION = 10
-const DEFAULT_DURATION = 2
+/** Standarddauer in Sekunden (auch Ziel des Knopfs ↺). */
+export const DEFAULT_DURATION = 2
 
 function load(): AnimationId {
   try {

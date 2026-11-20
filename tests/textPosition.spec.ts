@@ -3,7 +3,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { i18n } from '@/i18n'
 import TextPanel from '@/components/TextPanel.vue'
-import { nudgePosition } from '@/lib/textOverlay'
+import { animSpeedOf, DEFAULT_TEXT_STYLE, nudgePosition } from '@/lib/textOverlay'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 
 describe('Exakte Text-Position', () => {
@@ -53,6 +53,27 @@ describe('Exakte Text-Position', () => {
     const plusX = w.findAll('button.step')[1]
     await plusX.trigger('click')
     expect(texts.selected?.x).toBeCloseTo(0.128, 6)
+  })
+
+  it('Knöpfe ↺ setzen Lage, Größe und Tempo auf den Standard', async () => {
+    const texts = useTextOverlayStore()
+    texts.setItem(1)
+    texts.add(0, 10, 'Hallo')
+    texts.update(texts.selected!.id, { x: 0.2, y: 0.3, size: 0.1, animSpeed: 2 })
+    const w = panel()
+    await w.vm.$nextTick()
+    // Jeder Regler hat einen Knopf ↺.
+    expect(w.findAll('button.reset')).toHaveLength(w.findAll('input[type=range]').length)
+    await w.get('[data-testid=text-pos-x-reset]').trigger('click')
+    await w.get('[data-testid=text-pos-y-reset]').trigger('click')
+    expect(texts.selected?.x).toBe(DEFAULT_TEXT_STYLE.x)
+    expect(texts.selected?.y).toBe(DEFAULT_TEXT_STYLE.y)
+    expect(w.get('[data-testid=text-pos-x-reset]').attributes('disabled')).toBeDefined()
+    await w.get('[data-testid=text-anim-speed-reset]').trigger('click')
+    expect(animSpeedOf(texts.selected!)).toBe(1)
+    const sizeReset = w.findAll('button.reset').find((b) => b.attributes('title')?.includes('6'))
+    await sizeReset!.trigger('click')
+    expect(texts.selected?.size).toBeCloseTo(DEFAULT_TEXT_STYLE.size, 6)
   })
 
   it('Pfeiltasten: 0,1 % fein, 1 % mit Umschalt, am Rand begrenzt', () => {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RangeSpinner from './timeline/RangeSpinner.vue'
+import ResetButton from './ResetButton.vue'
 import { storeToRefs } from 'pinia'
 import { useTextOverlayStore } from '@/stores/textOverlays'
 import { formatTimeMs, parseTimeInput } from '@/lib/timeFormat'
@@ -11,6 +12,7 @@ import { useCustomFonts } from '@/lib/customFonts'
 import FontSelect from './FontSelect.vue'
 import {
   ANIM_SPEEDS,
+  DEFAULT_TEXT_STYLE,
   MAX_TEXT_LENGTH,
   MAX_TEXT_OVERLAYS,
   MAX_TEXT_SIZE,
@@ -179,6 +181,9 @@ type Axis = (typeof AXES)[number]
 function percent(axis: Axis): number {
   return selected.value ? Math.round(selected.value[axis] * 1000) / 10 : 0
 }
+
+/** Standardlage eines neuen Textes in Prozent (Ziel der Knöpfe ↺). */
+const defaultPercent = (axis: Axis) => Math.round(DEFAULT_TEXT_STYLE[axis] * 1000) / 10
 
 function setPercent(axis: Axis, value: number): void {
   if (!Number.isFinite(value)) return
@@ -410,6 +415,12 @@ function preview(text: string): string {
           >
             +
           </button>
+          <ResetButton
+            :value="defaultPercent(axis)"
+            :disabled="busy || percent(axis) === defaultPercent(axis)"
+            :data-testid="`text-pos-${axis}-reset`"
+            @click="setPercent(axis, defaultPercent(axis))"
+          />
         </div>
         <p class="hint">{{ t('text.dragHint') }}</p>
       </div>
@@ -446,22 +457,30 @@ function preview(text: string): string {
           <span class="field-label">{{ t('text.animSpeed') }}</span>
           <span class="field-value">{{ formatAnimSpeed(animSpeedOf(selected), locale) }}</span>
         </div>
-        <input
-          class="range"
-          type="range"
-          min="0"
-          :max="ANIM_SPEEDS.length - 1"
-          step="1"
-          :value="animSpeedIndex(animSpeedOf(selected))"
-          :disabled="busy || selected.animation === 'none'"
-          :aria-label="t('text.animSpeed')"
-          :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
-          @input="
-            patch({
-              animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
-            })
-          "
-        />
+        <div class="pos-row">
+          <input
+            class="range"
+            type="range"
+            min="0"
+            :max="ANIM_SPEEDS.length - 1"
+            step="1"
+            :value="animSpeedIndex(animSpeedOf(selected))"
+            :disabled="busy || selected.animation === 'none'"
+            :aria-label="t('text.animSpeed')"
+            :aria-valuetext="formatAnimSpeed(animSpeedOf(selected), locale)"
+            @input="
+              patch({
+                animSpeed: ANIM_SPEEDS[Number(($event.target as HTMLInputElement).value)] ?? 1,
+              })
+            "
+          />
+          <ResetButton
+            :value="formatAnimSpeed(1, locale)"
+            :disabled="busy || selected.animation === 'none' || animSpeedOf(selected) === 1"
+            data-testid="text-anim-speed-reset"
+            @click="patch({ animSpeed: 1 })"
+          />
+        </div>
         <span class="hint">{{ t('text.animSpeedHint') }}</span>
       </div>
 
@@ -471,6 +490,7 @@ function preview(text: string): string {
           <span class="field-value">{{ sizePercent }} %</span>
         </div>
         <RangeSpinner
+          :reset="Math.round(DEFAULT_TEXT_STYLE.size * 1000)"
           :scale="0.1"
           class="range"
           :min="MIN_TEXT_SIZE * 1000"

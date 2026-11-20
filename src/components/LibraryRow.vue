@@ -539,6 +539,7 @@ function resetRange(): void {
       </div>
       <RangeSpinner
         :id="`clip-speed-${item.id}`"
+        :reset="0"
         class="speed-range"
         :min="-MAX_SPEED_STEP"
         :max="MAX_SPEED_STEP"

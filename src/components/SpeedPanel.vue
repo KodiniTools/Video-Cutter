@@ -75,6 +75,7 @@ function onInput(ev: Event): void {
     </div>
     <RangeSpinner
       id="video-speed"
+      :reset="0"
       class="speed-range"
       :min="-MAX_SPEED_STEP"
       :max="MAX_SPEED_STEP"
