@@ -326,23 +326,61 @@ const remove = (ripple: boolean) => run(() => store.removeSelection({ ripple }))
 
 const textDefault = useTextDefaultStore()
 
-const insertText = (): boolean =>
-  store.addText(
-    // Gespeicherter Text-Standard des Nutzers geht vor.
-    { ...DEFAULT_TEXT_STYLE, animSpeed: 1, ...textDefault.value, text: t('text.defaultText') },
-    secondsToTime(DEFAULT_TEXT_DURATION),
-  ) !== null
+/** Daten eines neuen Textes: gespeicherter Text-Standard des Nutzers geht vor. */
+const newTextData = (): Record<string, unknown> => ({
+  ...DEFAULT_TEXT_STYLE,
+  animSpeed: 1,
+  ...textDefault.value,
+  text: t('text.defaultText'),
+})
 
-/** Text am Abspielkopf anlegen; die Einstellungen stehen danach neben der Vorschau. */
+const insertText = (): boolean =>
+  store.addText(newTextData(), secondsToTime(DEFAULT_TEXT_DURATION)) !== null
+
+/**
+ * Text am Abspielkopf anlegen; die Einstellungen stehen danach neben der Vorschau.
+ * Im Ersetzen-Modus tritt er an die Stelle des wartenden Elements.
+ */
 function addText(): void {
-  run(insertText)
+  if (store.replaceTarget !== null) store.replaceWithOverlay('text', newTextData())
+  else run(insertText)
 }
+
+// --- Ersetzen ----------------------------------------------------------------
+
+function toggleReplace(): void {
+  if (store.replaceTarget !== null) store.cancelReplace()
+  else run(() => store.startReplace())
+}
+
+/** Anleitung im Ersetzen-Banner je nach Art des wartenden Clips. */
+const replaceHelp = computed(() => {
+  const kind = store.replaceTargetKind
+  return kind ? t(`timeline.replace.help.${kind}`) : ''
+})
+
+const REPLACE_ERRORS: Partial<Record<OpError, string>> = {
+  'kind-mismatch': 'timeline.replace.mismatch',
+  'track-locked': 'timeline.hint.locked',
+  'too-short': 'timeline.hint.tooShort',
+  overlap: 'timeline.hint.overlap',
+}
+const replaceErrorText = computed(() => {
+  const e = store.replaceError
+  if (e === null) return ''
+  const key = REPLACE_ERRORS[e]
+  return key ? t(key) : t('timeline.replace.failed')
+})
 
 /** Form, Symbol oder Emoji am Abspielkopf anlegen (Auswahl aus der Galerie). */
 function addGraphic(
   kind: TimelineGraphicKind,
   extra: { symbol?: GraphicSymbol; emoji?: string },
 ): void {
+  if (store.replaceTarget !== null) {
+    store.replaceWithOverlay('graphic', { ...newGraphicData(kind), ...extra })
+    return
+  }
   run(
     () =>
       store.addGraphic(
@@ -381,6 +419,10 @@ async function addImage(e: Event): Promise<void> {
     } catch (err) {
       if (!(err instanceof Error && err.message === MEDIA_IMAGE_UNSUPPORTED)) throw err
       imageId = (await addImageAsset(file)).id
+    }
+    if (!markerId && store.replaceTarget !== null) {
+      store.replaceWithOverlay('graphic', newImageData(imageId))
+      return
     }
     const insert = () =>
       store.addGraphic(newImageData(imageId), secondsToTime(DEFAULT_GRAPHIC_DURATION)) !== null
@@ -596,6 +638,7 @@ function onKeydown(event: KeyboardEvent): void {
   let handled = true
   if (key === 'Escape') {
     if (drag) onDragCancel()
+    else if (store.replaceTarget !== null) store.cancelReplace()
     else store.select([])
   } else if (mod && key === 'z') {
     if (event.shiftKey) store.redo()
@@ -699,6 +742,18 @@ function onKeydown(event: KeyboardEvent): void {
         @click="remove(true)"
       >
         {{ t('timeline.rippleRemove') }}
+      </button>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="timeline-replace"
+        :class="{ active: store.replaceTarget !== null }"
+        :aria-pressed="store.replaceTarget !== null"
+        :disabled="store.replaceTarget === null && store.replaceCandidate === null"
+        :title="t('timeline.replace.title')"
+        @click="toggleReplace"
+      >
+        {{ t('timeline.replace.button') }}
       </button>
       <label class="snap" :title="t('timeline.snapTitle')">
         <input v-model="store.snapping" type="checkbox" data-testid="timeline-snap" />
@@ -813,6 +868,27 @@ function onKeydown(event: KeyboardEvent): void {
         @click="fit"
       >
         {{ t('timeline.fit') }}
+      </button>
+    </div>
+
+    <div
+      v-if="store.replaceTarget !== null"
+      class="replace-bar"
+      role="status"
+      data-testid="replace-bar"
+    >
+      <strong>{{ t('timeline.replace.active') }}</strong>
+      <span>{{ replaceHelp }}</span>
+      <span v-if="replaceErrorText" class="hint" data-testid="replace-error">{{
+        replaceErrorText
+      }}</span>
+      <button
+        type="button"
+        class="tool wide"
+        data-testid="replace-cancel"
+        @click="store.cancelReplace()"
+      >
+        {{ t('timeline.replace.cancel') }}
       </button>
     </div>
 
@@ -1144,6 +1220,22 @@ function onKeydown(event: KeyboardEvent): void {
 .tool:disabled {
   opacity: 0.45;
   cursor: default;
+}
+.tool.active {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+.replace-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border: 1px solid var(--ds-accent);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-accent-soft);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text);
 }
 .tool:focus-visible {
   outline: none;

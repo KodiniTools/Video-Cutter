@@ -10,6 +10,9 @@ import {
   appendMedia as appendMediaOp,
   insertAudioAt as insertAudioAtOp,
   insertMediaAt as insertMediaAtOp,
+  replaceAnchor,
+  replaceWithMedia as replaceWithMediaOp,
+  replaceWithOverlay as replaceWithOverlayOp,
   assetInUse,
   createDoc,
   clipEnd,
@@ -521,6 +524,83 @@ export const useTimelineStore = defineStore('timeline', () => {
     return true
   }
 
+  // --- Ersetzen -------------------------------------------------------------
+
+  /**
+   * Clip, den „Ersetzen“ gerade tauschen würde: genau ein markierter Clip bzw.
+   * Bild und Ton eines Videos (dann das Bild). Sonst `null`.
+   */
+  const replaceCandidate = computed((): string | null => {
+    const ids = selection.value
+    if (ids.length === 0) return null
+    const group = linkGroupIds(doc.value, ids[0])
+    if (ids.some((id) => !group.includes(id))) return null
+    // Mehrere verknüpfte Clips: nur Bild + eigener Ton eines Videos zählen als eins.
+    const anchor = replaceAnchor(
+      doc.value,
+      ids.find((id) => findClip(doc.value, id)?.clip.kind === 'video') ?? ids[0],
+    )
+    if (!anchor) return null
+    if (ids.length > 1 && anchor.clip.kind !== 'video') return null
+    return anchor.clip.id
+  })
+
+  /**
+   * Clip, der im Ersetzen-Modus auf sein neues Element wartet. Solange er
+   * gesetzt ist, ersetzt „+ Timeline“, „+ Text“, „+ Form / Emoji“ und „+ Bild“
+   * ihn, statt etwas einzufügen.
+   */
+  const replaceTarget = ref<string | null>(null)
+  /** Warum das letzte Ersetzen abgelehnt wurde (Hinweis im Ersetzen-Banner). */
+  const replaceError = ref<OpError | null>(null)
+
+  function startReplace(): boolean {
+    const id = replaceCandidate.value
+    if (id === null) return false
+    replaceTarget.value = id
+    replaceError.value = null
+    return true
+  }
+
+  function cancelReplace(): void {
+    replaceTarget.value = null
+    replaceError.value = null
+  }
+
+  /** Art des wartenden Clips: `video`, `audio` oder `overlay` (Spur-Art). */
+  const replaceTargetKind = computed((): TrackKind | null => {
+    const id = replaceTarget.value
+    return id === null ? null : (findClip(doc.value, id)?.track.kind ?? null)
+  })
+
+  function finishReplace(op: (d: TimelineDoc, target: string) => OpResult): boolean {
+    const target = replaceTarget.value
+    if (target === null) return false
+    const before = new Set(doc.value.tracks.flatMap((t) => t.clips.map((c) => c.id)))
+    if (!apply((d) => op(d, target))) {
+      replaceError.value = lastError.value
+      return false
+    }
+    selection.value = doc.value.tracks
+      .flatMap((t) => t.clips.map((c) => c.id))
+      .filter((id) => !before.has(id))
+    cancelReplace()
+    return true
+  }
+
+  /** Wartenden Clip durch ein Medium der Medienliste ersetzen (ein Verlaufsschritt). */
+  const replaceWithMedia = (assetId: string) =>
+    finishReplace((d, target) => replaceWithMediaOp(d, target, assetId))
+
+  /** Wartendes Ebenen-Element durch ein neues (Text, Form/Emoji, Bild) ersetzen. */
+  const replaceWithOverlay = (kind: OverlayClip['kind'], data: Record<string, unknown>) =>
+    finishReplace((d, target) => replaceWithOverlayOp(d, target, { kind, data }))
+
+  // Verschwindet der wartende Clip (Rückgängig, Löschen), endet der Modus.
+  watch(doc, (d) => {
+    if (replaceTarget.value !== null && !findClip(d, replaceTarget.value)) cancelReplace()
+  })
+
   // --- Ziehen mit der Maus ---------------------------------------------------
 
   /** Einrast-Toleranz in Zeit (aus Pixeln über den Zoom). */
@@ -881,6 +961,14 @@ export const useTimelineStore = defineStore('timeline', () => {
     insertAudioAt,
     insertMediaAtPlayhead,
     insertImageAtPlayhead,
+    replaceCandidate,
+    replaceTarget,
+    replaceTargetKind,
+    replaceError,
+    startReplace,
+    cancelReplace,
+    replaceWithMedia,
+    replaceWithOverlay,
     splitTargets,
     splitAtPlayhead,
     dragClipTo,

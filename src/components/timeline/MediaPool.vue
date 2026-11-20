@@ -101,6 +101,12 @@ const isImage = (item: PoolItem) => item.media?.kind === 'image'
 function insert(item: PoolItem): void {
   const m = item.media
   if (!m) return
+  // Ersetzen-Modus: Das Medium tritt an die Stelle des wartenden Clips.
+  if (timeline.replaceTarget !== null) {
+    if (m.kind === 'image') timeline.replaceWithOverlay('graphic', newImageData(m.id))
+    else timeline.replaceWithMedia(m.id)
+    return
+  }
   if (m.kind === 'image')
     timeline.insertImageAtPlayhead(newImageData(m.id), secondsToTime(DEFAULT_GRAPHIC_DURATION))
   else timeline.insertMediaAtPlayhead(m.id)
@@ -187,6 +193,7 @@ function playLabel(item: PoolItem): string {
 }
 
 function addLabel(item: PoolItem): string {
+  if (timeline.replaceTarget !== null) return t('mediaPool.replaceWithNamed', { name: item.name })
   const key = isAudio(item)
     ? 'mediaPool.addAudioToTimelineNamed'
     : isImage(item)
@@ -381,11 +388,16 @@ const rejectedText = computed(() =>
               v-if="item.media"
               type="button"
               class="to-timeline"
+              data-testid="pool-to-timeline"
               :title="addLabel(item)"
               :aria-label="addLabel(item)"
               @click="insert(item)"
             >
-              {{ t('mediaPool.addToTimeline') }}
+              {{
+                timeline.replaceTarget !== null
+                  ? t('mediaPool.replaceWith')
+                  : t('mediaPool.addToTimeline')
+              }}
             </button>
             <button
               type="button"

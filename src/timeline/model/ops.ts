@@ -11,6 +11,7 @@ import {
   type LayoutKey,
   type ClipTransitionPreset,
   TIMELINE_DOC_VERSION,
+  type AssetId,
   type AssetRef,
   type AudioClip,
   type Clip,
@@ -1737,6 +1738,156 @@ export function insertMediaAt(
     gain: 1,
     linkGroup,
   })
+}
+
+// --- Ersetzen ---------------------------------------------------------------
+
+/**
+ * Clip, der beim Ersetzen von `clipId` tatsächlich getauscht wird: Bei Bild und
+ * Ton eines Videos (verknüpft) ist es immer das Bild, auch wenn der Ton
+ * angeklickt wurde.
+ */
+export function replaceAnchor(doc: TimelineDoc, clipId: string): ClipLocation | null {
+  const loc = findClip(doc, clipId)
+  if (!loc) return null
+  if (loc.clip.kind !== 'audio' || !loc.clip.linkGroup) return loc
+  const asset = loc.clip.asset
+  return (
+    linkedClips(doc, loc, true).find(
+      (m) => m.clip.kind === 'video' && m.clip.asset === asset && m.clip.start === loc.clip.start,
+    ) ?? loc
+  )
+}
+
+/** Platz ab `start` bis zum nächsten Clip der Spur (ohne die genannten Clips). */
+function roomFrom(clips: readonly Clip[], start: Time, without: ReadonlySet<string>): Time {
+  let room = Number.POSITIVE_INFINITY
+  for (const c of clips)
+    if (!without.has(c.id) && c.start >= start) room = Math.min(room, c.start - start)
+  return room
+}
+
+/**
+ * Clip an genau derselben Stelle (gleiche Spur, gleicher Beginn) durch ein
+ * anderes Medium der Medienliste ersetzen. Der neue Clip übernimmt KEINE
+ * Einstellungen des alten (Tempo, Zuschnitt, Lage, Farbe, Übergänge, Blenden,
+ * Lautstärke, Kurve, Verknüpfung, Marker-Bindung …): Er beginnt am Anfang der
+ * Quelle und ist so lang wie das neue Medium – höchstens bis zum nächsten Clip
+ * der Spur, der nie überschrieben oder verschoben wird.
+ * - Video (bzw. Bild eines Videos samt Ton): durch ein Video. Der eigene Ton des
+ *   alten Videos geht mit; der des neuen kommt verknüpft auf dessen Ton-Spur,
+ *   sonst auf die oberste freie Ton-Spur ohne Musik bzw. eine neue.
+ * - Einzelner Ton-Clip: durch eine Tondatei.
+ * Anderes lehnt der Befehl mit `kind-mismatch` ab.
+ */
+export function replaceWithMedia(
+  doc: TimelineDoc,
+  clipId: string,
+  assetId: string,
+  opts: { ids?: () => string } = {},
+): OpResult {
+  const anchor = replaceAnchor(doc, clipId)
+  if (!anchor) return fail('clip-not-found')
+  const asset = doc.assets[assetId]
+  if (!asset) return fail('asset-not-found')
+  if (asset.duration === null || asset.kind === 'image') return fail('kind-mismatch')
+  const old = anchor.clip
+  const onVideo = anchor.track.kind === 'video'
+  if (onVideo ? asset.kind !== 'video' : anchor.track.kind !== 'audio' || asset.kind !== 'audio')
+    return fail('kind-mismatch')
+  if (asset.duration < MIN_CLIP_DURATION) return fail('too-short')
+
+  // Weg kommen der Clip und – bei einem Video – sein eigener Ton.
+  const removed = [anchor]
+  if (onVideo && old.linkGroup && 'asset' in old)
+    for (const m of linkedClips(doc, anchor, true))
+      if (m.clip.kind === 'audio' && m.clip.asset === old.asset && m.clip.start === old.start)
+        removed.push(m)
+  if (removed.some((m) => m.track.locked)) return fail('track-locked')
+  const removedIds = new Set(removed.map((m) => m.clip.id))
+
+  const start = old.start
+  const duration = Math.min(asset.duration, roomFrom(anchor.track.clips, start, removedIds))
+  if (duration < MIN_CLIP_DURATION) return fail('overlap')
+  const ids = opts.ids ?? createId
+
+  let next = doc
+  doc.tracks.forEach((track, i) => {
+    if (track.clips.some((c) => removedIds.has(c.id)))
+      next = withClips(next, i, track.clips.filter((c) => !removedIds.has(c.id)) as Clip[])
+  })
+
+  const base = { asset: assetId, start, duration, sourceIn: 0, speed: 1 }
+  if (!onVideo)
+    return insertClip(next, anchor.track.id, { ...base, id: ids(), kind: 'audio', gain: 1 })
+
+  let audioTrackId: string | null = null
+  if (asset.hasAudio) {
+    const end = start + duration
+    const fits = (t: Track) => t.kind === 'audio' && !t.locked && !overlaps(t.clips, start, end)
+    const oldAudio = removed.find((m) => m.track.kind === 'audio')
+    const own = oldAudio ? next.tracks.find((t) => t.id === oldAudio.track.id) : undefined
+    const free = own && fits(own) ? own : next.tracks.find((t) => fits(t) && !isMusicTrack(next, t))
+    if (free) audioTrackId = free.id
+    else {
+      audioTrackId = ids()
+      const added = addTrack(
+        next,
+        { id: audioTrackId, kind: 'audio', name: nextTrackName(next, 'A') },
+        next.tracks.length,
+      )
+      if (!added.ok) return added
+      next = added.doc
+    }
+  }
+  const linkGroup = audioTrackId ? ids() : undefined
+  const video = insertClip(next, anchor.track.id, {
+    ...base,
+    id: ids(),
+    kind: 'video',
+    ...(linkGroup ? { linkGroup } : {}),
+  })
+  if (!video.ok || !audioTrackId) return video
+  return insertClip(video.doc, audioTrackId, {
+    ...base,
+    id: ids(),
+    kind: 'audio',
+    gain: 1,
+    linkGroup,
+  })
+}
+
+/**
+ * Element einer Ebene (Text, Form/Emoji, Bild) an genau derselben Stelle
+ * (gleiche Ebene, gleicher Beginn, gleiche Länge) durch ein neues ersetzen.
+ * Das neue bringt nur seine eigenen Daten mit (Standard der neuen Art), vom
+ * alten bleibt nichts – auch keine Verknüpfung oder Marker-Bindung.
+ */
+export function replaceWithOverlay(
+  doc: TimelineDoc,
+  clipId: string,
+  replacement: Pick<OverlayClip, 'kind' | 'data'> & { asset?: AssetId },
+  opts: { id?: string } = {},
+): OpResult {
+  const loc = findClip(doc, clipId)
+  if (!loc) return fail('clip-not-found')
+  if (loc.track.kind !== 'overlay' || !trackAccepts('overlay', replacement.kind))
+    return fail('kind-mismatch')
+  if (loc.track.locked) return fail('track-locked')
+  const clip: OverlayClip = {
+    id: opts.id ?? createId(),
+    kind: replacement.kind,
+    start: loc.clip.start,
+    duration: loc.clip.duration,
+    data: replacement.data,
+    ...(replacement.asset !== undefined ? { asset: replacement.asset } : {}),
+  }
+  const without = withClips(
+    doc,
+    loc.trackIndex,
+    loc.track.clips.filter((c) => c.id !== clipId) as Clip[],
+  )
+  return insertClip(without, loc.track.id, clip)
 }
 
 // --- Marker -----------------------------------------------------------------
