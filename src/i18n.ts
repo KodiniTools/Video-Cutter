@@ -710,6 +710,9 @@ const messages = {
       addImageToTimelineNamed: '{name} am Abspielkopf als Bild auf eine Ebene legen',
       audioFile: 'Tondatei',
       imageFile: 'Bild',
+      showImageHint: 'Klicken: Bild groß anzeigen.',
+      showImageNamed: '{name} groß anzeigen',
+      closeImage: 'Schließen',
       imageUnsupported:
         'Das Server-Backend ist veraltet und nimmt noch keine Bilder an. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API). Über „+ Bild“ lassen sich Bilder weiter nur im Browser einfügen.',
       imageLoadFailed: 'Das Bild konnte nicht geladen werden.',
@@ -2156,6 +2159,9 @@ const messages = {
       addImageToTimelineNamed: 'Put {name} on a layer as an image at the playhead',
       audioFile: 'Audio file',
       imageFile: 'Image',
+      showImageHint: 'Click: show the image large.',
+      showImageNamed: 'Show {name} large',
+      closeImage: 'Close',
       imageUnsupported:
         'The server backend is outdated and does not accept images yet. Please update the backend (deploy/deploy.sh without SKIP_API). “+ Image” still inserts images in the browser only.',
       imageLoadFailed: 'The image could not be loaded.',
