@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ImageLightbox from './ImageLightbox.vue'
 import StillClipForm from './StillClipForm.vue'
 import VoiceOverForm from './VoiceOverForm.vue'
 import VoiceRecorder from './VoiceRecorder.vue'
@@ -129,12 +130,21 @@ const useOriginal = ref(false)
 const canPlay = (item: PoolItem) =>
   !!item.media && (isAudio(item) || item.derived?.proxy.state === 'ready')
 
+const mediaFileUrl = (id: string) => `${API_BASE}/api/media/${encodeURIComponent(id)}/file`
+
 function playSrc(item: PoolItem): string {
   const id = item.media!.id
-  return useOriginal.value || isAudio(item)
-    ? `${API_BASE}/api/media/${encodeURIComponent(id)}/file`
-    : proxyUrl(id)
+  return useOriginal.value || isAudio(item) ? mediaFileUrl(id) : proxyUrl(id)
 }
+
+/** Große Bildvorschau: Schlüssel des gezeigten Bild-Eintrags (null = zu). */
+const zoomKey = ref<string | null>(null)
+/** Verschwindet der Eintrag (entfernt), schließt sich die Vorschau von selbst. */
+const zoomItem = computed(() =>
+  zoomKey.value === null ? undefined : pool.items.find((i) => i.key === zoomKey.value),
+)
+/** Bilder lassen sich groß zeigen, sobald sie hochgeladen und geladen sind. */
+const canZoom = (item: PoolItem) => isImage(item) && item.prepare === 'done'
 
 function startPlay(item: PoolItem, sound: boolean): void {
   if (playing.value?.key !== item.key) {
@@ -373,6 +383,18 @@ const rejectedText = computed(() =>
             playing?.key === item.key && playing.sound ? '❚❚' : '▶'
           }}</span>
         </button>
+        <button
+          v-else-if="canZoom(item)"
+          type="button"
+          class="thumb image zoomable"
+          :style="thumbStyle(item)"
+          :title="t('mediaPool.showImageHint')"
+          :aria-label="t('mediaPool.showImageNamed', { name: item.name })"
+          data-testid="media-pool-image-thumb"
+          @click="zoomKey = item.key"
+        >
+          <span class="thumb-badge" aria-hidden="true">⤢</span>
+        </button>
         <div
           v-else
           class="thumb"
@@ -438,6 +460,15 @@ const rejectedText = computed(() =>
         </div>
       </li>
     </ul>
+    <ImageLightbox
+      v-if="zoomItem?.media"
+      :key="zoomItem.key"
+      :src="mediaFileUrl(zoomItem.media.id)"
+      :fallback="zoomItem.thumb"
+      :name="zoomItem.name"
+      :details="details(zoomItem)"
+      @close="zoomKey = null"
+    />
   </section>
 </template>
 
@@ -562,6 +593,17 @@ const rejectedText = computed(() =>
   border: 0;
   cursor: pointer;
 }
+.thumb.zoomable {
+  position: relative;
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+.thumb.zoomable:hover .thumb-badge,
+.thumb.zoomable:focus-visible .thumb-badge {
+  opacity: 1;
+}
+.thumb.zoomable:focus-visible,
 .thumb.playable:focus-visible {
   outline: none;
   box-shadow: var(--ds-focus-ring);

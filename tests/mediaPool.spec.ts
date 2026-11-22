@@ -319,6 +319,47 @@ describe('Medienliste: Bilder', () => {
     expect(ready).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1' }))
   })
 
+  it('Klick auf das Vorschaubild eines Bildes öffnet die große Vorschau, ✕/Esc/daneben schließt', async () => {
+    const pool = useMediaPoolStore()
+    pool.add([png('logo.png')])
+    uploads[0].resolve(imageView())
+    await flushPromises()
+    const wrapper = mount(MediaPool, { global: { plugins: [i18n] }, attachTo: document.body })
+    const thumb = wrapper.get('[data-testid="media-pool-image-thumb"]')
+    expect(thumb.element.tagName).toBe('BUTTON')
+    expect(thumb.attributes('aria-label')).toBe('logo.png groß anzeigen')
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(false)
+
+    await thumb.trigger('click')
+    const box = wrapper.get('[data-testid="image-lightbox"]')
+    expect(box.attributes('aria-label')).toBe('logo.png')
+    expect(wrapper.get('[data-testid="image-lightbox-img"]').attributes('src')).toBe(
+      '/api/media/b1/file',
+    )
+    expect(box.text()).toContain('1920×1080')
+    // Klick aufs Bild schließt nicht.
+    await wrapper.get('[data-testid="image-lightbox-img"]').trigger('click')
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="image-lightbox-close"]').trigger('click')
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(false)
+
+    await thumb.trigger('click')
+    await wrapper.get('[data-testid="image-lightbox"]').trigger('cancel')
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(false)
+
+    await thumb.trigger('click')
+    await wrapper.get('[data-testid="image-lightbox"] .frame').trigger('click')
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(false)
+
+    // Entfernen schließt eine offene Vorschau.
+    await thumb.trigger('click')
+    pool.remove(pool.items[0].key)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="image-lightbox"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('„+ Timeline“ legt ein Bild als Bild-Clip an; verwendet = nicht entfernbar', async () => {
     const pool = useMediaPoolStore()
     const timeline = useTimelineStore()
