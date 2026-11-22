@@ -146,6 +146,18 @@ export async function fetchAsset(id: string, hash: string): Promise<Blob> {
   return await res.blob()
 }
 
+/** Nur den Namen ändern (Stand, Dateien und Datum bleiben). */
+export async function renameProject(id: string, name: string): Promise<ProjectSummary> {
+  const res = await fetch(url(`/${enc(id)}/rename`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) throw await failure(res)
+  const data = (await res.json()) as { project?: unknown }
+  return parseSummary(data.project)
+}
+
 export async function deleteProject(id: string): Promise<void> {
   const res = await fetch(url(`/${enc(id)}`), { method: 'DELETE' })
   if (!res.ok && res.status !== 404) throw await failure(res)

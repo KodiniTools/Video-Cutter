@@ -14,6 +14,9 @@ const uploadAsset = vi.fn((_id: string, _hash: string, _f: Blob) => Promise.reso
 const fetchProject = vi.fn()
 const openProjectMedia = vi.fn()
 const deleteProject = vi.fn((_id: string) => Promise.resolve())
+const renameProject = vi.fn((id: string, name: string): Promise<ProjectSummary> =>
+  Promise.resolve(summary({ id, name })),
+)
 const listProjects = vi.fn((): Promise<ProjectSummary[]> => Promise.resolve([]))
 const fetchAsset = vi.fn((_id: string, hash: string) =>
   Promise.resolve(new Blob([`asset:${hash}`], { type: 'image/png' })),
@@ -35,6 +38,7 @@ vi.mock('@/lib/projectApi', () => ({
   openProjectMedia: (id: string) => openProjectMedia(id),
   fetchAsset: (id: string, h: string) => fetchAsset(id, h),
   deleteProject: (id: string) => deleteProject(id),
+  renameProject: (id: string, name: string) => renameProject(id, name),
   // Kennung = Dateiname (eindeutig genug für den Test), 64 Hex-Zeichen.
   sha256Hex: async (b: Blob) => hashOfName((b as File).name ?? 'x'),
 }))
@@ -332,6 +336,30 @@ describe('timelineProjects-Store', () => {
     expect((saveProject.mock.calls[1][0] as SaveRequest).id).toBe('p1')
     await store.save('Kopie', true)
     expect((saveProject.mock.calls[2][0] as SaveRequest).id).toBeUndefined()
+  })
+
+  it('benennt Projekte um; beim geöffneten speichert danach der neue Name', async () => {
+    const store = useTimelineProjectStore()
+    fill()
+    saveProject.mockResolvedValue({ project: summary(), missingAssets: [] })
+    await store.save('Film')
+    store.projects = [summary(), summary({ id: 'p2', name: 'Anderes' })]
+
+    await store.rename('p2', 'Zweites')
+    expect(renameProject).toHaveBeenLastCalledWith('p2', 'Zweites')
+    expect(store.projects.map((p) => p.name)).toEqual(['Film', 'Zweites'])
+    expect(store.current).toMatchObject({ id: 'p1', name: 'Film' })
+
+    await store.rename('p1', 'Urlaub')
+    expect(store.current).toMatchObject({ id: 'p1', name: 'Urlaub' })
+    expect(store.projects[0].name).toBe('Urlaub')
+    expect(store.busy).toBeNull()
+
+    // Fehler (z. B. altes Backend): Name bleibt, nicht mehr beschäftigt.
+    renameProject.mockRejectedValueOnce(new Error('PROJECTS_UNSUPPORTED'))
+    await expect(store.rename('p1', 'X')).rejects.toThrow('PROJECTS_UNSUPPORTED')
+    expect(store.current?.name).toBe('Urlaub')
+    expect(store.busy).toBeNull()
   })
 
   it('meldet laufende Uploads, verfallene Videos und ein veraltetes Backend', async () => {

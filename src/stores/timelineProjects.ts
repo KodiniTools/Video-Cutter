@@ -8,6 +8,7 @@ import {
 } from '@/lib/imageAssets'
 import {
   deleteProject,
+  renameProject,
   fetchAsset,
   fetchProject,
   listProjects,
@@ -97,7 +98,7 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
   const current = ref<{ id: string; name: string; savedAt: number } | null>(null)
   /** Namensvorschlag für ein umgewandeltes, noch nicht gespeichertes Projekt. */
   const suggestedName = ref('')
-  const busy = ref<'save' | 'open' | 'delete' | null>(null)
+  const busy = ref<'save' | 'open' | 'delete' | 'rename' | null>(null)
   const progress = ref<TimelineProjectProgress | null>(null)
   /** Das Dokument, wie es zuletzt gespeichert oder geöffnet wurde. */
   const savedDoc = shallowRef<TimelineDoc | null>(null)
@@ -365,6 +366,23 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     }
   }
 
+  /**
+   * Gespeichertes Projekt umbenennen. Ist es gerade geöffnet, übernimmt der
+   * Editor den neuen Namen (sonst würde das nächste Speichern ihn zurücksetzen).
+   */
+  async function rename(id: string, name: string): Promise<ProjectSummary> {
+    if (busy.value) throw new Error(TIMELINE_PROJECT_BUSY)
+    busy.value = 'rename'
+    try {
+      const p = await renameProject(id, name)
+      projects.value = projects.value.map((x) => (x.id === id ? { ...x, name: p.name } : x))
+      if (current.value?.id === id) current.value = { ...current.value, name: p.name }
+      return p
+    } finally {
+      busy.value = null
+    }
+  }
+
   // --- Automatisches Speichern ----------------------------------------------
 
   function clearAutosaveTimer(): void {
@@ -449,5 +467,6 @@ export const useTimelineProjectStore = defineStore('timelineProjects', () => {
     startNew,
     detach,
     remove,
+    rename,
   }
 })

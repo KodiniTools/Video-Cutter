@@ -4,6 +4,7 @@ import {
   isAssetHash,
   MissingMediaError,
   parseSaveInput,
+  projectName,
   ProjectNotFoundError,
   projectStore,
   ProjectStorageFullError,
@@ -16,6 +17,7 @@ import {
  *   POST   /api/projects                     -> { project, missingAssets } (neu oder überschreiben)
  *   GET    /api/projects/:id                 -> { project, state }
  *   POST   /api/projects/:id/open            -> { media: { token: MediaView } }
+ *   POST   /api/projects/:id/rename          { name } -> { project }
  *   POST   /api/projects/:id/assets/:hash    (Rohdaten) -> 204
  *   GET    /api/projects/:id/assets/:hash    -> Datei
  *   DELETE /api/projects/:id                 -> { deleted }
@@ -82,6 +84,15 @@ projectsRouter.post(
   '/projects/:id/open',
   handle(async (req, res) => {
     res.json({ media: await projectStore.open(String(req.params.id)) })
+  }),
+)
+
+projectsRouter.post(
+  '/projects/:id/rename',
+  express.json({ limit: '4kb' }),
+  handle(async (req, res) => {
+    const name = projectName((req.body as { name?: unknown } | undefined)?.name)
+    res.json({ project: await projectStore.rename(String(req.params.id), name) })
   }),
 )
 
