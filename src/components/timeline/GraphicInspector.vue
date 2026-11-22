@@ -19,7 +19,7 @@ import {
   MIN_IMAGE_OPACITY,
   SYMBOL_NAMES,
 } from '@/lib/graphicOverlay'
-import { hasImageAsset } from '@/lib/imageAssets'
+import { getImageAsset, hasImageAsset } from '@/lib/imageAssets'
 import {
   ANIM_SPEEDS,
   animParts,
@@ -32,7 +32,13 @@ import {
   type OutAnimation,
 } from '@/lib/textOverlay'
 import { useTimelineStore } from '@/stores/timeline'
-import { clipGraphic, loopSpeedOf } from '@/timeline/graphics'
+import {
+  clipGraphic,
+  fitImageData,
+  IMAGE_FITS,
+  loopSpeedOf,
+  type ImageFit,
+} from '@/timeline/graphics'
 import OverlayKeys from './OverlayKeys.vue'
 import { graphicMotionAt, withGraphicChange, type GraphicMotion } from '@/timeline/graphicKeys'
 
@@ -76,6 +82,13 @@ const cropped = computed(
   () => !!g.value && (g.value.cropL || g.value.cropR || g.value.cropT || g.value.cropB) > 0,
 )
 const percent = (v: number) => Math.round(v * 1000) / 10
+
+/** Bild an die Bildfläche anpassen (ein Rückgängig-Schritt). */
+function fitImage(mode: ImageFit): void {
+  const asset = g.value ? getImageAsset(g.value.image) : undefined
+  if (!asset) return
+  set(fitImageData(mode, store.doc.settings, asset))
+}
 
 let editing = false
 
@@ -199,7 +212,7 @@ onBeforeUnmount(commit)
     <div class="row">
       <label class="field">
         <span>
-          {{ sizeLabel }} {{ percent(g.w) }} %<template v-if="isImage">
+          {{ sizeLabel }} {{ percent(g.w) }} %<template v-if="isImage && !g.stretch">
             · {{ t('graphics.height') }} {{ percent(imageHeight(g)) }} %</template
           >
         </span>
@@ -215,7 +228,7 @@ onBeforeUnmount(commit)
           @change="commit"
         />
       </label>
-      <label v-if="hasHeight(g.kind)" class="field">
+      <label v-if="hasHeight(g.kind) || (isImage && g.stretch)" class="field">
         <span>{{ t('graphics.height') }} {{ percent(g.h) }} %</span>
         <RangeSpinner
           :scale="100"
@@ -322,6 +335,24 @@ onBeforeUnmount(commit)
     </template>
 
     <template v-if="isImage">
+      <div class="field" data-testid="graphic-fit">
+        <span>{{ t('graphics.image.fit') }}</span>
+        <div class="fit-buttons" role="group" :aria-label="t('graphics.image.fit')">
+          <button
+            v-for="mode in IMAGE_FITS"
+            :key="mode"
+            type="button"
+            class="fit"
+            :class="{ active: mode === 'stretch' && g.stretch }"
+            :disabled="imageMissing"
+            :title="t(`graphics.image.fits.${mode}Title`)"
+            :data-testid="`graphic-fit-${mode}`"
+            @click="fitImage(mode)"
+          >
+            {{ t(`graphics.image.fits.${mode}`) }}
+          </button>
+        </div>
+      </div>
       <label class="field">
         <span>{{ t('graphics.image.opacity') }} {{ Math.round(g.opacity * 100) }} %</span>
         <RangeSpinner
@@ -599,6 +630,36 @@ button:focus-visible {
 .emojis button[aria-pressed='true'] {
   border-color: var(--ds-accent);
   background: var(--ds-surface-2);
+}
+.fit-buttons {
+  display: flex;
+  gap: 6px;
+}
+.fit {
+  flex: 1;
+  min-height: var(--ds-control-sm);
+  padding: 0 var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-2);
+  color: var(--ds-text);
+  font-size: var(--ds-text-sm);
+  cursor: pointer;
+}
+.fit:hover:not(:disabled) {
+  border-color: var(--ds-accent);
+}
+.fit.active {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+.fit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.fit:focus-visible {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
 }
 .crop {
   display: flex;
