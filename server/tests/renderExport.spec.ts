@@ -220,6 +220,15 @@ describe('POST /api/render', () => {
     expect(reason(check(doc([clip({ crop: { x: 0, y: 0, width: 0.5, height: 1 } })])))).toBe('crop')
     expect(reason(change((d) => (d.settings.width = 640)))).toBe('format')
     expect(reason(change((d) => (d.tracks[1].volume = 0.5)))).toBe('audio')
+    // Gesamtlautstärke ≠ 100 % ändert den Ton; ohne Ton spielt sie keine Rolle.
+    const vol = (d: Loose) => ((d.settings as Record<string, unknown>).volume = 0.8)
+    expect(reason(change(vol))).toBe('audio')
+    expect(
+      change((d) => {
+        vol(d)
+        d.tracks[1].muted = true
+      }),
+    ).toMatchObject({ ok: true, audio: false })
     const audioClip = (d: Loose) =>
       (d.tracks[1] as { clips: Array<Record<string, unknown>> }).clips[0]
     expect(reason(change((d) => (audioClip(d).gain = 0.5)))).toBe('audio')

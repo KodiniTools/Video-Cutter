@@ -838,6 +838,14 @@ export function compileTimeline(doc: RenderDoc, opts: CompileOptions): CompiledT
     chains.push(`[amixed]${LOUDNORM_FILTER},aresample=${sr},atrim=duration=${sec(duration)}[aout]`)
   }
 
+  // Gesamtlautstärke zuletzt (auch nach dem Angleichen): wirkt auf die ganze Ausgabe.
+  const master = doc.settings.volume
+  if (mixes.length > 0 && Math.abs(master - 1) > 1e-6) {
+    const last = chains.length - 1
+    chains[last] = chains[last].replace(/\[aout\]$/, '[amaster]')
+    chains.push(`[amaster]volume=${num(master)}[aout]`)
+  }
+
   return {
     inputs,
     filter: chains.join(';'),
