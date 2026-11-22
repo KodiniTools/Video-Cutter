@@ -179,6 +179,11 @@ export interface GraphicData {
   flipX: boolean
   /** Nur Bilder: weicher Schatten. */
   shadow: boolean
+  /**
+   * Nur Bilder: Seitenverhältnis frei (gestreckt). Dann gilt `h` als Höhe,
+   * sonst folgt die Höhe aus dem Seitenverhältnis des Bildes.
+   */
+  stretch: boolean
 }
 
 /** Zusätzliche Startwerte beim Hinzufügen. */
@@ -244,6 +249,7 @@ export function defaultGraphic(kind: GraphicKind): Omit<GraphicData, 'start' | '
     cropB: 0,
     flipX: false,
     shadow: false,
+    stretch: false,
   }
   switch (kind) {
     case 'rect':
@@ -317,6 +323,7 @@ export function clampGraphic<T extends GraphicData>(g: T): T {
     cropB: Number.isFinite(g.cropB) ? c(g.cropB, 0, MAX_CROP) : 0,
     flipX: g.flipX === true,
     shadow: g.shadow === true,
+    stretch: g.kind === 'image' && g.stretch === true,
   }
 }
 
@@ -359,7 +366,7 @@ export function imageGeometry(
   const sw = Math.max(1e-6, iw * (1 - g.cropL - g.cropR))
   const sh = Math.max(1e-6, ih * (1 - g.cropT - g.cropB))
   const dw = g.w * H
-  return { sx, sy, sw, sh, dw, dh: (dw * sh) / sw }
+  return { sx, sy, sw, sh, dw, dh: g.stretch ? g.h * H : (dw * sh) / sw }
 }
 
 /** Höhe des (zugeschnittenen) Bildes als Anteil der Bildhöhe – zur Anzeige. */
@@ -712,6 +719,7 @@ export function lookKey(g: GraphicData, H: number): string {
     g.cropB,
     g.flipX,
     g.shadow,
+    g.stretch,
   ].join('|')
 }
 

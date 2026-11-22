@@ -429,6 +429,18 @@ const messages = {
         hint: 'Das Bild erscheint an der aktuellen Stelle in der Bildmitte. Transparenz von PNG/WebP bleibt erhalten; Bilder liegen unter Formen und Texten.',
         border: 'Rahmen',
         opacity: 'Deckkraft',
+        fit: 'An Bildfläche',
+        fits: {
+          contain: 'Anpassen',
+          containTitle:
+            'Ganzes Bild in der Mitte, so groß wie möglich. Das Seitenverhältnis bleibt, es können Ränder frei bleiben.',
+          cover: 'Ausfüllen',
+          coverTitle:
+            'Bildfläche ganz bedecken. Das Seitenverhältnis bleibt, der Überstand wird mittig abgeschnitten.',
+          stretch: 'Strecken',
+          stretchTitle:
+            'Bild genau auf die Bildfläche ziehen. Das Seitenverhältnis wird dabei verzerrt; Breite und Höhe lassen sich danach getrennt einstellen.',
+        },
         crop: 'Zuschneiden',
         cropReset: 'Zuschnitt zurücksetzen',
         sides: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' },
@@ -1894,6 +1906,18 @@ const messages = {
         hint: 'The image appears at the current position in the centre. PNG/WebP transparency is kept; images sit below shapes and texts.',
         border: 'Border',
         opacity: 'Opacity',
+        fit: 'Fit to frame',
+        fits: {
+          contain: 'Fit',
+          containTitle:
+            'Whole image centred, as large as possible. Keeps the aspect ratio; empty borders may remain.',
+          cover: 'Fill',
+          coverTitle:
+            'Cover the whole frame. Keeps the aspect ratio; the overhang is cropped evenly.',
+          stretch: 'Stretch',
+          stretchTitle:
+            'Pull the image exactly onto the frame. Distorts the aspect ratio; width and height can then be set separately.',
+        },
         crop: 'Crop',
         cropReset: 'Reset crop',
         sides: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' },

@@ -3,6 +3,9 @@ import {
   clampGraphic,
   defaultGraphic,
   lookKey,
+  MAX_CROP,
+  MAX_GRAPHIC_W,
+  MIN_GRAPHIC_SIZE,
   renderGraphic,
   type GraphicData,
   type GraphicKind,
@@ -68,6 +71,65 @@ export function clipGraphic(data: Record<string, unknown>): GraphicData {
     if (key !== 'kind' && typeof value === typeof merged[key]) merged[key] = value
   }
   return clampGraphic({ ...(merged as unknown as GraphicData), start: 0, end: 1 })
+}
+
+/** Wie ein Bild die Bildfläche (das Projektformat) einnimmt. */
+export const IMAGE_FITS = ['contain', 'cover', 'stretch'] as const
+export type ImageFit = (typeof IMAGE_FITS)[number]
+
+const round4 = (v: number) => Math.round(v * 10000) / 10000
+
+/**
+ * Bild an die Bildfläche anpassen. Ergebnis: Änderungen für `clip.data`.
+ *  - `contain` (Anpassen): ganzes Bild sichtbar, Seitenverhältnis bleibt.
+ *  - `cover` (Ausfüllen): Fläche ganz bedeckt, Seitenverhältnis bleibt; der
+ *    Überstand wird mittig zugeschnitten (höchstens `MAX_CROP` je Seite).
+ *  - `stretch` (Strecken): genau die Fläche, Seitenverhältnis wird verzerrt.
+ * Immer: mittig, ohne Drehung, bisheriger Zuschnitt und Keyframes verworfen
+ * (sie würden das Ergebnis wieder verschieben).
+ * `frame` = Projektformat in Pixel, `image` = Originalgröße des Bildes.
+ */
+export function fitImageData(
+  mode: ImageFit,
+  frame: { width: number; height: number },
+  image: { width: number; height: number },
+): Record<string, unknown> {
+  const frameAr = frame.width > 0 && frame.height > 0 ? frame.width / frame.height : 16 / 9
+  const imageAr = image.width > 0 && image.height > 0 ? image.width / image.height : frameAr
+  const base = {
+    x: 0.5,
+    y: 0.5,
+    rotation: 0,
+    cropL: 0,
+    cropR: 0,
+    cropT: 0,
+    cropB: 0,
+    stretch: false,
+    keys: [],
+  }
+  const w = (v: number) => round4(Math.min(MAX_GRAPHIC_W, Math.max(MIN_GRAPHIC_SIZE, v)))
+  switch (mode) {
+    case 'contain':
+      return { ...base, w: w(Math.min(frameAr, imageAr)) }
+    case 'stretch':
+      return { ...base, stretch: true, w: w(frameAr), h: 1 }
+    case 'cover': {
+      if (Math.abs(imageAr - frameAr) < 1e-6) return { ...base, w: w(frameAr) }
+      if (imageAr > frameAr) {
+        // Zu breit: links und rechts abschneiden.
+        const c = round4(Math.min(MAX_CROP, (1 - frameAr / imageAr) / 2))
+        const ar = imageAr * (1 - 2 * c)
+        return { ...base, cropL: c, cropR: c, w: w(Math.max(frameAr, ar)) }
+      }
+      // Zu hoch: oben und unten abschneiden.
+      const c = round4(Math.min(MAX_CROP, (1 - imageAr / frameAr) / 2))
+      return { ...base, cropT: c, cropB: c, w: w(frameAr) }
+    }
+    default: {
+      const never: never = mode
+      throw new Error(`Unbekannte Einpassung: ${String(never)}`)
+    }
+  }
 }
 
 /** Steht in den Daten ein eigenes Tempo für die Dauer-Animation? */

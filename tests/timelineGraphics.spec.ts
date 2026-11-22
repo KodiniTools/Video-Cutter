@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { MissingGraphicsError, parseMissingGraphics, uploadGraphic } from '@/lib/graphicsApi'
+import { imageGeometry } from '@/lib/graphicOverlay'
 import { registerImageAssetForTest } from '@/lib/imageAssets'
 import { parsePreviewPlan } from '@/lib/previewApi'
 import { startRender } from '@/lib/renderApi'
 import { useTimelineStore } from '@/stores/timeline'
 import {
   clipGraphic,
+  fitImageData,
   GraphicImages,
   isDrawable,
   loopSpeedOf,
@@ -64,6 +66,71 @@ describe('clipGraphic', () => {
       height: 200,
     })
     expect(isDrawable(clipGraphic(newImageData('img-test')))).toBe(true)
+  })
+})
+
+describe('fitImageData: Bild an die Bildfläche', () => {
+  const full = { width: 1920, height: 1080 }
+  const frameAr = 1920 / 1080
+  const box = (patch: Record<string, unknown>, img: { width: number; height: number }) => {
+    registerImageAssetForTest({
+      id: 'fit',
+      name: 'f.png',
+      source: {} as CanvasImageSource,
+      ...img,
+    })
+    const g = clipGraphic({ ...newImageData('fit'), rotation: 30, cropL: 0.1, ...patch })
+    const { dw, dh } = imageGeometry(g, 1080)
+    return { g, dw, dh }
+  }
+
+  it('Anpassen: ganzes Bild, Seitenverhältnis bleibt', () => {
+    const wide = box(fitImageData('contain', full, { width: 4000, height: 1000 }), {
+      width: 4000,
+      height: 1000,
+    })
+    expect(wide.dw).toBeCloseTo(1920, 0)
+    expect(wide.dh).toBeCloseTo(480, 0)
+    expect(wide.g).toMatchObject({ x: 0.5, y: 0.5, rotation: 0, cropL: 0, stretch: false })
+    const tall = box(fitImageData('contain', full, { width: 1000, height: 2000 }), {
+      width: 1000,
+      height: 2000,
+    })
+    expect(tall.dh).toBeCloseTo(1080, 0)
+    expect(tall.dw).toBeCloseTo(540, 0)
+  })
+
+  it('Ausfüllen: Fläche bedeckt, Überstand mittig abgeschnitten', () => {
+    const patch = fitImageData('cover', full, { width: 2752, height: 1536 })
+    const r = box(patch, { width: 2752, height: 1536 })
+    expect(r.dw).toBeGreaterThanOrEqual(1919.5)
+    expect(r.dh).toBeGreaterThanOrEqual(1079.5)
+    expect(r.dw / r.dh).toBeCloseTo(frameAr, 2)
+    expect(patch.cropT).toBe(patch.cropB)
+    const tall = fitImageData('cover', full, { width: 1000, height: 1000 })
+    expect(tall).toMatchObject({ cropT: tall.cropB, cropL: 0 })
+    expect((tall.cropT as number) > 0).toBe(true)
+    // Extrem schmal: Zuschnitt begrenzt, Fläche trotzdem bedeckt.
+    const strip = fitImageData('cover', { width: 1080, height: 1920 }, { width: 5000, height: 500 })
+    expect(strip.cropL).toBe(0.45)
+    const s2 = box(strip, { width: 5000, height: 500 })
+    expect(s2.dh).toBeGreaterThanOrEqual(1079.5)
+    expect(fitImageData('cover', full, { width: 1920, height: 1080 })).toMatchObject({
+      cropL: 0,
+      cropT: 0,
+    })
+  })
+
+  it('Strecken: genau die Fläche, Höhe frei; entfernt Keyframes', () => {
+    const patch = fitImageData('stretch', full, { width: 1000, height: 1000 })
+    expect(patch).toMatchObject({ stretch: true, h: 1, keys: [] })
+    const r = box(patch, { width: 1000, height: 1000 })
+    expect(r.dw).toBeCloseTo(1920, 0)
+    expect(r.dh).toBeCloseTo(1080, 0)
+    // Ohne Strecken folgt die Höhe wieder dem Seitenverhältnis.
+    expect(box({ ...patch, stretch: false }, { width: 1000, height: 1000 }).dh).toBeCloseTo(1920, 0)
+    // Nur Bilder können gestreckt sein.
+    expect(clipGraphic({ kind: 'rect', stretch: true }).stretch).toBe(false)
   })
 })
 
