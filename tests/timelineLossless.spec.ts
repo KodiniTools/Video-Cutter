@@ -97,6 +97,7 @@ describe('losslessCheck', () => {
     expect(reason(must(moveClip(doc, audio.id, { start: S }, { linked: false })))).toBe('audio')
     const track = doc.tracks.find((t) => t.kind === 'audio')!
     expect(reason(must(updateTrack(doc, track.id, { volume: 0.5 })))).toBe('audio')
+    expect(reason(must(updateSettings(doc, { volume: 0.8 })))).toBe('audio')
     const text: Clip = { id: 't', kind: 'text', start: 0, duration: S, data: { text: 'x' } }
     expect(reason(must(insertOverlayClips(doc, [text], 'T1')))).toBe('overlays')
   })

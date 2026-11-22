@@ -48,8 +48,14 @@ export const MIN_PROJECT_SIDE = 16
 export const MIN_FPS = 1
 export const MAX_FPS = 60
 
+/** Größte Gesamtlautstärke (Faktor, 2 = 200 %), wie auf dem Server. */
+export const MAX_MASTER_VOLUME = 2
+
+/** Gesamtlautstärke eines Projekts (fehlt = 1). */
+export const masterVolume = (settings: TimelineSettings): number => settings.volume ?? 1
+
 export type SettingsPatch = Partial<
-  Pick<TimelineSettings, 'width' | 'height' | 'fps' | 'background'>
+  Pick<TimelineSettings, 'width' | 'height' | 'fps' | 'background' | 'volume'>
 >
 
 const validSide = (v: number) =>
@@ -67,6 +73,14 @@ export function updateSettings(doc: TimelineDoc, patch: SettingsPatch): OpResult
   if (patch.height !== undefined) next.height = patch.height
   if (patch.fps !== undefined) next.fps = patch.fps
   if (patch.background !== undefined) next.background = patch.background.toLowerCase()
+  if (patch.volume !== undefined) {
+    if (!Number.isFinite(patch.volume) || patch.volume < 0 || patch.volume > MAX_MASTER_VOLUME)
+      return fail('invalid-settings')
+    // 1 = unverändert: Feld weglassen, so bleiben Dokumente wie bisher.
+    const v = Math.round(patch.volume * 1000) / 1000
+    if (v === 1) delete next.volume
+    else next.volume = v
+  }
   if (
     !validSide(next.width) ||
     !validSide(next.height) ||
@@ -76,9 +90,10 @@ export function updateSettings(doc: TimelineDoc, patch: SettingsPatch): OpResult
     !/^#[0-9a-f]{6}$/.test(next.background)
   )
     return fail('invalid-settings')
-  const same = (Object.keys(next) as Array<keyof TimelineSettings>).every(
-    (k) => next[k] === doc.settings[k],
-  )
+  const keys = new Set([...Object.keys(next), ...Object.keys(doc.settings)]) as Set<
+    keyof TimelineSettings
+  >
+  const same = [...keys].every((k) => next[k] === doc.settings[k])
   // Nichts geändert: kein neuer Stand (und damit kein leerer Rückgängig-Schritt).
   return same ? ok(doc) : ok({ ...doc, settings: next })
 }

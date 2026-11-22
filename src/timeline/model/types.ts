@@ -39,6 +39,11 @@ export interface TimelineSettings {
   /** Farbe hinter allen Spuren (CSS-Hex). */
   background: string
   sampleRate: number
+  /**
+   * Gesamtlautstärke der Ausgabe als Faktor 0 … 2, wirkt nach dem Mischen
+   * aller Spuren auf Vorschau und Exportdatei. Fehlt = 1 (unverändert).
+   */
+  volume?: number
 }
 
 export type TrackKind = 'video' | 'audio' | 'overlay'

@@ -50,7 +50,12 @@ export interface DocSettings {
   /** Farbe hinter allen Spuren, `#rrggbb`. */
   background: string
   sampleRate: number
+  /** Gesamtlautstärke nach dem Mischen, Faktor 0 … 2 (fehlt im Dokument = 1). */
+  volume: number
 }
+
+/** Größte Gesamtlautstärke (Faktor), wie im Editor. */
+export const MAX_MASTER_VOLUME = 2
 
 export interface DocCrop {
   x: number
@@ -465,6 +470,8 @@ export function parseTimelineDoc(
       fail('settings.background', 'Hintergrund muss eine Farbe wie #000000 sein.')
     if (!SAMPLE_RATES.includes(s.sampleRate as number))
       fail('settings.sampleRate', `Abtastrate muss ${SAMPLE_RATES.join(' oder ')} sein.`)
+    if (s.volume !== undefined && !inRange(s.volume, 0, MAX_MASTER_VOLUME))
+      fail('settings.volume', `Gesamtlautstärke muss zwischen 0 und ${MAX_MASTER_VOLUME} liegen.`)
     if (errors.length === 0)
       settings = {
         width: s.width as number,
@@ -472,6 +479,7 @@ export function parseTimelineDoc(
         fps: s.fps as number,
         background: (s.background as string).toLowerCase(),
         sampleRate: s.sampleRate as number,
+        volume: s.volume === undefined ? 1 : (s.volume as number),
       }
   }
 

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CropFrame from './CropFrame.vue'
 import PositionFrame from './PositionFrame.vue'
+import RangeSpinner from './RangeSpinner.vue'
 import {
   fetchPreviewPlan,
   fetchPreviewStats,
@@ -23,7 +24,14 @@ import {
   nudgeTime,
   type NudgeStepMs,
 } from '@/timeline/nudge'
-import { frameTime, MICROS_PER_SECOND, timeToSeconds, type TimelineDoc } from '@/timeline/model'
+import {
+  frameTime,
+  masterVolume,
+  MAX_MASTER_VOLUME,
+  MICROS_PER_SECOND,
+  timeToSeconds,
+  type TimelineDoc,
+} from '@/timeline/model'
 
 /**
  * Vorschau des Timeline-Editors. Das Bild kommt vollständig vom Server: Er
@@ -137,6 +145,27 @@ function storedFull(): boolean {
 const fullRes = ref(storedFull())
 /** Der Server kennt die volle Auflösung nicht (veraltetes Backend). */
 const fullUnsupported = ref(false)
+
+/**
+ * Gesamtlautstärke (Prozent) – gehört zum Projekt und wirkt auf Vorschau und
+ * Exportdatei. Ziehen ergibt einen einzigen Rückgängig-Schritt.
+ */
+const volumePercent = computed(() => Math.round(masterVolume(store.doc.settings) * 100))
+let volumeDragging = false
+
+function onVolume(e: Event): void {
+  if (!volumeDragging) {
+    store.beginGesture()
+    volumeDragging = true
+  }
+  store.updateSettings({ volume: Number((e.target as HTMLInputElement).value) / 100 })
+}
+
+function commitVolume(): void {
+  if (!volumeDragging) return
+  volumeDragging = false
+  store.endGesture()
+}
 
 function toggleFull(): void {
   fullRes.value = !fullRes.value
@@ -513,6 +542,20 @@ onBeforeUnmount(() => {
       >
         {{ t('timelinePreview.full') }}
       </button>
+      <label class="volume" :title="t('timelinePreview.volumeTitle')">
+        <span class="volume-label" aria-hidden="true">{{ volumePercent === 0 ? '🔇' : '🔊' }}</span>
+        <RangeSpinner
+          min="0"
+          :max="MAX_MASTER_VOLUME * 100"
+          step="5"
+          :value="volumePercent"
+          :reset="100"
+          :aria-label="t('timelinePreview.volume')"
+          data-testid="preview-volume"
+          @input="onVolume"
+          @change="commitVolume"
+        />
+      </label>
       <span v-if="fullUnsupported" class="full-note" role="status" data-testid="preview-full-note">
         {{ t('timelinePreview.fullUnsupported') }}
       </span>
@@ -731,6 +774,17 @@ onBeforeUnmount(() => {
   color: var(--ds-danger, #c0392b);
 }
 
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  min-width: 220px;
+  font-size: var(--ds-text-sm);
+}
+.volume :deep(.range-spinner) {
+  flex: 1;
+  min-width: 0;
+}
 .speed {
   margin-left: auto;
   font-size: var(--ds-text-xs, var(--ds-text-sm));

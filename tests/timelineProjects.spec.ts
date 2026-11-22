@@ -171,6 +171,16 @@ describe('projectFile', () => {
     expect(state.doc).toEqual(doc)
     expect(state.images).toEqual({ [imageId]: ref })
 
+    // Gesamtlautstärke geht mit; Unsinn gilt als 100 %.
+    const withVol = (volume: unknown) =>
+      parseTimelineProject({
+        ...raw,
+        doc: { ...raw.doc, settings: { ...raw.doc.settings, volume } },
+      }).doc.settings.volume
+    expect(withVol(1.25)).toBe(1.25)
+    expect(withVol(9)).toBeUndefined()
+    expect(withVol('laut')).toBeUndefined()
+
     const code = (v: unknown) => {
       try {
         parseTimelineProject(v)

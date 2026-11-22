@@ -73,7 +73,7 @@ export function checkLossless(
     .flatMap((t) =>
       t.clips
         .filter((c) => c.gain > 0 && info(c.asset)?.hasAudio === true)
-        .map((c) => ({ clip: c, volume: c.gain * t.volume })),
+        .map((c) => ({ clip: c, volume: c.gain * t.volume * doc.settings.volume })),
     )
   if (sound.length > 1) return no('audio')
   const base = {

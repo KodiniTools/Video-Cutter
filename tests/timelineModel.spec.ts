@@ -24,6 +24,7 @@ import {
   trimClip,
   updateClipData,
   updateSettings,
+  masterVolume,
   updateTrack,
   validateDoc,
   type AudioClip,
@@ -584,6 +585,22 @@ describe('updateSettings', () => {
     const doc = createDoc()
     const r = updateSettings(doc, { width: 1920, fps: 30 })
     expect(r.ok && r.doc === doc).toBe(true)
+  })
+
+  it('Gesamtlautstärke: 0 … 2, 100 % lässt das Feld weg', () => {
+    const doc = createDoc()
+    const r = updateSettings(doc, { volume: 1.5 })
+    expect(r.ok && r.doc.settings.volume).toBe(1.5)
+    if (!r.ok) return
+    expect(masterVolume(r.doc.settings)).toBe(1.5)
+    const back = updateSettings(r.doc, { volume: 1 })
+    expect(back.ok && 'volume' in back.doc.settings).toBe(false)
+    expect(back.ok && masterVolume(back.doc.settings)).toBe(1)
+    // Kein Unterschied -> dasselbe Dokument.
+    expect(updateSettings(doc, { volume: 1 })).toEqual({ ok: true, doc })
+    expect(updateSettings(r.doc, { volume: 1.5 })).toEqual({ ok: true, doc: r.doc })
+    for (const volume of [-0.1, 2.5, Number.NaN])
+      expect(updateSettings(doc, { volume })).toEqual({ ok: false, error: 'invalid-settings' })
   })
 
   it('lehnt ab, was der Server nicht annähme', () => {

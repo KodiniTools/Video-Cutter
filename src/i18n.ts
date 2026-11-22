@@ -1305,6 +1305,9 @@ const messages = {
       gridTitle:
         'Drittel-Linien über dem Bild ein- oder ausblenden. Rahmen und Raster sind nur Hilfen in der Vorschau und erscheinen nicht in der Ausgabedatei.',
       full: 'Volle Auflösung',
+      volume: 'Gesamtlautstärke in Prozent',
+      volumeTitle:
+        'Gesamtlautstärke: wirkt nach dem Mischen aller Spuren auf Vorschau und Exportdatei (100 % = unverändert).',
       fullTitle:
         'Vorschau in der Größe der Ausgabedatei aus den Originalvideos rendern (Bildgüte wie Export „Hoch“). Das Rendern dauert deutlich länger; ausgeschaltet läuft die schnelle Vorschau mit höchstens 540 px Höhe.',
       fullUnsupported: 'Backend veraltet: volle Auflösung nicht verfügbar.',
@@ -2751,6 +2754,9 @@ const messages = {
       gridTitle:
         'Show or hide rule-of-thirds lines over the picture. Frame and grid are preview aids only and never appear in the exported file.',
       full: 'Full resolution',
+      volume: 'Master volume in percent',
+      volumeTitle:
+        'Master volume: applies after mixing all tracks, to the preview and the exported file (100 % = unchanged).',
       fullTitle:
         'Render the preview at the size of the exported file from the original videos (picture quality like export “High”). Rendering takes noticeably longer; switched off, the fast preview with at most 540 px height is used.',
       fullUnsupported: 'Backend outdated: full resolution not available.',

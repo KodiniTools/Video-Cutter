@@ -67,7 +67,11 @@ function parseSettings(v: unknown): TimelineSettings {
   if (!isNum(width) || !isNum(height) || !isNum(fps) || !isNum(sampleRate)) invalid()
   if (width <= 0 || height <= 0 || fps <= 0 || sampleRate <= 0) invalid()
   if (typeof background !== 'string') invalid()
-  return { width, height, fps, background, sampleRate }
+  const volume = v.volume
+  // Gesamtlautstärke ist optional; Unsinn wird ignoriert (= 100 %).
+  return isNum(volume) && volume >= 0 && volume <= 2 && volume !== 1
+    ? { width, height, fps, background, sampleRate, volume }
+    : { width, height, fps, background, sampleRate }
 }
 
 function parseAsset(key: string, v: unknown): AssetRef {

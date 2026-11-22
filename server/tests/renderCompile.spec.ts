@@ -120,6 +120,8 @@ describe('parseTimelineDoc', () => {
     ['ungerade Breite', (d) => (d.settings.width = 641), 'settings.width'],
     ['Bildrate 0', (d) => (d.settings.fps = 0), 'settings.fps'],
     ['Farbe als Wort', (d) => (d.settings.background = 'red'), 'settings.background'],
+    ['Gesamtlautstärke zu hoch', (d) => (d.settings.volume = 3), 'settings.volume'],
+    ['Gesamtlautstärke als Text', (d) => (d.settings.volume = '1'), 'settings.volume'],
     [
       'Filter im Farbwert',
       (d) => (d.settings.background = '#000000,drawtext'),
@@ -331,6 +333,25 @@ describe('compileTimeline', () => {
       normalizeAudio: true,
     })
     expect(silent.filter).not.toContain('loudnorm')
+  })
+
+  it('Gesamtlautstärke wirkt zuletzt auf den ganzen Ton (auch nach dem Angleichen)', () => {
+    expect(parsed(rawDoc()).settings.volume).toBe(1)
+    expect(compileTimeline(parsed(rawDoc()), { sources }).filter).not.toContain('[amaster]')
+    const raw: Loose = rawDoc()
+    raw.settings.volume = 1.5
+    const doc = parsed(raw)
+    expect(doc.settings.volume).toBe(1.5)
+    const c = compileTimeline(doc, { sources })
+    expect(c.filter.endsWith('[amaster];[amaster]volume=1.5[aout]')).toBe(true)
+    expect(c.filter.match(/\[aout\]/g)).toHaveLength(1)
+    const n = compileTimeline(doc, { sources, normalizeAudio: true })
+    expect(n.filter).toMatch(/loudnorm=[^;]*\[amaster\];\[amaster\]volume=1\.5\[aout\]$/)
+    raw.settings.volume = 0
+    expect(compileTimeline(parsed(raw), { sources }).filter).toContain('volume=0[aout]')
+    // Stille bleibt Stille.
+    const silent = compileTimeline(doc, { sources, range: { start: s(2), end: s(3) } })
+    expect(silent.filter).not.toContain('[amaster]')
   })
 
   it('liefert für leere Bereiche Hintergrund und Stille, wirft bei leerem Abschnitt', () => {
