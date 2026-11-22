@@ -466,6 +466,19 @@ export class ProjectStore {
     })
   }
 
+  /**
+   * Nur den Namen ändern. Stand, Dateien und „zuletzt gespeichert“ bleiben,
+   * damit die Reihenfolge der Liste gleich bleibt.
+   */
+  async rename(id: string, name: string): Promise<ProjectSummary> {
+    if (!isProjectId(id)) throw new ProjectNotFoundError()
+    return this.withLock(id, async () => {
+      const p = await this.read(id)
+      if (p.name !== name) await this.write({ ...p, name })
+      return summary({ ...p, name })
+    })
+  }
+
   async remove(id: string): Promise<boolean> {
     if (!isProjectId(id)) return false
     return this.withLock(id, async () => {

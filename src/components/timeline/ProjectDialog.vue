@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { PROJECTS_UNSUPPORTED } from '@/lib/projectApi'
@@ -43,6 +43,9 @@ const error = ref('')
 const notice = ref('')
 /** Inline-Bestätigung: Projekt-ID (bzw. `new`) + Aktion. */
 const confirm = ref<{ id: string; action: 'open' | 'delete' | 'new' } | null>(null)
+/** Umbenennen in der Liste: Projekt-ID + eingegebener Name. */
+const editing = ref<{ id: string; name: string } | null>(null)
+const renameInput = ref<HTMLInputElement[] | HTMLInputElement | null>(null)
 
 const locked = computed(() => busy.value !== null)
 const canSave = computed(() => hasContent.value && !locked.value && name.value.trim().length > 0)
@@ -77,6 +80,7 @@ function messageOf(e: unknown): string {
 
 function clearMessages(): void {
   confirm.value = null
+  editing.value = null
   error.value = ''
   notice.value = ''
 }
@@ -147,6 +151,39 @@ async function doDelete(id: string): Promise<void> {
     await store.remove(id)
   } catch (e) {
     error.value = messageOf(e)
+  }
+}
+
+async function startRename(id: string, current: string): Promise<void> {
+  clearMessages()
+  editing.value = { id, name: current }
+  await nextTick()
+  const el = Array.isArray(renameInput.value) ? renameInput.value[0] : renameInput.value
+  el?.focus()
+  el?.select()
+}
+
+const canRename = computed(() => !locked.value && (editing.value?.name.trim().length ?? 0) > 0)
+
+async function doRename(): Promise<void> {
+  const e = editing.value
+  if (!e || !canRename.value) return
+  const next = e.name.trim()
+  const old = projects.value.find((p) => p.id === e.id)?.name
+  if (next === old) {
+    editing.value = null
+    return
+  }
+  try {
+    const p = await store.rename(e.id, next)
+    editing.value = null
+    // Das geöffnete Projekt: auch das Namensfeld oben nachziehen.
+    if (current.value?.id === p.id) name.value = p.name
+    notice.value = t('timelineProjects.renamed', { name: p.name })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    error.value =
+      msg === PROJECTS_UNSUPPORTED ? t('timelineProjects.renameOutdated') : messageOf(err)
   }
 }
 
@@ -316,7 +353,36 @@ function formatSize(bytes: number): string {
               {{ formatSize(p.size) }}
             </small>
           </div>
-          <div v-if="confirm?.id === p.id" class="confirm" role="group">
+          <form
+            v-if="editing?.id === p.id"
+            class="rename"
+            data-testid="project-rename-form"
+            @submit.prevent="doRename"
+          >
+            <input
+              ref="renameInput"
+              v-model="editing.name"
+              class="input"
+              type="text"
+              maxlength="120"
+              :aria-label="t('timelineProjects.renameLabel')"
+              :disabled="locked"
+              data-testid="project-rename-input"
+              @keydown.esc.stop.prevent="editing = null"
+            />
+            <button
+              class="btn tiny primary"
+              type="submit"
+              :disabled="!canRename"
+              data-testid="project-rename-save"
+            >
+              {{ t('timelineProjects.renameSave') }}
+            </button>
+            <button class="btn tiny ghost" type="button" @click="editing = null">
+              {{ t('projects.cancel') }}
+            </button>
+          </form>
+          <div v-else-if="confirm?.id === p.id" class="confirm" role="group">
             <span class="confirm-text">
               {{
                 confirm.action === 'open' ? t('projects.confirmOpen') : t('projects.confirmDelete')
@@ -345,6 +411,17 @@ function formatSize(bytes: number): string {
               @click="askOpen(p.id)"
             >
               {{ t('projects.open') }}
+            </button>
+            <button
+              class="btn tiny ghost"
+              type="button"
+              :disabled="locked"
+              :title="t('timelineProjects.rename')"
+              :aria-label="t('timelineProjects.renameNamed', { name: p.name })"
+              data-testid="project-rename"
+              @click="startRename(p.id, p.name)"
+            >
+              ✎
             </button>
             <button
               v-if="p.kind === 'timeline'"
@@ -550,6 +627,16 @@ function formatSize(bytes: number): string {
 .confirm {
   flex-wrap: wrap;
   flex-basis: 100%;
+}
+.rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+}
+.rename .input {
+  flex: 1;
+  min-width: 0;
 }
 .confirm-text {
   flex-basis: 100%;

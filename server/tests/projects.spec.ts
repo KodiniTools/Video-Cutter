@@ -187,6 +187,21 @@ describe('ProjectStore', () => {
     await expect(store.asset(r.project.id, hash)).rejects.toBeInstanceOf(ProjectNotFoundError)
   })
 
+  it('benennt ein Projekt um, ohne Stand, Dateien oder Datum zu ändern', async () => {
+    const v = await video('a.mp4')
+    const r = await store.save({ name: 'Alt', state: { x: 1 }, media: [v.id], assets: [] })
+    const renamed = await store.rename(r.project.id, 'Neu')
+    expect(renamed).toMatchObject({ id: r.project.id, name: 'Neu', videoCount: 1, size: 10 })
+    expect(renamed.updatedAt).toBe(r.project.updatedAt)
+    expect((await store.list()).map((p) => p.name)).toEqual(['Neu'])
+    expect((await store.get(r.project.id)).state).toEqual({ x: 1 })
+    expect(Object.keys(await store.open(r.project.id))).toEqual([v.id])
+    await expect(store.rename('fehlt', 'X')).rejects.toBeInstanceOf(ProjectNotFoundError)
+    await expect(store.rename('6f9619ff-8b86-4d01-b42d-00cf4fc964ff', 'X')).rejects.toBeInstanceOf(
+      ProjectNotFoundError,
+    )
+  })
+
   it('Speicherlimit und Löschen', async () => {
     const big = await video('big.mp4', 9_000)
     const r = await store.save({ name: 'P', state: {}, media: [big.id], assets: [] })

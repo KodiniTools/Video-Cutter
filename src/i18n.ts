@@ -1444,6 +1444,13 @@ const messages = {
         audioFade: 'Ton ein-/ausblenden',
         crop: 'Zuschnitt',
       },
+      rename: 'Umbenennen',
+      renameNamed: '{name} umbenennen',
+      renameLabel: 'Neuer Projektname',
+      renameSave: 'Übernehmen',
+      renamed: 'Umbenannt in „{name}“.',
+      renameOutdated:
+        'Das Server-Backend ist veraltet und kann Projekte noch nicht umbenennen. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
       busy: 'Bitte warten …',
       outdated:
         'Das Server-Backend ist veraltet und kennt Projekte des neuen Editors noch nicht. Bitte das Backend aktualisieren (deploy/deploy.sh ohne SKIP_API).',
@@ -2880,6 +2887,13 @@ const messages = {
         audioFade: 'audio fade in/out',
         crop: 'crop',
       },
+      rename: 'Rename',
+      renameNamed: 'Rename {name}',
+      renameLabel: 'New project name',
+      renameSave: 'Apply',
+      renamed: 'Renamed to “{name}”.',
+      renameOutdated:
+        'The server backend is outdated and cannot rename projects yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
       busy: 'Please wait …',
       outdated:
         'The server backend is outdated and does not support projects of the new editor yet. Please update the backend (deploy/deploy.sh without SKIP_API).',
