@@ -11,6 +11,7 @@ import {
   type RenderQuality,
   type RenderWatch,
 } from '@/lib/renderApi'
+import { downloadUrl as startDownload, hasSavePicker, saveUrlWithPicker } from '@/lib/download'
 import { GRAPHICS_UNSUPPORTED, MissingGraphicsError } from '@/lib/graphicsApi'
 import { formatTimeMs } from '@/lib/timeFormat'
 import { useTimelineStore } from '@/stores/timeline'
@@ -42,6 +43,12 @@ const normalizeAudio = ref(false)
 const progress = ref(0)
 const error = ref('')
 const downloaded = ref(false)
+/** Die Datei wird gerade über den „Speichern unter"-Dialog geschrieben. */
+const saving = ref(false)
+/** Über den Dialog gespeichert (statt Download gestartet). */
+const saved = ref(false)
+/** Endung der fertigen Datei (verlustfrei: Container der Quelle, wie der Server). */
+const outputExt = ref('mp4')
 /** Verlustfrei verlangt, aber der Server hat neu kodiert (altes Backend). */
 const losslessMissed = ref(false)
 
@@ -74,11 +81,71 @@ const downloadUrl = computed(() =>
   phase.value === 'done' && jobId ? renderDownloadUrl(jobId) : '',
 )
 
+/** Wie `losslessExt` auf dem Server: nur bekannte Container, sonst mp4. */
+const LOSSLESS_EXTS = ['mp4', 'mov', 'm4v', 'webm', 'mkv']
+const MIME_BY_EXT: Record<string, string> = {
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  webm: 'video/webm',
+  mkv: 'video/x-matroska',
+}
+function losslessExtOf(check: ReturnType<typeof losslessCheck>): string {
+  if (!check.ok) return 'mp4'
+  const m = /\.([^.]+)$/.exec(store.doc.assets[check.asset]?.name ?? '')
+  const ext = m ? m[1].toLowerCase() : ''
+  return LOSSLESS_EXTS.includes(ext) ? ext : 'mp4'
+}
+
+/** Dateiname wie auf dem Server (`safeBaseName`), für den Speichern-Dialog. */
+const fileName = computed(() => {
+  const base = (name.value.trim() || 'projekt')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9-_ ]+/g, '')
+    .trim()
+    .slice(0, 80)
+  return `${base || 'projekt'}.${outputExt.value}`
+})
+
+/**
+ * Herunterladen: Wo der Browser es kann (Chromium), öffnet sich der
+ * „Speichern unter"-Dialog für Ort und Namen. Sonst lädt der Link wie bisher
+ * (Firefox/Safari fragen nur, wenn das in den Browser-Einstellungen steht).
+ */
+async function download(ev: MouseEvent): Promise<void> {
+  if (!hasSavePicker()) {
+    downloaded.value = true
+    return
+  }
+  ev.preventDefault()
+  if (saving.value || !downloadUrl.value) return
+  const url = downloadUrl.value
+  const file = fileName.value
+  saving.value = true
+  try {
+    const result = await saveUrlWithPicker(url, file, MIME_BY_EXT[outputExt.value] ?? 'video/mp4')
+    if (result === 'unsupported') startDownload(url, file)
+    // Abgebrochen: Knopf bleibt, der Server hält die Datei weiter bereit.
+    saved.value = result === 'saved'
+    if (result !== 'cancelled') downloaded.value = true
+  } catch (e) {
+    // Der Server hat die Datei beim Abholen schon verworfen: neu exportieren.
+    jobId = null
+    error.value = t('timelineExport.saveFailed', {
+      reason: e instanceof Error ? e.message : String(e),
+    })
+    phase.value = 'error'
+  } finally {
+    saving.value = false
+  }
+}
+
 async function start(): Promise<void> {
   phase.value = 'running'
   progress.value = 0
   error.value = ''
   downloaded.value = false
+  saved.value = false
   losslessMissed.value = false
   const ctrl = (startCtrl = new AbortController())
   try {
@@ -101,6 +168,7 @@ async function start(): Promise<void> {
     })
     const id = job.jobId
     losslessMissed.value = copy && !job.lossless
+    outputExt.value = job.lossless ? losslessExtOf(lossless.value) : 'mp4'
     if (ctrl.signal.aborted) {
       void cancelRender(id)
       return
@@ -262,7 +330,15 @@ onBeforeUnmount(discard)
 
       <div v-else class="form">
         <p role="status">
-          {{ t(downloaded ? 'timelineExport.downloaded' : 'timelineExport.done') }}
+          {{
+            t(
+              saved
+                ? 'timelineExport.saved'
+                : downloaded
+                  ? 'timelineExport.downloaded'
+                  : 'timelineExport.done',
+            )
+          }}
         </p>
         <p v-if="losslessMissed" class="error" data-testid="export-lossless-missed">
           {{ t('timelineExport.lossless.missed') }}
@@ -275,9 +351,10 @@ onBeforeUnmount(discard)
             :href="downloadUrl"
             download
             data-testid="export-download"
-            @click="downloaded = true"
+            :aria-disabled="saving || undefined"
+            @click="download"
           >
-            {{ t('timelineExport.download') }}
+            {{ t(saving ? 'timelineExport.saving' : 'timelineExport.download') }}
           </a>
         </div>
       </div>

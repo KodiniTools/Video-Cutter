@@ -57,7 +57,7 @@ import {
   parseTimeInput,
   toMs,
 } from '@/lib/timeFormat'
-import { saveFile, isAppleMobile } from '@/lib/download'
+import { saveFile, isAppleMobile, hasSavePicker } from '@/lib/download'
 import { readVideoDuration } from '@/lib/videoMeta'
 import { frameIndex, frameSeekTime, snapToFrame, stepFrames } from '@/lib/frameTime'
 import FrameSpinner from './FrameSpinner.vue'
@@ -1096,8 +1096,9 @@ async function downloadResult(): Promise<void> {
           activeJob.value = null
         }
         mutedDownload = { source: item.file, blob }
-        // iOS: Teilen-Dialog nur direkt aus einem Tippen -> erneut tippen lassen.
-        if (appleMobile) {
+        // iOS-Teilen und „Speichern unter"-Dialog öffnen sich nur direkt aus
+        // einem Klick -> nach dem Warten auf den Server erneut klicken lassen.
+        if (appleMobile || hasSavePicker()) {
           mutedReadyId.value = item.id
           return
         }

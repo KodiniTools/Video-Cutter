@@ -1354,6 +1354,9 @@ const messages = {
       done: 'Das Video ist fertig.',
       downloaded: 'Der Download wurde gestartet.',
       download: 'Herunterladen',
+      saving: 'Wird gespeichert …',
+      saved: 'Das Video wurde gespeichert.',
+      saveFailed: 'Speichern fehlgeschlagen ({reason}). Bitte das Video erneut exportieren.',
       normalize: 'Lautstärke angleichen',
       normalizeHint:
         'Bringt den fertigen Ton auf eine einheitliche Lautheit (EBU R128, −16 LUFS). Wirkt nur im Export, nicht in der Vorschau.',
@@ -2815,6 +2818,9 @@ const messages = {
       done: 'The video is ready.',
       downloaded: 'The download has started.',
       download: 'Download',
+      saving: 'Saving …',
+      saved: 'The video has been saved.',
+      saveFailed: 'Saving failed ({reason}). Please export the video again.',
       normalize: 'Normalise loudness',
       normalizeHint:
         'Brings the finished audio to a uniform loudness (EBU R128, −16 LUFS). Applies to the export only, not the preview.',

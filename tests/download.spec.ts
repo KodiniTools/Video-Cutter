@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { isAppleMobile, canShareFile, saveFile } from '@/lib/download'
+import {
+  isAppleMobile,
+  canShareFile,
+  saveFile,
+  hasSavePicker,
+  saveUrlWithPicker,
+} from '@/lib/download'
 
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
@@ -81,5 +87,72 @@ describe('saveFile', () => {
 
     delete (navigator as unknown as { canShare?: unknown }).canShare
     delete (navigator as unknown as { share?: unknown }).share
+  })
+})
+
+describe('saveUrlWithPicker', () => {
+  type PickerFn = (opts?: unknown) => Promise<unknown>
+  function setPicker(fn: PickerFn | undefined): void {
+    ;(window as unknown as { showSaveFilePicker?: PickerFn }).showSaveFilePicker = fn
+  }
+  afterEach(() => setPicker(undefined))
+
+  it('meldet unsupported ohne Dialog (Firefox/Safari)', async () => {
+    expect(hasSavePicker()).toBe(false)
+    expect(await saveUrlWithPicker('/x', 'a.mp4')).toBe('unsupported')
+  })
+
+  it('öffnet den Dialog vor dem Laden und schreibt die Antwort in die Datei', async () => {
+    const order: string[] = []
+    const write = vi.fn().mockResolvedValue(undefined)
+    const close = vi.fn().mockResolvedValue(undefined)
+    const picker = vi.fn(async () => {
+      order.push('picker')
+      return { createWritable: async () => ({ write, close }) }
+    })
+    setPicker(picker)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        order.push('fetch')
+        return new Response(new Blob([new Uint8Array([1, 2])]), { status: 200 })
+      }),
+    )
+
+    expect(hasSavePicker()).toBe(true)
+    expect(await saveUrlWithPicker('/api/cut/1/download', 'film.mp4')).toBe('saved')
+    expect(order).toEqual(['picker', 'fetch'])
+    expect(picker).toHaveBeenCalledWith({
+      suggestedName: 'film.mp4',
+      types: [{ description: 'Video', accept: { 'video/mp4': ['.mp4'] } }],
+    })
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('lädt nichts, wenn der Nutzer abbricht', async () => {
+    setPicker(() => Promise.reject(new DOMException('abort', 'AbortError')))
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    expect(await saveUrlWithPicker('/x', 'a.mp4')).toBe('cancelled')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('fällt ohne Nutzergeste (SecurityError) auf unsupported zurück', async () => {
+    setPicker(() => Promise.reject(new DOMException('no gesture', 'SecurityError')))
+    expect(await saveUrlWithPicker('/x', 'a.mp4')).toBe('unsupported')
+  })
+
+  it('bricht die Datei ab und wirft, wenn der Server einen Fehler liefert', async () => {
+    const abort = vi.fn().mockResolvedValue(undefined)
+    const close = vi.fn()
+    setPicker(async () => ({ createWritable: async () => ({ write: vi.fn(), close, abort }) }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('weg', { status: 404 })),
+    )
+    await expect(saveUrlWithPicker('/x', 'a.mp4')).rejects.toThrow('HTTP 404')
+    expect(abort).toHaveBeenCalledTimes(1)
+    expect(close).not.toHaveBeenCalled()
   })
 })
