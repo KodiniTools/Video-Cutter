@@ -67,6 +67,7 @@ interface SavePickerOptions {
 interface WritableLike {
   write: (data: Blob) => Promise<void>
   close: () => Promise<void>
+  abort?: () => Promise<void>
 }
 interface FileHandleLike {
   createWritable: () => Promise<WritableLike>
@@ -78,19 +79,21 @@ function fileExtension(name: string): string {
   return m ? m[1].toLowerCase() : ''
 }
 
-/**
- * Öffnet den nativen "Speichern unter"-Dialog und schreibt den Blob dorthin.
- * @returns true, wenn gespeichert ODER vom Nutzer abgebrochen wurde (kein
- *          weiterer Fallback nötig); false, wenn die API fehlt/fehlschlägt.
- */
-async function savePickerDownload(blob: Blob, name: string): Promise<boolean> {
+function savePicker(): ShowSaveFilePicker | null {
+  if (typeof window === 'undefined') return null
   const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker })
     .showSaveFilePicker
-  if (typeof picker !== 'function') return false
+  return typeof picker === 'function' ? picker : null
+}
 
-  const mime = blob.type || 'video/mp4'
+/** Bietet der Browser den „Speichern unter"-Dialog (Chromium)? */
+export function hasSavePicker(): boolean {
+  return savePicker() !== null
+}
+
+function pickerTypes(name: string, mime: string): SavePickerType[] {
   const ext = fileExtension(name)
-  const types: SavePickerType[] = ext
+  return ext
     ? [
         {
           description: mime.startsWith('image/') ? 'Bild' : 'Video',
@@ -98,9 +101,81 @@ async function savePickerDownload(blob: Blob, name: string): Promise<boolean> {
         },
       ]
     : []
+}
+
+/** Ergebnis von {@link saveUrlWithPicker}. */
+export type PickerSaveResult = 'saved' | 'cancelled' | 'unsupported'
+
+/**
+ * Lädt eine Server-Datei über den „Speichern unter"-Dialog: Erst der Dialog
+ * (braucht die Nutzergeste, also vor jedem `await` aufrufen), dann wird die
+ * Antwort direkt in die gewählte Datei geschrieben (gestreamt, ohne Blob im
+ * Speicher, wo der Browser es kann).
+ *
+ * @returns `unsupported`, wenn der Dialog fehlt oder nicht geöffnet werden
+ *          konnte (Aufrufer lädt dann klassisch herunter); `cancelled` bei
+ *          Abbruch durch den Nutzer (es wurde nichts geladen).
+ * @throws  wenn das Laden oder Schreiben nach der Auswahl scheitert.
+ */
+export async function saveUrlWithPicker(
+  url: string,
+  name: string,
+  mime = 'video/mp4',
+): Promise<PickerSaveResult> {
+  const picker = savePicker()
+  if (!picker) return 'unsupported'
+  let handle: FileHandleLike
+  try {
+    handle = await picker({ suggestedName: name, types: pickerTypes(name, mime) })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled'
+    // z. B. SecurityError ohne Nutzergeste -> klassischer Download.
+    return 'unsupported'
+  }
+  const writable = await handle.createWritable()
+  try {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (res.body && typeof WritableStream !== 'undefined' && writable instanceof WritableStream) {
+      // pipeTo schließt die Datei am Ende selbst bzw. bricht sie bei Fehlern ab.
+      await res.body.pipeTo(writable)
+    } else {
+      await writable.write(await res.blob())
+      await writable.close()
+    }
+    return 'saved'
+  } catch (err) {
+    await writable.abort?.().catch(() => undefined)
+    throw err
+  }
+}
+
+/** Klassischer Download einer Adresse (ohne Dialog, je nach Browser-Einstellung). */
+export function downloadUrl(url: string, name: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.rel = 'noopener'
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => a.remove(), 1000)
+}
+
+/**
+ * Öffnet den nativen "Speichern unter"-Dialog und schreibt den Blob dorthin.
+ * @returns true, wenn gespeichert ODER vom Nutzer abgebrochen wurde (kein
+ *          weiterer Fallback nötig); false, wenn die API fehlt/fehlschlägt.
+ */
+async function savePickerDownload(blob: Blob, name: string): Promise<boolean> {
+  const picker = savePicker()
+  if (!picker) return false
 
   try {
-    const handle = await picker({ suggestedName: name, types })
+    const handle = await picker({
+      suggestedName: name,
+      types: pickerTypes(name, blob.type || 'video/mp4'),
+    })
     const writable = await handle.createWritable()
     await writable.write(blob)
     await writable.close()
